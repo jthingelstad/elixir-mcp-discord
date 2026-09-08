@@ -113,7 +113,20 @@ function readText(content) {
  * connector can pause a long tool sequence, and stopping there would truncate
  * the reply mid-investigation.
  */
-export async function ask({ system, messages, maxTokens = config.claude.maxTokens }) {
+/**
+ * `onEvent` receives live progress while the turn runs: `tool_start` the moment
+ * Claude decides on a call (the name is in the content_block_start, before any
+ * arguments stream), and `text` deltas as prose arrives.
+ *
+ * Worth being clear about what streaming does and does not reach here. Elixir
+ * MCP's own transport is invisible to us — the MCP connector means Anthropic
+ * holds that connection, and a tool call is request/response regardless. And
+ * Discord has no streaming message API; the ask lane approximates it by editing
+ * one message on a throttle. What genuinely streams is Claude to us, and the
+ * valuable part of that is not prose appearing letter by letter — it is the
+ * tool calls becoming visible the instant they happen.
+ */
+export async function ask({ system, messages, maxTokens = config.claude.maxTokens, onEvent }) {
   const history = [...messages];
   const called = [];
   const errors = [];
@@ -124,7 +137,7 @@ export async function ask({ system, messages, maxTokens = config.claude.maxToken
   for (let round = 0; round < 5; round += 1) {
     let response;
     try {
-      response = await client.beta.messages.create({
+      const stream = client.beta.messages.stream({
         model: config.claude.model,
         max_tokens: maxTokens,
         betas: [MCP_BETA],
@@ -137,6 +150,27 @@ export async function ask({ system, messages, maxTokens = config.claude.maxToken
         thinking: { type: "adaptive", display: "summarized" },
         output_config: { effort: config.claude.effort },
       });
+
+      if (onEvent) {
+        stream.on("streamEvent", (event) => {
+          try {
+            if (event.type === "content_block_start") {
+              const block = event.content_block;
+              if (typeof block?.type === "string" && block.type.endsWith("tool_use")) {
+                onEvent({ kind: "tool_start", name: block.name || "unknown" });
+              }
+            } else if (event.type === "content_block_delta") {
+              if (event.delta?.type === "text_delta") {
+                onEvent({ kind: "text", text: event.delta.text });
+              }
+            }
+          } catch {
+            // A failing progress renderer must never take down the answer.
+          }
+        });
+      }
+
+      response = await stream.finalMessage();
     } catch (error) {
       log.error("claude_call_failed", { error: error.message });
       return { ok: false, error: error.message, called, errors, trace, usd: usdTotal };

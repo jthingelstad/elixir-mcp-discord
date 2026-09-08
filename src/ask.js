@@ -51,9 +51,13 @@ usually zero. Lead with the answer, then the supporting numbers. Say "I don't
 know" in three words rather than thirty.
 
 FORMAT
-Discord messages are capped at 2000 characters — stay well under. Use short
-bold labels and compact lists over paragraphs when presenting numbers. No
-tables. Never paste raw JSON.
+Discord messages are capped at 2000 characters — stay well under.
+
+NEVER use a markdown table. Discord does not render them; a table arrives as
+literal pipe characters and is unreadable. For anything you would tabulate, use
+one short line per row instead, like "**De stichting** — 0 fame". Bold labels
+and compact lists over paragraphs whenever you present numbers. Never paste raw
+JSON.
 
 HONESTY
 This is unofficial fan content, not endorsed by Supercell. If someone asks how
@@ -100,6 +104,55 @@ function renderTrace(trace, usd) {
   return `-# **How I got there** · $${usd.toFixed(4)}\n${body}`;
 }
 
+/**
+ * A Discord message edited on a throttle, which is as close to streaming as
+ * Discord gets — there is no partial-message API, only `edit`. Discord rate
+ * limits edits per channel (roughly 5 per 5s), so EDIT_MS keeps a comfortable
+ * margin and a flush is skipped entirely when nothing changed.
+ */
+const EDIT_MS = 1500;
+
+class LiveMessage {
+  constructor(message) {
+    this.message = message;
+    this.rendered = null;
+    this.next = null;
+    this.timer = setInterval(() => this.flush(), EDIT_MS);
+  }
+
+  update(content) {
+    this.next = content.slice(0, 1900);
+  }
+
+  async flush() {
+    if (this.next === null || this.next === this.rendered) return;
+    const content = this.next;
+    this.rendered = content;
+    await this.message.edit(content).catch((error) => {
+      log.warn("live_edit_failed", { error: error.message });
+    });
+  }
+
+  async finish(content) {
+    clearInterval(this.timer);
+    this.next = content.slice(0, 2000);
+    this.rendered = null; // force the last write through
+    await this.flush();
+  }
+}
+
+/** The in-progress view: tools as they fire, then prose as it arrives. */
+function renderProgress(toolsSoFar, text) {
+  const lines = toolsSoFar.map((name) => `-# 🔧 \`${name.replace(/^.*__/, "")}\``);
+  if (text) {
+    lines.push("");
+    lines.push(text.length > 1500 ? `${text.slice(0, 1500)}…` : text);
+  } else if (lines.length === 0) {
+    lines.push("-# thinking…");
+  }
+  return lines.join("\n");
+}
+
 function chunk(text) {
   const parts = [];
   let rest = text;
@@ -143,19 +196,29 @@ export async function handleAsk(message) {
     return;
   }
 
-  await message.channel.sendTyping();
-  const typing = setInterval(() => message.channel.sendTyping().catch(() => {}), 8000);
-
   try {
     const history = await recentTurns(message.channel, message.id);
     const asker = message.member?.displayName || message.author.username;
+
+    const placeholder = await message.reply("-# thinking…");
+    const live = new LiveMessage(placeholder);
+    const toolsSoFar = [];
+    let streamed = "";
+
     const result = await ask({
       system: SYSTEM,
       messages: [...history, { role: "user", content: `${asker}: ${question}` }],
+      onEvent: (event) => {
+        if (event.kind === "tool_start") toolsSoFar.push(event.name);
+        else if (event.kind === "text") streamed += event.text;
+        live.update(renderProgress(toolsSoFar, streamed));
+      },
     });
 
+    clearInterval(live.timer);
+
     if (!result.ok) {
-      await message.reply(
+      await live.finish(
         result.error === "refusal"
           ? "I'm not able to answer that one."
           : `Something broke on my side talking to Elixir MCP: \`${result.error}\`. There's no local fallback here by design, so that's the whole answer.`,
@@ -167,10 +230,13 @@ export async function handleAsk(message) {
     const answer = result.text || "I got nothing back for that.";
     const friction = detectFriction({ text: answer, called: result.called, errors: result.errors });
 
+    // The live message becomes the answer, so the reply the member is already
+    // watching turns into the final text rather than being orphaned above it.
     const parts = chunk(answer);
-    let sent;
-    for (const [index, part] of parts.entries()) {
-      sent = index === 0 ? await message.reply(part) : await message.channel.send(part);
+    await live.finish(parts[0]);
+    let sent = placeholder;
+    for (const part of parts.slice(1)) {
+      sent = await message.channel.send(part);
     }
 
     const trace = renderTrace(result.trace, result.usd);
@@ -199,7 +265,5 @@ export async function handleAsk(message) {
   } catch (error) {
     log.error("ask_crashed", { error: error.message, stack: error.stack?.slice(0, 400) });
     await message.reply("I fell over answering that. It's logged.").catch(() => {});
-  } finally {
-    clearInterval(typing);
   }
 }
