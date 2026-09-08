@@ -147,7 +147,7 @@ characters), or exactly NONE if you filed nothing.`;
  * the point: a member watching their complaint get answered is the strongest
  * argument for the product there is.
  */
-export async function newFeedbackResponses() {
+export async function newFeedbackResponses({ seedOnly = false } = {}) {
   const result = await callTool("elixir_my_feedback", {});
   if (!result.ok) {
     log.warn("feedback_read_failed", { error: result.error });
@@ -175,5 +175,10 @@ export async function newFeedbackResponses() {
   if (fresh.length > 0) {
     state.set({ answeredFeedbackIds: [...seen].slice(-500) });
   }
-  return fresh;
+
+  // First run marks the whole history as already shown and returns nothing.
+  // Same rule as the event cursor: seed, never drain. An empty ledger meeting a
+  // year of answered feedback is a channel full of old news, which is a worse
+  // first impression than silence — and it happened, once, on 2026-09-08.
+  return seedOnly ? [] : fresh;
 }

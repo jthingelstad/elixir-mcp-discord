@@ -107,8 +107,8 @@ async function seedCursor() {
   return result.cursor;
 }
 
-async function postFeedbackResponses(channel) {
-  for (const item of await newFeedbackResponses()) {
+async function postFeedbackResponses(channel, { seedOnly = false } = {}) {
+  for (const item of await newFeedbackResponses({ seedOnly })) {
     const shipped = item.shippedIn ? ` (shipped in ${item.shippedIn})` : "";
     await channel.send(
       [
@@ -127,7 +127,7 @@ export async function pollOnce(channel) {
   if (cursor === null || cursor === undefined) {
     cursor = await seedCursor();
     if (cursor === null) return;
-    await postFeedbackResponses(channel).catch(() => {});
+    await postFeedbackResponses(channel, { seedOnly: true }).catch(() => {});
     return;
   }
 
