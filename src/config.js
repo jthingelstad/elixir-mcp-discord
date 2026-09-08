@@ -13,7 +13,7 @@
 
 import dotenv from "dotenv";
 
-const loaded = dotenv.config();
+const loaded = dotenv.config({ quiet: true });
 
 /**
  * Where each optional value actually came from.
