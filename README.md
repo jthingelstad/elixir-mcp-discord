@@ -1,5 +1,10 @@
 # elixir-mcp-discord
 
+[![tests](https://github.com/jthingelstad/elixir-mcp-discord/actions/workflows/test.yml/badge.svg)](https://github.com/jthingelstad/elixir-mcp-discord/actions/workflows/test.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)](package.json)
+[![contract](https://img.shields.io/badge/Elixir%20MCP-contract%200.28-8a63d2.svg)](https://elixir.poapkings.com)
+
 A Discord bot for a Clash Royale clan, powered **entirely** by
 [Elixir MCP](https://elixir.poapkings.com). No local game database, no Clash
 Royale API key, no cached roster. Every fact it states came from an MCP tool
