@@ -63,6 +63,43 @@ beyond the same MCP server.
 
 ${FEEDBACK_PROMPT}`;
 
+/**
+ * Renders the turn's reasoning and tool calls for the channel.
+ *
+ * Jamie asked for this and it is more than a debug view: in a channel whose
+ * entire purpose is showing what Elixir MCP is like, the tool names and the
+ * arguments ARE the demonstration. A member who sees `war_current` called with
+ * their clan tag learns something a polished answer hides. It also makes a
+ * wrong answer diagnosable by whoever noticed it, rather than only by whoever
+ * reads the logs.
+ */
+function renderTrace(trace, usd) {
+  if (!trace || trace.length === 0) return null;
+  const lines = [];
+
+  for (const step of trace) {
+    if (step.kind === "thought") {
+      lines.push(`> 💭 ${step.text.replace(/\s+/g, " ").slice(0, 400)}`);
+    } else if (step.kind === "tool") {
+      let args = "";
+      try {
+        args = JSON.stringify(step.input ?? {});
+      } catch {
+        args = "{}";
+      }
+      if (args.length > 180) args = `${args.slice(0, 177)}…`;
+      const name = step.name.replace(/^.*__/, "");
+      lines.push(`> 🔧 \`${name}\` \`${args}\``);
+    } else if (step.kind === "error") {
+      lines.push(`> ⚠️ \`${step.name.replace(/^.*__/, "")}\` failed: ${step.detail.slice(0, 200)}`);
+    }
+  }
+
+  let body = lines.join("\n");
+  if (body.length > 1700) body = `${body.slice(0, 1700)}\n> …`;
+  return `-# **How I got there** · $${usd.toFixed(4)}\n${body}`;
+}
+
 function chunk(text) {
   const parts = [];
   let rest = text;
@@ -130,17 +167,17 @@ export async function handleAsk(message) {
     const answer = result.text || "I got nothing back for that.";
     const friction = detectFriction({ text: answer, called: result.called, errors: result.errors });
 
-    const notes = [];
-    if (result.called.length > 0) {
-      notes.push(result.called.map((n) => n.replace(/^.*__/, "")).join(", "));
-    }
-    notes.push(`$${result.usd.toFixed(4)}`);
-
     const parts = chunk(answer);
     let sent;
     for (const [index, part] of parts.entries()) {
-      const body = index === parts.length - 1 ? `${part}\n-# ${notes.join(" · ")}` : part;
-      sent = index === 0 ? await message.reply(body) : await message.channel.send(body);
+      sent = index === 0 ? await message.reply(part) : await message.channel.send(part);
+    }
+
+    const trace = renderTrace(result.trace, result.usd);
+    if (trace && sent) {
+      await sent
+        .reply({ content: trace, allowedMentions: { repliedUser: false } })
+        .catch((error) => log.warn("trace_post_failed", { error: error.message }));
     }
 
     log.info("ask_answered", {

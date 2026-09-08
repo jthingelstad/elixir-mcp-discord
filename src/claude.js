@@ -71,21 +71,32 @@ function readToolActivity(content) {
   const namesById = new Map();
   const called = [];
   const errors = [];
+  // The trace is the ordered story of the turn — what it thought, then what it
+  // called, interleaved as it happened. Showing it is a product decision, not a
+  // debug affordance: in a channel whose whole purpose is "what is Elixir MCP
+  // like", the tool names ARE the demonstration.
+  const trace = [];
 
   for (const block of content) {
     if (typeof block?.type !== "string") continue;
-    if (block.type.endsWith("tool_use")) {
+    if (block.type === "thinking") {
+      // Empty unless display:"summarized" is set on the request.
+      const text = (block.thinking || "").trim();
+      if (text) trace.push({ kind: "thought", text });
+    } else if (block.type.endsWith("tool_use")) {
       const name = block.name || "unknown";
       if (block.id) namesById.set(block.id, name);
       called.push(name);
+      trace.push({ kind: "tool", name, input: block.input });
     } else if (block.type.endsWith("tool_result")) {
-      if (!block.is_error) continue;
       const name = namesById.get(block.tool_use_id) || "unknown";
+      if (!block.is_error) continue;
       const detail = JSON.stringify(block.content ?? "").slice(0, 400);
       errors.push({ name, detail });
+      trace.push({ kind: "error", name, detail });
     }
   }
-  return { called, errors };
+  return { called, errors, trace };
 }
 
 function readText(content) {
@@ -106,6 +117,7 @@ export async function ask({ system, messages, maxTokens = config.claude.maxToken
   const history = [...messages];
   const called = [];
   const errors = [];
+  const trace = [];
   let usdTotal = 0;
   let text = "";
 
@@ -120,12 +132,14 @@ export async function ask({ system, messages, maxTokens = config.claude.maxToken
         messages: history,
         mcp_servers: mcpServers,
         tools,
-        thinking: { type: "adaptive" },
+        // "omitted" is the default on Sonnet 5 and returns empty thinking
+        // blocks. We show our work in-channel, so ask for the summary.
+        thinking: { type: "adaptive", display: "summarized" },
         output_config: { effort: config.claude.effort },
       });
     } catch (error) {
       log.error("claude_call_failed", { error: error.message });
-      return { ok: false, error: error.message, called, errors, usd: usdTotal };
+      return { ok: false, error: error.message, called, errors, trace, usd: usdTotal };
     }
 
     const usd = costOf(config.claude.model, response.usage);
@@ -135,10 +149,11 @@ export async function ask({ system, messages, maxTokens = config.claude.maxToken
     const activity = readToolActivity(response.content);
     called.push(...activity.called);
     errors.push(...activity.errors);
+    trace.push(...activity.trace);
     text = readText(response.content) || text;
 
     if (response.stop_reason === "refusal") {
-      return { ok: false, error: "refusal", called, errors, usd: usdTotal };
+      return { ok: false, error: "refusal", called, errors, trace, usd: usdTotal };
     }
     if (response.stop_reason === "pause_turn") {
       history.push({ role: "assistant", content: response.content });
@@ -150,12 +165,13 @@ export async function ask({ system, messages, maxTokens = config.claude.maxToken
       text,
       called,
       errors,
+      trace,
       usd: usdTotal,
       truncated: response.stop_reason === "max_tokens",
     };
   }
 
-  return { ok: true, text, called, errors, usd: usdTotal, truncated: true };
+  return { ok: true, text, called, errors, trace, usd: usdTotal, truncated: true };
 }
 
 export function overDailyCap() {
