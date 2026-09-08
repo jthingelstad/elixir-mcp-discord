@@ -52,6 +52,16 @@ If Elixir MCP is down, this bot says so and stops. It has nothing else to
 consult. That makes it an honest instrument: when an answer is good, the MCP
 server earned it.
 
+### It is its own principal
+
+The bot connects as an Elixir MCP **agent** — a principal that acts for a clan
+rather than for a person, with its own key, event cursor and feedback inbox, at
+its own URL (`/a/<id>/mcp`). Its key is refused at the personal `/mcp`.
+
+That is not decoration. An agent's tool surface has no `elixir_my_players`, so
+it *cannot* answer "what players do you track?" with its owner's personal list —
+which is exactly what it did before the split.
+
 ### It does not know who you are
 
 A member connecting their own agent has added their own player, so their agent

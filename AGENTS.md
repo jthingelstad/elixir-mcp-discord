@@ -40,6 +40,29 @@ via anything but `players_search` is the leak that would make this demo lie.
 **Public repo, no secrets.** `.env` is gitignored, `state/` is gitignored. Check
 `git ls-files` before assuming something is untracked.
 
+## It is an AGENT now, not Jamie
+
+Since 2026-09-08 this bot authenticates as its own principal — an Elixir MCP
+*agent* (`public_id 272bd891a21d`, role `leader`, owned by Jamie's account) with
+its own key, its own event cursor and its own feedback inbox. It connects at its
+own door, `https://elixir.poapkings.com/a/272bd891a21d/mcp`, and its key is
+refused at the personal `/mcp` with `wrong_resource`.
+
+That closes a real exposure rather than a theoretical one. Riding Jamie's
+account, this bot could answer "what players do you track?" with his personal
+claimed-player list, and on first boot it read *his* answered feedback as its
+own and posted eight items into a public channel. Both are now impossible by
+construction: the agent surface publishes 34 tools instead of 37, and
+`elixir_my_players`, `elixir_add_player` and `elixir_add_clan` are not merely
+hidden but refused on call.
+
+**So do not add them back to a prompt.** If a member asks "how am I doing", the
+answer is still to ask for a tag and use `players_search` — that friction is
+part of what the channel demonstrates.
+
+**`game_clock` is the right first call** for "what day is it", not a borrowed
+clan's river race.
+
 ## Feedback is the deliverable
 
 Jamie's framing: *"we really want this agent to give feedback on what it wants

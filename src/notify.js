@@ -11,10 +11,14 @@
  * a promise the product could not keep.
  *
  * CURSOR: we pass `mark_seen: false` on every poll and keep our own position in
- * state.json. `events_seen_through` is a single per-account marker, so
- * acknowledging here would silently consume events belonging to any other
- * routine on the same account. Our own cursor costs one integer and takes that
- * whole class of problem off the table.
+ * state.json. `events_seen_through` is a single per-account marker, and this
+ * bot originally shared an account with its owner — acknowledging would have
+ * silently consumed events belonging to his other routines.
+ *
+ * Since 2026-09-08 it is its own principal, so that collision is gone and
+ * `mark_seen: true` would now be correct. The local cursor stays anyway: it
+ * costs one integer, it survives a second consumer appearing on this account
+ * later, and it means a restart can never skip an event it failed to post.
  */
 
 import { config } from "./config.js";

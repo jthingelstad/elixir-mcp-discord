@@ -1,4 +1,9 @@
 node_modules/
 .env
+# Backups of a secrets file are still a secrets file. A `git add -A` after
+# writing .env.bak swept one into a commit on 2026-09-08; GitHub's push
+# protection caught it, which is not a control this repo should be relying on.
+.env.*
+!.env.example
 state/
 *.log
