@@ -29,6 +29,9 @@ const DEFAULTS = {
   // meta.contract_version carried on every tool response — bare "<contract>".
   contractVersion: null,
   answeredFeedbackIds: [],
+  // null = never seeded. Distinct from {} on purpose: an empty ledger on a
+  // fresh install would make every job whose window is still open fire at once.
+  scheduledRuns: null,
 };
 
 function read() {

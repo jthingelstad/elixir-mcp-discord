@@ -7,6 +7,7 @@ import { Client, GatewayIntentBits, Partials, Events } from "discord.js";
 import { config, provenance } from "./config.js";
 import { handleAsk } from "./ask.js";
 import { startPolling } from "./notify.js";
+import { startScheduler } from "./schedule.js";
 import { initialize } from "./mcp.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
@@ -52,6 +53,7 @@ client.once(Events.ClientReady, async (ready) => {
   }
   startPolling(notifyChannel);
   log.info("notify_polling_started", { everySeconds: config.notifyPollSeconds });
+  startScheduler(notifyChannel);
 });
 
 client.on(Events.MessageCreate, async (message) => {

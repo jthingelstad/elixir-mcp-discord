@@ -95,6 +95,39 @@ looks wrong. It prints the
 contract version and tool fingerprint, tells you if either moved since last
 time, and pulls the changelog when it did.
 
+## Scheduled posts
+
+Beyond reacting to the event feed, the bot runs prompts on a clock and posts the
+answers. Times are UTC; `src/schedule.js` holds the prompts.
+
+| Job | When | What |
+|---|---|---|
+| `war-deck-check` | daily 01:00 | who still has war decks today (war days only) |
+| `notable-movers` | daily 12:30 | up to three players whose last 24h stood out |
+| `capability-spotlight` | daily 17:00 | one thing you could ask, asked and answered |
+| `rival-scout` | Mon 12:00 | this week's war bracket, scouted |
+| `pilot-spotlight` | Fri 23:00 | who improved most, one player in depth |
+| `meta-report` | Sun 15:00 | what's rising in the corpus vs how we play |
+
+Two rules picked this roster: don't restate the event feed (`clan_pulse`,
+`war_day_open`, joins and week-close already get written up when they fire), and
+favour what a single-clan bot structurally cannot do — the multi-clan corpus,
+meta decks, rival scouting, Pilot Score.
+
+**Silence is a valid output.** Any prompt that can be dull is told it may answer
+`SKIP`, which posts nothing and still marks the run done. A channel that
+manufactures content on a quiet day teaches people to mute it.
+
+Turn jobs off by key, no code change:
+
+```
+SCHEDULE_DISABLED=meta-report,pilot-spotlight
+```
+
+Roughly $0.05–0.20 per post. A missed run fires late only inside its own
+catch-up window — a war-deck nudge at 4am because the host was asleep is worse
+than one that never fires.
+
 ## Tests
 
 ```bash
