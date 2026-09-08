@@ -91,7 +91,7 @@ lazy(config, "mcp", () => ({
 
 /**
  * Clash Royale tags start with `#`, which is a comment character to dotenv — an
- * unquoted `CLAN_TAG=#J2RGCRVG` parses as the empty string and the failure
+ * unquoted `CLAN_TAG=#2GUCVLQR` parses as the empty string and the failure
  * surfaces far from its cause. So: say so in the error, and accept the tag with
  * or without the `#` since quoting is the thing people forget.
  */
@@ -100,7 +100,7 @@ lazy(config, "clanTag", () => {
   if (!raw) {
     throw new Error(
       'Missing CLAN_TAG. If it is set, check that it is QUOTED in .env — an ' +
-        'unquoted value starting with "#" is read as a comment. Use CLAN_TAG="#J2RGCRVG".',
+        'unquoted value starting with "#" is read as a comment. Use CLAN_TAG="#2GUCVLQR".',
     );
   }
   return raw.startsWith("#") ? raw : `#${raw}`;
