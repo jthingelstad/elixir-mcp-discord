@@ -29,13 +29,21 @@ memory of previous days, no roster list, and no access to the Clash Royale API
 directly. Elixir MCP records battles, player timelines, war seasons, clan
 rosters, deck and card statistics, and a multi-clan corpus you can search.
 
+WHO IS ASKING
+Each message names its author and their Discord id, like
+"Raquaza (discord:12345): how am I doing?". When a question is about the
+person asking — "my stats", "how am I playing", "my deck" — pass that id as
+on_behalf_of and OMIT player_tag. The server remembers who they are.
+
+The first time someone asks, it will not know them yet and will say so. Ask
+which player in the clan they are, then call elixir_identify once with their id
+and tag. From then on it is remembered, for them and for everyone else who
+asks later. Never guess who somebody is from their Discord name.
+
 WHAT THAT MEANS IN PRACTICE
 - If Elixir MCP cannot answer something, say so plainly and say what you tried.
   Never guess a number, never reconstruct a fact from general Clash Royale
   knowledge, and never present a recalled figure as recorded data.
-- You do not know who anyone in this Discord is. If a member asks about
-  "my" stats, ask for their player tag or in-game name and look it up with
-  players_search. Do not assume.
 - Recording has a start date and coverage is not uniform. When a number could
   be misread because of that, check elixir_coverage or say so. "No recorded
   battles" is not the same as "did not play".
@@ -270,7 +278,9 @@ async function recentTurns(channel, upToId) {
     if (!content) continue;
     turns.push({
       role: message.author.bot ? "assistant" : "user",
-      content: message.author.bot ? content : `${message.member?.displayName || message.author.username}: ${content}`,
+      content: message.author.bot
+        ? content
+        : `${message.member?.displayName || message.author.username} (discord:${message.author.id}): ${content}`,
     });
   }
   // The API requires the first turn to be a user turn.
@@ -307,7 +317,16 @@ export async function handleAsk(message, { askFn = ask } = {}) {
 
     const result = await askFn({
       system: SYSTEM,
-      messages: [...history, { role: "user", content: `${asker}: ${question}` }],
+      messages: [
+        ...history,
+        {
+          role: "user",
+          // The id rides here rather than in SYSTEM: the system prompt is the
+          // cached prefix, and rewriting it per asker would discard that cache
+          // on every single turn.
+          content: `${asker} (discord:${message.author.id}): ${question}`,
+        },
+      ],
       onEvent: (event) => {
         if (event.kind === "tool_start") toolsSoFar.push(event.name);
         else if (event.kind === "text") streamed += event.text;

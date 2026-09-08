@@ -146,18 +146,26 @@ function readToolActivity(content, timings) {
       const ms = timings?.get(block.tool_use_id);
       if (step && ms !== undefined) step.ms = ms;
 
-      if (block.is_error) {
-        const detail = resultText(block.content).slice(0, 400);
+      let body = null;
+      const raw = resultText(block.content);
+      try {
+        body = JSON.parse(raw);
+      } catch {
+        // A tool answering in prose is legal; there is just no shape to report.
+      }
+
+      // is_error alone is not enough. A call can fail without the flag being
+      // set -- an unknown tool name resolves at the protocol layer, not the
+      // tool layer -- and Elixir MCP reports its own refusals as a body with
+      // an `error` object. Both used to render as an ordinary success, so the
+      // model would report "linked!" while nothing had been written. Observed
+      // 2026-09-08: two elixir_identify calls stored nothing and said they had.
+      const failed = block.is_error || Boolean(body?.error);
+      if (failed) {
+        const detail = (body?.error?.message ?? raw).slice(0, 400);
         errors.push({ name, detail });
         trace.push({ kind: "error", name, detail });
         continue;
-      }
-
-      let body = null;
-      try {
-        body = JSON.parse(resultText(block.content));
-      } catch {
-        // A tool answering in prose is legal; there is just no shape to report.
       }
       if (step) step.shape = describeShape(body);
       const envelope = readEnvelope(body);

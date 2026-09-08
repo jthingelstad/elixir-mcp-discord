@@ -130,3 +130,18 @@ test("an empty result is called out, not smoothed over", () => {
 test("a truncated answer says so", () => {
   assert.ok(renderTrace({ ...RESULT, truncated: true }).includes("TRUNCATED"));
 });
+
+test("a tool that failed without the error flag is still reported as failed", () => {
+  // The failure this closes: an unknown tool name fails at the PROTOCOL layer,
+  // so the result block carries no is_error, and Elixir MCP reports its own
+  // refusals as a body with an `error` object. Both used to render as a normal
+  // success, and the model would tell a member "linked!" having written
+  // nothing. Observed live on 2026-09-08.
+  const trace = renderTrace({
+    ...RESULT,
+    errors: [{ name: "elixir_identify", detail: "unknown tool" }],
+    trace: [{ kind: "error", name: "elixir_identify", detail: "unknown tool" }],
+  });
+  assert.ok(trace.includes("⚠️"), "a failure must be visible in the footer");
+  assert.ok(trace.includes("elixir_identify"));
+});
