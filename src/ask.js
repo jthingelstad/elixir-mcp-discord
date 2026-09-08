@@ -68,89 +68,128 @@ beyond the same MCP server.
 ${FEEDBACK_PROMPT}`;
 
 /**
- * Renders the turn's reasoning and tool calls for the channel.
+ * The diagnostic footer under every answer.
  *
- * Jamie asked for this and it is more than a debug view: in a channel whose
- * entire purpose is showing what Elixir MCP is like, the tool names and the
- * arguments ARE the demonstration. A member who sees `war_current` called with
- * their clan tag learns something a polished answer hides. It also makes a
- * wrong answer diagnosable by whoever noticed it, rather than only by whoever
- * reads the logs.
+ * In a channel whose purpose is showing what Elixir MCP is like, the tool names
+ * and arguments ARE the demonstration — a member who sees `war_current` called
+ * with their clan tag learns something a polished answer hides. But the reason
+ * it carries this much is debuggability: a screenshot of a wrong answer should
+ * be enough to work out what went wrong, without anyone reading a log.
+ *
+ * What each part is for:
+ *   shape (→ 1 players)   the tool answered fine WITH NOTHING IN IT, and the
+ *                         model narrated around the hole. "1 player" and
+ *                         "0 players" read identically in prose.
+ *   envelope              as_of / recorded_since / freshness — whether "94
+ *                         battles in 30 days" is the record or a fragment.
+ *   completeness_note     the server explicitly saying capture was incomplete.
+ *                         It has always reached the model and never the reader.
+ *   latency               separates "slow because six calls" from "slow because
+ *                         one call took nine seconds".
+ *   rounds / stop reason  a pause_turn resume otherwise looks like a straight
+ *                         run, and a max_tokens cutoff looks like a finished
+ *                         answer.
+ *   model / effort        cost without them is unattributable after a change.
+ *   contract fingerprint  when an answer changes shape between two days, this
+ *                         says whether the bot saw the old surface or the new.
+ *
+ * Not here, because it needs a server change: Elixir MCP writes an mcp_call_audit
+ * row per call but exposes no id for it, so a bad answer cannot be joined to the
+ * server-side record. A `request_id` on ResponseMeta would fix that for every
+ * consumer. `turnId` below is the local half — it joins a screenshot to this
+ * process's log, and nothing further.
  */
-function renderTrace(trace, usd) {
-  if (!trace || trace.length === 0) return null;
-  const lines = [];
+const TRACE_LIMIT = 1900;
 
-  for (const step of trace) {
-    if (step.kind === "thought") {
-      lines.push(`> 💭 ${step.text.replace(/\s+/g, " ").slice(0, 400)}`);
-    } else if (step.kind === "tool") {
-      let args = "";
+function clip(text, max) {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+function agoLabel(seconds) {
+  if (seconds === null || seconds === undefined) return null;
+  if (seconds < 120) return `fresh ${Math.round(seconds)}s`;
+  if (seconds < 7200) return `fresh ${Math.round(seconds / 60)}m`;
+  return `fresh ${Math.round(seconds / 3600)}h`;
+}
+
+export function renderTrace(result) {
+  const short = (name) => name.replace(/^.*__/, "");
+
+  // Built in priority order: the mechanical facts always fit, and reasoning
+  // fills whatever room is left. Losing a thought costs less than losing the
+  // completeness caveat that explains why the number is wrong.
+  const head = `-# **How I got there** · \`${result.turnId}\``;
+
+  const footer = [
+    result.model,
+    `effort ${result.effort}`,
+    `$${result.usd.toFixed(4)}`,
+    `${(result.ms / 1000).toFixed(1)}s`,
+    result.rounds > 1 ? `${result.rounds} rounds` : null,
+    result.stopReason,
+    result.truncated ? "**TRUNCATED**" : null,
+    result.serverVersion,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const required = [];
+  for (const step of result.trace) {
+    if (step.kind === "tool") {
+      let args = "{}";
       try {
         args = JSON.stringify(step.input ?? {});
       } catch {
-        args = "{}";
+        /* keep the placeholder */
       }
-      if (args.length > 180) args = `${args.slice(0, 177)}…`;
-      const name = step.name.replace(/^.*__/, "");
-      lines.push(`> 🔧 \`${name}\` \`${args}\``);
+      const clipped = args.length > 180;
+      const parts = [`> 🔧 \`${short(step.name)}\` \`${clip(args, 180)}\``];
+      if (clipped) parts.push("*(args clipped)*");
+      if (step.shape) parts.push(`→ ${step.shape}`);
+      if (step.ms !== undefined) parts.push(`· ${(step.ms / 1000).toFixed(1)}s`);
+      required.push(parts.join(" "));
     } else if (step.kind === "error") {
-      lines.push(`> ⚠️ \`${step.name.replace(/^.*__/, "")}\` failed: ${step.detail.slice(0, 200)}`);
+      required.push(`> ⚠️ \`${short(step.name)}\` failed: ${clip(step.detail, 200)}`);
     }
   }
 
-  let body = lines.join("\n");
-  if (body.length > 1700) body = `${body.slice(0, 1700)}\n> …`;
-  return `-# **How I got there** · $${usd.toFixed(4)}\n${body}`;
-}
-
-/**
- * A Discord message edited on a throttle, which is as close to streaming as
- * Discord gets — there is no partial-message API, only `edit`. Discord rate
- * limits edits per channel (roughly 5 per 5s), so EDIT_MS keeps a comfortable
- * margin and a flush is skipped entirely when nothing changed.
- */
-const EDIT_MS = 1500;
-
-class LiveMessage {
-  constructor(message) {
-    this.message = message;
-    this.rendered = null;
-    this.next = null;
-    this.timer = setInterval(() => this.flush(), EDIT_MS);
+  const envelope = result.envelopes?.at(-1);
+  if (envelope) {
+    const bits = [
+      envelope.as_of ? `as_of ${envelope.as_of.slice(11, 16)}Z` : null,
+      envelope.recorded_since ? `recorded since ${envelope.recorded_since.slice(0, 10)}` : null,
+      agoLabel(envelope.freshness_seconds),
+    ].filter(Boolean);
+    if (bits.length) required.push(`> 📅 ${bits.join(" · ")}`);
   }
 
-  update(content) {
-    this.next = content.slice(0, 1900);
+  const notes = [...new Set((result.envelopes || []).map((e) => e.completeness_note).filter(Boolean))];
+  for (const note of notes.slice(0, 2)) {
+    required.push(`> ❗ ${clip(note, 300)}`);
   }
 
-  async flush() {
-    if (this.next === null || this.next === this.rendered) return;
-    const content = this.next;
-    this.rendered = content;
-    await this.message.edit(content).catch((error) => {
-      log.warn("live_edit_failed", { error: error.message });
-    });
+  if (required.length === 0 && result.trace.length === 0) return null;
+
+  const thoughts = result.trace
+    .filter((step) => step.kind === "thought")
+    .map((step) => `> 💭 ${clip(step.text.replace(/\s+/g, " "), 400)}`);
+
+  const lines = [head, ...required];
+  let used = [...lines, `-# ${footer}`].join("\n").length;
+  let shown = 0;
+  for (const thought of thoughts) {
+    if (used + thought.length + 1 > TRACE_LIMIT) break;
+    lines.push(thought);
+    used += thought.length + 1;
+    shown += 1;
+  }
+  if (shown < thoughts.length) {
+    const omitted = `> 💭 *(${thoughts.length - shown} more reasoning step${thoughts.length - shown === 1 ? "" : "s"} not shown)*`;
+    if (used + omitted.length + 1 <= TRACE_LIMIT) lines.push(omitted);
   }
 
-  async finish(content) {
-    clearInterval(this.timer);
-    this.next = content.slice(0, 2000);
-    this.rendered = null; // force the last write through
-    await this.flush();
-  }
-}
-
-/** The in-progress view: tools as they fire, then prose as it arrives. */
-function renderProgress(toolsSoFar, text) {
-  const lines = toolsSoFar.map((name) => `-# 🔧 \`${name.replace(/^.*__/, "")}\``);
-  if (text) {
-    lines.push("");
-    lines.push(text.length > 1500 ? `${text.slice(0, 1500)}…` : text);
-  } else if (lines.length === 0) {
-    lines.push("-# thinking…");
-  }
-  return lines.join("\n");
+  lines.push(`-# ${footer}`);
+  return clip(lines.join("\n"), 2000);
 }
 
 function chunk(text) {
@@ -239,7 +278,7 @@ export async function handleAsk(message) {
       sent = await message.channel.send(part);
     }
 
-    const trace = renderTrace(result.trace, result.usd);
+    const trace = renderTrace(result);
     if (trace && sent) {
       await sent
         .reply({ content: trace, allowedMentions: { repliedUser: false } })
@@ -247,9 +286,15 @@ export async function handleAsk(message) {
     }
 
     log.info("ask_answered", {
+      turnId: result.turnId,
       user: message.author.id,
       tools: result.called.length,
+      toolNames: result.called.join(","),
       usd: result.usd.toFixed(4),
+      ms: result.ms,
+      rounds: result.rounds,
+      stopReason: result.stopReason,
+      truncated: result.truncated || undefined,
       friction: friction?.reason,
     });
 

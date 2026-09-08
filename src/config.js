@@ -11,7 +11,32 @@
  * into on your first run.
  */
 
-import "dotenv/config";
+import dotenv from "dotenv";
+
+const loaded = dotenv.config();
+
+/**
+ * Where each optional value actually came from.
+ *
+ * dotenv does NOT override an existing process.env entry, so a variable
+ * exported in your shell silently outranks .env. Generic names like
+ * CLAUDE_EFFORT are exactly the ones a developer already has set globally for
+ * something else — and this bot ran at effort "high" for its first evening
+ * because of one, quietly paying for thinking nobody asked for. Neither
+ * behaviour is wrong; being unable to see which one happened is.
+ */
+export const provenance = [];
+
+function tracked(name, fallback) {
+  const fromEnv = (process.env[name] || "").trim();
+  const fromFile = (loaded.parsed?.[name] || "").trim();
+  let source = "default";
+  if (fromEnv && fromFile && fromEnv !== fromFile) source = "SHELL (shadows .env)";
+  else if (fromEnv && fromFile) source = ".env";
+  else if (fromEnv) source = "shell";
+  provenance.push({ name, value: fromEnv || fallback, source });
+  return fromEnv || fallback;
+}
 
 function required(name) {
   const value = (process.env[name] || "").trim();
@@ -46,8 +71,8 @@ function lazy(target, key, build) {
 
 export const config = {
   claude: {
-    model: optional("CLAUDE_MODEL", "claude-sonnet-5"),
-    effort: optional("CLAUDE_EFFORT", "medium"),
+    model: tracked("CLAUDE_MODEL", "claude-sonnet-5"),
+    effort: tracked("CLAUDE_EFFORT", "medium"),
     maxTokens: 8000,
   },
   notifyPollSeconds: Number(optional("NOTIFY_POLL_SECONDS", "300")),

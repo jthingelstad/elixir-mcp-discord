@@ -4,7 +4,7 @@
  */
 
 import { Client, GatewayIntentBits, Partials, Events } from "discord.js";
-import { config } from "./config.js";
+import { config, provenance } from "./config.js";
 import { handleAsk } from "./ask.js";
 import { startPolling } from "./notify.js";
 import { initialize } from "./mcp.js";
@@ -22,6 +22,14 @@ const client = new Client({
 
 client.once(Events.ClientReady, async (ready) => {
   log.info("discord_ready", { user: ready.user.tag });
+  for (const entry of provenance) {
+    const shadowed = entry.source.startsWith("SHELL");
+    log[shadowed ? "warn" : "info"]("config_resolved", {
+      name: entry.name,
+      value: entry.value,
+      source: entry.source,
+    });
+  }
 
   const handshake = await initialize();
   if (!handshake.ok) {

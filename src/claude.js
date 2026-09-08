@@ -1,35 +1,43 @@
 /**
- * The model call.
+ * The model call, and everything we can learn about it.
  *
  * Tools reach Claude through the Claude API's MCP connector: we hand the API
  * the Elixir MCP URL and our service token, and Anthropic opens the MCP
  * connection server-side and runs the tool loop. That is the whole integration.
  *
- * Two reasons this beats proxying tools by hand, and both are the reason this
- * repo exists:
+ * Two reasons this beats proxying tools by hand, and both are why this repo
+ * exists:
  *
  *   1. Tool drift stops being our problem. Elixir MCP publishes
  *      `serverInfo.version` as `<contract>+tools.<fingerprint>` precisely
  *      because clients cache `tools/list` forever. A hand-written tool mirror
- *      goes stale silently — the same way a hand-maintained "22 tools, contract
- *      0.10" note went stale while the server shipped 36 tools at 0.28. The
- *      connector re-reads the surface itself, so a tool that shipped this
- *      morning is callable this afternoon with no deploy here.
+ *      goes stale silently — the way a "22 tools, contract 0.10" note went
+ *      stale while the server shipped 36 tools at 0.28. The connector re-reads
+ *      the surface itself.
  *
- *   2. It is the same path a member's own agent takes. If this bot had a
- *      privileged shortcut into the data, the channel would be demonstrating
- *      something nobody else can reproduce.
+ *   2. It is the same path a member's own agent takes. A privileged shortcut
+ *      would make the channel demonstrate something nobody can reproduce.
+ *
+ * A NOTE ON WHAT THE CONNECTOR GIVES BACK. Because tool results come home as
+ * `mcp_tool_result` blocks, we can read the payloads Claude read. That is what
+ * makes the diagnostic footer possible: the result SHAPE (how many rows, and
+ * whether it was empty) and the meta envelope every Elixir MCP response carries
+ * — as_of, recorded_since, freshness_seconds, and above all completeness_note,
+ * which is the server saying "capture was incomplete, caveat this" and which
+ * until now reached the model and never the reader.
  *
  * There is deliberately no local database, no roster cache, and no fallback. If
  * Elixir MCP cannot answer, neither can this bot, and it says so.
  */
 
+import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "./config.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
 
 const MCP_BETA = "mcp-client-2025-11-20";
+const MAX_ROUNDS = 5;
 const client = new Anthropic();
 
 // USD per million tokens. Used only to report what the experiment costs.
@@ -61,42 +69,102 @@ const mcpServers = [
 ];
 const tools = [{ type: "mcp_toolset", mcp_server_name: config.mcp.serverName }];
 
+/** An mcp_tool_result's content is a string or an array of text blocks. */
+function resultText(content) {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((block) => (typeof block?.text === "string" ? block.text : ""))
+      .join("");
+  }
+  return "";
+}
+
 /**
- * Walks the response content and reports what actually happened with tools.
- * The block type names for connector tool use are matched by suffix rather than
- * exact string so a rename on the API side degrades to "we saw no tool
- * activity" instead of crashing the reply.
+ * Describes a result without reproducing it: how many rows, of what, and
+ * whether it was empty.
+ *
+ * This is the cheapest guard against the failure that is hardest to see from a
+ * transcript — a tool that answered perfectly well with nothing in it, and a
+ * model that narrated smoothly around the hole. "1 player" and "0 players" read
+ * identically in prose and could not be more different.
  */
-function readToolActivity(content) {
-  const namesById = new Map();
+function describeShape(body) {
+  if (!body || typeof body !== "object") return null;
+  const counts = [];
+  let sawArray = false;
+  for (const [key, value] of Object.entries(body)) {
+    if (key === "meta" || !Array.isArray(value)) continue;
+    sawArray = true;
+    counts.push(`${value.length} ${key}`);
+    if (counts.length === 2) break;
+  }
+  if (!sawArray) return "object";
+  const total = counts.join(", ");
+  return total.startsWith("0 ") && counts.length === 1 ? `${total} (EMPTY)` : total;
+}
+
+function readEnvelope(body) {
+  const meta = body?.meta;
+  if (!meta || typeof meta !== "object") return null;
+  return {
+    as_of: meta.as_of ?? null,
+    recorded_since: meta.recorded_since ?? null,
+    freshness_seconds: meta.freshness_seconds ?? null,
+    completeness_note: meta.completeness_note ?? null,
+    contract_version: meta.contract_version ?? null,
+  };
+}
+
+/**
+ * Walks one response and reports what the tools actually did. Block type names
+ * are matched by suffix so a rename on the API side degrades to "we saw no tool
+ * activity" rather than crashing the reply.
+ */
+function readToolActivity(content, timings) {
+  const byId = new Map();
   const called = [];
   const errors = [];
-  // The trace is the ordered story of the turn — what it thought, then what it
-  // called, interleaved as it happened. Showing it is a product decision, not a
-  // debug affordance: in a channel whose whole purpose is "what is Elixir MCP
-  // like", the tool names ARE the demonstration.
   const trace = [];
+  const envelopes = [];
 
   for (const block of content) {
     if (typeof block?.type !== "string") continue;
+
     if (block.type === "thinking") {
-      // Empty unless display:"summarized" is set on the request.
       const text = (block.thinking || "").trim();
       if (text) trace.push({ kind: "thought", text });
     } else if (block.type.endsWith("tool_use")) {
       const name = block.name || "unknown";
-      if (block.id) namesById.set(block.id, name);
+      const step = { kind: "tool", name, input: block.input, id: block.id };
+      if (block.id) byId.set(block.id, step);
       called.push(name);
-      trace.push({ kind: "tool", name, input: block.input });
+      trace.push(step);
     } else if (block.type.endsWith("tool_result")) {
-      const name = namesById.get(block.tool_use_id) || "unknown";
-      if (!block.is_error) continue;
-      const detail = JSON.stringify(block.content ?? "").slice(0, 400);
-      errors.push({ name, detail });
-      trace.push({ kind: "error", name, detail });
+      const step = byId.get(block.tool_use_id);
+      const name = step?.name || "unknown";
+      const ms = timings?.get(block.tool_use_id);
+      if (step && ms !== undefined) step.ms = ms;
+
+      if (block.is_error) {
+        const detail = resultText(block.content).slice(0, 400);
+        errors.push({ name, detail });
+        trace.push({ kind: "error", name, detail });
+        continue;
+      }
+
+      let body = null;
+      try {
+        body = JSON.parse(resultText(block.content));
+      } catch {
+        // A tool answering in prose is legal; there is just no shape to report.
+      }
+      if (step) step.shape = describeShape(body);
+      const envelope = readEnvelope(body);
+      if (envelope) envelopes.push({ tool: name, ...envelope });
     }
   }
-  return { called, errors, trace };
+  return { called, errors, trace, envelopes };
 }
 
 function readText(content) {
@@ -108,34 +176,41 @@ function readText(content) {
 }
 
 /**
- * One turn against Elixir MCP. Returns the text, what the tools did, and what
- * it cost. `pause_turn` is resumed rather than treated as an answer — the
- * connector can pause a long tool sequence, and stopping there would truncate
- * the reply mid-investigation.
- */
-/**
- * `onEvent` receives live progress while the turn runs: `tool_start` the moment
- * Claude decides on a call (the name is in the content_block_start, before any
- * arguments stream), and `text` deltas as prose arrives.
+ * `onEvent` receives live progress: `tool_start` the moment Claude decides on a
+ * call (content_block_start carries the name before arguments finish
+ * streaming), and `text` deltas as prose arrives.
  *
  * Worth being clear about what streaming does and does not reach here. Elixir
- * MCP's own transport is invisible to us — the MCP connector means Anthropic
- * holds that connection, and a tool call is request/response regardless. And
- * Discord has no streaming message API; the ask lane approximates it by editing
- * one message on a throttle. What genuinely streams is Claude to us, and the
- * valuable part of that is not prose appearing letter by letter — it is the
- * tool calls becoming visible the instant they happen.
+ * MCP's own transport is invisible to us — the connector means Anthropic holds
+ * that connection, and a tool call is request/response regardless. Discord has
+ * no streaming message API; the ask lane approximates it by editing one message
+ * on a throttle. What genuinely streams is Claude to us, and the valuable part
+ * is not prose arriving letter by letter — it is the tool calls becoming
+ * visible the instant they happen.
  */
 export async function ask({ system, messages, maxTokens = config.claude.maxTokens, onEvent }) {
   const history = [...messages];
+  const started = Date.now();
+  // Ours, not the server's. It cannot join to Elixir MCP's mcp_call_audit row —
+  // that needs a request_id on the response envelope, a server change — but it
+  // does turn "the war numbers looked wrong on Tuesday" into one grep of this
+  // process's log.
+  const turnId = randomUUID().slice(0, 8);
+
   const called = [];
   const errors = [];
   const trace = [];
+  const envelopes = [];
   let usdTotal = 0;
   let text = "";
+  let rounds = 0;
+  let stopReason = null;
 
-  for (let round = 0; round < 5; round += 1) {
+  for (let round = 0; round < MAX_ROUNDS; round += 1) {
+    rounds = round + 1;
     let response;
+    const timings = new Map();
+
     try {
       const stream = client.beta.messages.stream({
         model: config.claude.model,
@@ -151,61 +226,86 @@ export async function ask({ system, messages, maxTokens = config.claude.maxToken
         output_config: { effort: config.claude.effort },
       });
 
-      if (onEvent) {
-        stream.on("streamEvent", (event) => {
-          try {
-            if (event.type === "content_block_start") {
-              const block = event.content_block;
-              if (typeof block?.type === "string" && block.type.endsWith("tool_use")) {
-                onEvent({ kind: "tool_start", name: block.name || "unknown" });
-              }
-            } else if (event.type === "content_block_delta") {
-              if (event.delta?.type === "text_delta") {
-                onEvent({ kind: "text", text: event.delta.text });
-              }
+      // Per-call latency, which separates "slow because six calls" from "slow
+      // because one call took nine seconds". A tool starts executing when its
+      // arguments finish streaming (content_block_stop), and is done when its
+      // result block opens. content_block_stop carries only an index, so the
+      // index->id mapping from content_block_start is what joins the two.
+      const idByIndex = new Map();
+      const execStart = new Map();
+
+      stream.on("streamEvent", (event) => {
+        try {
+          if (event.type === "content_block_start") {
+            const block = event.content_block;
+            const type = block?.type;
+            if (typeof type !== "string") return;
+            if (type.endsWith("tool_use")) {
+              if (block.id) idByIndex.set(event.index, block.id);
+              onEvent?.({ kind: "tool_start", name: block.name || "unknown" });
+            } else if (type.endsWith("tool_result") && block.tool_use_id) {
+              const start = execStart.get(block.tool_use_id);
+              if (start !== undefined) timings.set(block.tool_use_id, Date.now() - start);
             }
-          } catch {
-            // A failing progress renderer must never take down the answer.
+          } else if (event.type === "content_block_stop") {
+            const id = idByIndex.get(event.index);
+            if (id) execStart.set(id, Date.now());
+          } else if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
+            onEvent?.({ kind: "text", text: event.delta.text });
           }
-        });
-      }
+        } catch {
+          // A failing progress renderer must never take down the answer.
+        }
+      });
 
       response = await stream.finalMessage();
     } catch (error) {
-      log.error("claude_call_failed", { error: error.message });
-      return { ok: false, error: error.message, called, errors, trace, usd: usdTotal };
+      log.error("claude_call_failed", { turnId, error: error.message });
+      return { ok: false, error: error.message, called, errors, trace, envelopes, usd: usdTotal };
     }
 
     const usd = costOf(config.claude.model, response.usage);
     usdTotal += usd;
     state.addSpend(usd);
 
-    const activity = readToolActivity(response.content);
+    const activity = readToolActivity(response.content, timings);
     called.push(...activity.called);
     errors.push(...activity.errors);
     trace.push(...activity.trace);
+    envelopes.push(...activity.envelopes);
     text = readText(response.content) || text;
+    stopReason = response.stop_reason;
 
-    if (response.stop_reason === "refusal") {
-      return { ok: false, error: "refusal", called, errors, trace, usd: usdTotal };
+    if (stopReason === "refusal") {
+      return { ok: false, error: "refusal", called, errors, trace, envelopes, usd: usdTotal };
     }
-    if (response.stop_reason === "pause_turn") {
+    if (stopReason === "pause_turn") {
+      // Resumed, not answered. Without the round count in the footer this looks
+      // identical to a straight run in the transcript.
       history.push({ role: "assistant", content: response.content });
       continue;
     }
-
-    return {
-      ok: true,
-      text,
-      called,
-      errors,
-      trace,
-      usd: usdTotal,
-      truncated: response.stop_reason === "max_tokens",
-    };
+    break;
   }
 
-  return { ok: true, text, called, errors, trace, usd: usdTotal, truncated: true };
+  return {
+    ok: true,
+    text,
+    called,
+    errors,
+    trace,
+    envelopes,
+    usd: usdTotal,
+    turnId,
+    ms: Date.now() - started,
+    rounds,
+    stopReason,
+    // A max_tokens cutoff otherwise reads as a complete answer.
+    truncated: stopReason === "max_tokens" || rounds >= MAX_ROUNDS,
+    model: config.claude.model,
+    effort: config.claude.effort,
+    serverVersion: state.get("serverVersion"),
+  };
 }
 
 export function overDailyCap() {
