@@ -1,4 +1,9 @@
 /**
+ * Lives in scripts/ under this name because Node's default test discovery
+ * claims both anything inside a test directory and anything named test-
+ * something — under either of those it would be picked up and run as a test
+ * file of its own, which is how it briefly turned a 13-test suite into 14.
+ *
  * Loaded via `--import` so it runs BEFORE any test file's imports are
  * evaluated — ESM hoists imports, so setting these at the top of a test file
  * would be too late.

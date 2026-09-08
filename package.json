@@ -11,7 +11,7 @@
   "scripts": {
     "start": "node src/index.js",
     "probe": "node src/probe.js",
-    "test": "node --test --import ./test/setup.js test/"
+    "test": "node --test --import ./scripts/setup-tests.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.72.0",
