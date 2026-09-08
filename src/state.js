@@ -21,7 +21,13 @@ const DEFAULTS = {
   eventCursor: null, // null = "start from now", set on first poll
   spendDate: null,
   spendUsd: 0,
+  // serverInfo.version from `initialize` — "<contract>+tools.<fingerprint>".
+  // Moves when the TOOL SCHEMAS change, which is the signal we actually care
+  // about. Distinct from contractVersion below: they are different strings from
+  // different calls, and storing both in one field logs drift forever.
   serverVersion: null,
+  // meta.contract_version carried on every tool response — bare "<contract>".
+  contractVersion: null,
   answeredFeedbackIds: [],
 };
 

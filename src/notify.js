@@ -140,9 +140,9 @@ export async function pollOnce(channel) {
   // Contract drift is worth a log line even when nothing broke: the tool
   // surface moving is exactly what this project is meant to notice early.
   const version = result.meta?.contract_version;
-  if (version && version !== state.get("serverVersion")) {
-    log.info("contract_version_changed", { from: state.get("serverVersion"), to: version });
-    state.set({ serverVersion: version });
+  if (version && version !== state.get("contractVersion")) {
+    log.info("contract_version_changed", { from: state.get("contractVersion"), to: version });
+    state.set({ contractVersion: version });
   }
 
   const events = result.events;
