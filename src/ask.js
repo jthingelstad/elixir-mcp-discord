@@ -192,6 +192,61 @@ export function renderTrace(result) {
   return clip(lines.join("\n"), 2000);
 }
 
+/**
+ * A Discord message edited on a throttle, which is as close to streaming as
+ * Discord gets — there is no partial-message API, only `edit`. Discord rate
+ * limits edits per channel (roughly 5 per 5s), so EDIT_MS keeps a comfortable
+ * margin and a flush is skipped entirely when nothing changed.
+ */
+const EDIT_MS = 1500;
+
+class LiveMessage {
+  constructor(message) {
+    this.message = message;
+    this.rendered = null;
+    this.next = null;
+    this.timer = setInterval(() => this.flush(), EDIT_MS);
+  }
+
+  update(content) {
+    const first = this.next === null;
+    this.next = content.slice(0, 1900);
+    // The first update goes out immediately. Waiting a full tick to show the
+    // first tool call wastes the most valuable moment in the turn — the point
+    // where the member learns something is actually happening. Everything after
+    // it rides the throttle, so this costs one extra edit per turn.
+    if (first) void this.flush();
+  }
+
+  async flush() {
+    if (this.next === null || this.next === this.rendered) return;
+    const content = this.next;
+    this.rendered = content;
+    await this.message.edit(content).catch((error) => {
+      log.warn("live_edit_failed", { error: error.message });
+    });
+  }
+
+  async finish(content) {
+    clearInterval(this.timer);
+    this.next = content.slice(0, 2000);
+    this.rendered = null; // force the last write through
+    await this.flush();
+  }
+}
+
+/** The in-progress view: tools as they fire, then prose as it arrives. */
+function renderProgress(toolsSoFar, text) {
+  const lines = toolsSoFar.map((name) => `-# 🔧 \`${name.replace(/^.*__/, "")}\``);
+  if (text) {
+    lines.push("");
+    lines.push(text.length > 1500 ? `${text.slice(0, 1500)}…` : text);
+  } else if (lines.length === 0) {
+    lines.push("-# thinking…");
+  }
+  return lines.join("\n");
+}
+
 function chunk(text) {
   const parts = [];
   let rest = text;
@@ -223,7 +278,13 @@ async function recentTurns(channel, upToId) {
   return turns.slice(-config.askHistoryTurns);
 }
 
-export async function handleAsk(message) {
+/**
+ * `askFn` is injectable so the smoke test can drive this whole path without a
+ * network call or a Discord connection. That seam exists because a refactor
+ * once deleted LiveMessage and every static check still passed — a missing
+ * symbol is a runtime ReferenceError, and nothing exercised this function.
+ */
+export async function handleAsk(message, { askFn = ask } = {}) {
   const question = message.cleanContent.trim();
   if (!question) return;
 
@@ -244,7 +305,7 @@ export async function handleAsk(message) {
     const toolsSoFar = [];
     let streamed = "";
 
-    const result = await ask({
+    const result = await askFn({
       system: SYSTEM,
       messages: [...history, { role: "user", content: `${asker}: ${question}` }],
       onEvent: (event) => {

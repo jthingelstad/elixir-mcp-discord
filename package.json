@@ -5,10 +5,13 @@
   "description": "A Discord bot powered entirely by the Elixir MCP server. Two lanes: an ask-anything channel and a clan notifications feed. No local game database - every fact comes from Elixir MCP.",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "node src/index.js",
-    "probe": "node src/probe.js"
+    "probe": "node src/probe.js",
+    "test": "node --test test/"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.72.0",

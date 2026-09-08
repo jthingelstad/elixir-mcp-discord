@@ -95,6 +95,20 @@ looks wrong. It prints the
 contract version and tool fingerprint, tells you if either moved since last
 time, and pulls the changelog when it did.
 
+## Tests
+
+```bash
+npm test
+```
+
+Six fast tests, no network and no spend: `handleAsk` runs against a fake Discord
+message and an injected `askFn`. They exist because a refactor once deleted the
+`LiveMessage` class and every static check still passed — a missing symbol is a
+runtime `ReferenceError`, and nothing exercised the path. Members found out
+instead. Deleting that class again fails three of these.
+
+(The tests import `src/config.js`, so they need a populated `.env`.)
+
 ## Running it as a service (macOS)
 
 ```bash
