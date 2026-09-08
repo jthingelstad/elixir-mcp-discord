@@ -60,17 +60,51 @@ Do not open with a greeting or close with a sign-off. Start with the news.
 
 ${FEEDBACK_PROMPT}`;
 
+/**
+ * Reads every event after `since`, following the server's paging contract:
+ * responses carry `next_cursor` and `has_more`, and the tool's own note says to
+ * pass next_cursor back as `since`. Capped at PAGE_LIMIT pages so a pathological
+ * feed can never spin here.
+ *
+ * The returned cursor takes the max of `next_cursor` and the highest event_id
+ * seen. With a topics filter those can differ — next_cursor tracks matching
+ * events — and taking the max only ever costs us re-scanning a few rows the
+ * filter would drop anyway.
+ */
+const PAGE_LIMIT = 10;
+
+async function drain(since, topics) {
+  const collected = [];
+  let cursor = since;
+
+  for (let page = 0; page < PAGE_LIMIT; page += 1) {
+    const args = { since: cursor, limit: 50, mark_seen: false };
+    if (topics) args.topics = topics;
+    const result = await callTool("elixir_events", args);
+    if (!result.ok) return { ok: false, error: result.error };
+
+    const events = result.body?.events || [];
+    collected.push(...events);
+
+    const highest = events.reduce((max, e) => Math.max(max, e.event_id ?? 0), cursor);
+    cursor = Math.max(result.body?.next_cursor ?? 0, highest);
+
+    if (!result.body?.has_more) {
+      return { ok: true, events: collected, cursor, meta: result.body?.meta };
+    }
+  }
+  return { ok: true, events: collected, cursor, truncated: true };
+}
+
 /** First run: learn where the feed is now and start from there. Draining the
  *  whole backlog into Discord on boot would be a worse first impression than
  *  posting nothing. */
 async function seedCursor() {
-  const result = await callTool("elixir_events", { limit: 1, mark_seen: false });
+  const result = await drain(0, null);
   if (!result.ok) return null;
-  const events = result.body?.events || [];
-  const latest = events.at(-1)?.event_id ?? 0;
-  state.set({ eventCursor: latest });
-  log.info("cursor_seeded", { cursor: latest });
-  return latest;
+  state.set({ eventCursor: result.cursor });
+  log.info("cursor_seeded", { cursor: result.cursor, skipped: result.events.length });
+  return result.cursor;
 }
 
 async function postFeedbackResponses(channel) {
@@ -97,13 +131,7 @@ export async function pollOnce(channel) {
     return;
   }
 
-  const result = await callTool("elixir_events", {
-    since: cursor,
-    topics: TOPICS,
-    limit: 50,
-    mark_seen: false,
-  });
-
+  const result = await drain(cursor, TOPICS);
   if (!result.ok) {
     log.warn("events_poll_failed", { error: result.error, cursor });
     return;
@@ -111,21 +139,24 @@ export async function pollOnce(channel) {
 
   // Contract drift is worth a log line even when nothing broke: the tool
   // surface moving is exactly what this project is meant to notice early.
-  const version = result.body?.meta?.contract_version;
+  const version = result.meta?.contract_version;
   if (version && version !== state.get("serverVersion")) {
     log.info("contract_version_changed", { from: state.get("serverVersion"), to: version });
     state.set({ serverVersion: version });
   }
 
-  const events = result.body?.events || [];
+  const events = result.events;
   await postFeedbackResponses(channel).catch((error) =>
     log.warn("feedback_post_failed", { error: error.message }),
   );
 
-  if (events.length === 0) return;
+  if (events.length === 0) {
+    // Nothing to say, but the cursor may still have moved past filtered rows.
+    if (result.cursor > cursor) state.set({ eventCursor: result.cursor });
+    return;
+  }
 
-  const newest = events.at(-1)?.event_id;
-  if (newest === undefined) return;
+  const newest = result.cursor;
 
   if (overDailyCap()) {
     log.warn("notify_over_cap", { pending: events.length });

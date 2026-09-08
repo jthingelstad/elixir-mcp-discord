@@ -89,7 +89,9 @@ than reusing one from another integration: calls are audited per token on the
 Elixir MCP admin page, and revoking one integration should never take down
 another.
 
-`npm run probe` is worth running any time an answer looks wrong. It prints the
+`npm run probe` needs only the two `ELIXIR_MCP_*` values, so you can verify a
+token before you have a Discord app. It is also worth running any time an answer
+looks wrong. It prints the
 contract version and tool fingerprint, tells you if either moved since last
 time, and pulls the changelog when it did.
 
