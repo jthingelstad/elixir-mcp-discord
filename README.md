@@ -95,6 +95,25 @@ looks wrong. It prints the
 contract version and tool fingerprint, tells you if either moved since last
 time, and pulls the changelog when it did.
 
+## Running it as a service (macOS)
+
+```bash
+./scripts/install-launchd.sh              # install + start at login
+./scripts/install-launchd.sh uninstall    # stop + remove
+launchctl print gui/$(id -u)/com.poapkings.elixir-mcp-discord
+tail -f ~/Library/Logs/elixir-mcp-discord/com.poapkings.elixir-mcp-discord.log
+```
+
+The repo ships a template rather than a plist, because a plist is nothing but
+absolute paths and yours are not these. Three things in it are deliberate:
+`node` is referenced by absolute path (launchd never reads your shell profile,
+so a bare `node` simply fails to spawn); `PATH` is set explicitly (launchd hands
+a job a minimal environment without `/opt/homebrew/bin`, and anything this
+process ever shells out to would inherit that gap); and `ThrottleInterval` is 30
+so a job that dies on startup — bad token, missing `.env` — leaves a legible
+crash loop in the log instead of drowning it at one restart every ten seconds.
+The installer refuses to run without a `.env` for the same reason.
+
 ## Operating notes
 
 - **The event cursor is local.** `elixir_events` keeps one `events_seen_through`
