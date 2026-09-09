@@ -1,13 +1,18 @@
 /**
- * Tiny JSON file store: the feed cursor, today's measured spend, and the last
- * serverInfo.version we saw.
+ * Tiny JSON file store: one event cursor per routine, the scheduled-run
+ * ledger, today's measured spend, and the last surface version we saw.
  *
- * The cursor is the important one. `elixir_events` keeps a per-ACCOUNT
- * `events_seen_through` marker, and a second token on the same account shares
- * it — so if this bot acknowledged events, it would silently consume
- * notifications belonging to any other routine on that account, and vice versa.
- * We therefore poll with `mark_seen: false` and track our own position here.
- * The account cursor is left exactly where it was.
+ * This is the only thing that survives a restart, and it is deliberately not
+ * game data. Nothing here caches an answer, a roster or a player: every fact
+ * this bot states is fetched in the turn that states it.
+ *
+ * CURSORS ARE PER ROUTINE, not per bot. Two event routines watching different
+ * topics are two independent readers, and a shared position would let the
+ * quiet one skip what the busy one already consumed. They are also kept here
+ * rather than acknowledged server-side: `elixir_events` advances a single
+ * per-ACCOUNT `events_seen_through` marker, so anything else polling the same
+ * account would eat notifications this bot never showed anybody. We poll with
+ * `mark_seen: false` and leave that marker exactly where it was.
  */
 
 import fs from "node:fs";
@@ -15,23 +20,36 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const STATE_PATH = path.join(here, "..", "state", "state.json");
+const STATE_PATH = process.env.STATE_PATH
+  ? path.resolve(process.env.STATE_PATH)
+  : path.join(here, "..", "state", "state.json");
 
 const DEFAULTS = {
-  eventCursor: null, // null = "start from now", set on first poll
+  // { [routineKey]: eventId }. A key absent means "start from now" and is
+  // seeded on first poll — never drained. An agent that wakes up and posts a
+  // month of history into a channel is the most common mistake with a feed.
+  cursors: {},
+  // { [routineKey]: periodKey }. null = never seeded, which is distinct from
+  // {} on purpose: an empty ledger on a fresh install would make every routine
+  // whose window is still open fire at once, in the same minute.
+  runs: null,
   spendDate: null,
   spendUsd: 0,
+  // { [routineKey]: usd } for today. One global number cannot answer "is the
+  // weekly meta report worth what it costs", which is the question an operator
+  // tuning a schedule actually has.
+  spendByRoutine: {},
   // serverInfo.version from `initialize` — "<contract>+tools.<fingerprint>".
-  // Moves when the TOOL SCHEMAS change, which is the signal we actually care
-  // about. Distinct from contractVersion below: they are different strings from
-  // different calls, and storing both in one field logs drift forever.
+  // Moves when the TOOL SCHEMAS change. Distinct from contractVersion below:
+  // different strings from different calls, and storing both in one field logs
+  // drift forever.
   serverVersion: null,
   // meta.contract_version carried on every tool response — bare "<contract>".
   contractVersion: null,
+  // The principal block from initialize, so a key repointed at another clan is
+  // a log line rather than a channel quietly reporting on strangers.
+  principal: null,
   answeredFeedbackIds: [],
-  // null = never seeded. Distinct from {} on purpose: an empty ledger on a
-  // fresh install would make every job whose window is still open fire at once.
-  scheduledRuns: null,
 };
 
 function read() {
@@ -57,12 +75,29 @@ export function set(updates) {
   return state;
 }
 
-/** Adds to today's spend and returns the new total, rolling over at UTC midnight. */
-export function addSpend(usd) {
+export function cursorFor(routineKey) {
+  return read().cursors[routineKey] ?? null;
+}
+
+export function setCursor(routineKey, cursor) {
+  const state = read();
+  write({ ...state, cursors: { ...state.cursors, [routineKey]: cursor } });
+}
+
+export function markRun(routineKey, periodKey) {
+  const state = read();
+  write({ ...state, runs: { ...(state.runs || {}), [routineKey]: periodKey } });
+}
+
+/** Adds to today's spend and returns the new total, rolling over at midnight UTC. */
+export function addSpend(usd, routineKey = "unattributed") {
   const today = new Date().toISOString().slice(0, 10);
   const state = read();
-  const spendUsd = (state.spendDate === today ? state.spendUsd : 0) + usd;
-  write({ ...state, spendDate: today, spendUsd });
+  const fresh = state.spendDate !== today;
+  const spendUsd = (fresh ? 0 : state.spendUsd) + usd;
+  const byRoutine = fresh ? {} : { ...state.spendByRoutine };
+  byRoutine[routineKey] = (byRoutine[routineKey] || 0) + usd;
+  write({ ...state, spendDate: today, spendUsd, spendByRoutine: byRoutine });
   return spendUsd;
 }
 
@@ -70,4 +105,10 @@ export function todaySpend() {
   const today = new Date().toISOString().slice(0, 10);
   const state = read();
   return state.spendDate === today ? state.spendUsd : 0;
+}
+
+export function todaySpendByRoutine() {
+  const today = new Date().toISOString().slice(0, 10);
+  const state = read();
+  return state.spendDate === today ? state.spendByRoutine : {};
 }

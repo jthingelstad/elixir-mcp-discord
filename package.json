@@ -1,8 +1,8 @@
 {
   "name": "elixir-mcp-discord",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
-  "description": "A Discord bot powered entirely by the Elixir MCP server. Two lanes: an ask-anything channel and a clan notifications feed. No local game database - every fact comes from Elixir MCP.",
+  "description": "A Discord bot powered entirely by the Elixir MCP server. Prompts, schedules and channels are files an operator owns; the code is a runner with no clan in it.",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -11,6 +11,8 @@
   "scripts": {
     "start": "node src/index.js",
     "probe": "node src/probe.js",
+    "routines": "node src/cli.js list",
+    "try": "node src/cli.js try",
     "test": "node --test --import ./scripts/setup-tests.js"
   },
   "dependencies": {

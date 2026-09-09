@@ -9,7 +9,16 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { handleAsk, renderTrace } from "../src/ask.js";
+import { handleAsk } from "../src/ask.js";
+import { renderTrace } from "../src/trace.js";
+import { parseRoutine } from "../src/routines.js";
+
+/** The ask lane is now driven by a routine file like everything else, so the
+ *  smoke test drives it with one rather than with a module-level constant. */
+const ROUTINE = parseRoutine(
+  "ask",
+  "---\ntrigger: message\nchannel: ask\nhistory_turns: 4\n---\nAnswer clan questions.",
+);
 
 function fakeMessage(content) {
   const posted = [];
@@ -68,7 +77,7 @@ const RESULT = {
 
 test("answers a question, replacing the placeholder with the answer", async () => {
   const { message, posted } = fakeMessage("how many battles?");
-  await handleAsk(message, { askFn: async () => RESULT });
+  await handleAsk(message, ROUTINE, { askFn: async () => RESULT });
 
   assert.ok(posted.length >= 2, "expected an answer and a trace");
   assert.equal(posted[0].text, RESULT.text, "placeholder should become the answer");
@@ -78,7 +87,7 @@ test("answers a question, replacing the placeholder with the answer", async () =
 
 test("a failed turn reports the failure and does not crash", async () => {
   const { message, posted } = fakeMessage("break please");
-  await handleAsk(message, {
+  await handleAsk(message, ROUTINE, {
     askFn: async () => ({ ok: false, error: "boom", called: [], errors: [], trace: [] }),
   });
   assert.ok(posted[0].text.includes("boom"), "the real error should reach the channel");
@@ -86,7 +95,7 @@ test("a failed turn reports the failure and does not crash", async () => {
 
 test("streaming progress reaches the live message", async () => {
   const { message, posted } = fakeMessage("what is the war day?");
-  await handleAsk(message, {
+  await handleAsk(message, ROUTINE, {
     askFn: async ({ onEvent }) => {
       onEvent({ kind: "tool_start", name: "war_current" });
       onEvent({ kind: "text", text: "Training day." });

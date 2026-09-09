@@ -8,7 +8,7 @@
  * tool surface moving without anyone noticing.
  */
 
-import { initialize, listTools, callTool } from "./mcp.js";
+import { initialize, listTools, callTool, describePrincipal } from "./mcp.js";
 import * as state from "./state.js";
 import { config } from "./config.js";
 
@@ -19,6 +19,11 @@ if (!handshake.ok) {
 }
 console.log(`ok    connected to ${config.mcp.url}`);
 console.log(`      serverInfo.version = ${handshake.version}`);
+console.log(`      principal = ${describePrincipal(handshake.principal)}`);
+if (handshake.principal && handshake.principal.kind !== "agent") {
+  console.log(`      WARNING: this is a ${handshake.principal.kind} connection, not an agent.`);
+  console.log(`      "Me" will be a person, not the clan. See /docs/agents.`);
+}
 
 const previous = state.get("serverVersion");
 if (previous && previous !== handshake.version) {
@@ -38,18 +43,24 @@ if (!tools.ok) {
 console.log(`ok    ${tools.tools.length} tools published`);
 console.log(`      ${tools.tools.map((t) => t.name).sort().join(", ")}`);
 
-const identity = await callTool("elixir_my_players", {});
-if (!identity.ok) {
-  console.error(`FAIL  elixir_my_players: ${identity.error}`);
+// game_clock, deliberately: it is on every principal's surface and needs no
+// subject. This check used to call elixir_my_players, which an AGENT door does
+// not publish and REFUSES on call -- so a perfectly healthy agent key failed
+// its own probe with a person-only tool name in the error.
+const clock = await callTool("game_clock", {});
+if (!clock.ok) {
+  console.error(`FAIL  game_clock: ${clock.error}`);
   process.exit(1);
 }
-console.log(`ok    token authenticated`);
+console.log(`ok    key authenticated`);
 
 const events = await callTool("elixir_events", { limit: 1, mark_seen: false });
 if (!events.ok) {
   console.error(`FAIL  elixir_events: ${events.error}`);
   process.exit(1);
 }
-console.log(`ok    event feed readable; local cursor = ${state.get("eventCursor") ?? "unset"}`);
+const cursors = state.get("cursors") || {};
+const positions = Object.entries(cursors).map(([key, at]) => `${key}=${at}`).join(", ");
+console.log(`ok    event feed readable; local cursors = ${positions || "unset (seed on first poll)"}`);
 console.log(`      pending on account = ${events.body?.meta?.events_pending ?? "?"}`);
 console.log(`      spend today = $${state.todaySpend().toFixed(4)}`);

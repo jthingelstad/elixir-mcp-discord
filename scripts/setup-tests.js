@@ -12,12 +12,20 @@
  * .env at all. Nothing here reaches the network: these values exist purely to
  * let the modules construct. A test that needed a real credential would be an
  * integration test, and this suite is deliberately not that.
+ *
+ * STATE_PATH is redirected into a temp file. The suite exercises the spend
+ * counter and the run ledger, and a test run must not move a live bot's cursor
+ * or spend a day's budget on paper.
  */
 
+import os from "node:os";
+import path from "node:path";
+
+process.env.ELIXIR_MCP_URL ||= "https://elixir.example.com/a/testagent/mcp";
 process.env.ELIXIR_MCP_TOKEN ||= "svt_test";
-process.env.CLAN_TAG ||= "#2GUCVLQR";
 process.env.DISCORD_BOT_TOKEN ||= "test";
 process.env.DISCORD_GUILD_ID ||= "1";
-process.env.ASK_CHANNEL_ID ||= "2";
-process.env.NOTIFY_CHANNEL_ID ||= "3";
+process.env.CHANNEL_ASK ||= "2";
+process.env.CHANNEL_PULSE ||= "3";
 process.env.ANTHROPIC_API_KEY ||= "sk-ant-test";
+process.env.STATE_PATH ||= path.join(os.tmpdir(), `elixir-mcp-discord-test-${process.pid}.json`);

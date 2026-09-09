@@ -33,6 +33,7 @@
 import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "./config.js";
+import { callTool, resolveToolName } from "./mcp.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
 
@@ -196,7 +197,19 @@ function readText(content) {
  * is not prose arriving letter by letter — it is the tool calls becoming
  * visible the instant they happen.
  */
-export async function ask({ system, messages, maxTokens = config.claude.maxTokens, onEvent }) {
+export async function ask({
+  system,
+  messages,
+  maxTokens = config.claude.maxTokens,
+  onEvent,
+  // A routine may pick its own model and effort: a war-deck nudge that reads
+  // one field does not need what a weekly meta report needs, and paying the
+  // same for both is how a schedule quietly becomes expensive.
+  model = config.claude.model,
+  effort = config.claude.effort,
+  // Spend is bucketed by routine so "what does this post cost" is answerable.
+  routineKey = "unattributed",
+}) {
   const history = [...messages];
   const started = Date.now();
   // Ours, not the server's. It cannot join to Elixir MCP's mcp_call_audit row —
@@ -221,7 +234,7 @@ export async function ask({ system, messages, maxTokens = config.claude.maxToken
 
     try {
       const stream = client.beta.messages.stream({
-        model: config.claude.model,
+        model,
         max_tokens: maxTokens,
         betas: [MCP_BETA],
         system,
@@ -231,7 +244,7 @@ export async function ask({ system, messages, maxTokens = config.claude.maxToken
         // "omitted" is the default on Sonnet 5 and returns empty thinking
         // blocks. We show our work in-channel, so ask for the summary.
         thinking: { type: "adaptive", display: "summarized" },
-        output_config: { effort: config.claude.effort },
+        output_config: { effort },
       });
 
       // Per-call latency, which separates "slow because six calls" from "slow
@@ -272,9 +285,9 @@ export async function ask({ system, messages, maxTokens = config.claude.maxToken
       return { ok: false, error: error.message, called, errors, trace, envelopes, usd: usdTotal };
     }
 
-    const usd = costOf(config.claude.model, response.usage);
+    const usd = costOf(model, response.usage);
     usdTotal += usd;
-    state.addSpend(usd);
+    state.addSpend(usd, routineKey);
 
     const activity = readToolActivity(response.content, timings);
     called.push(...activity.called);
@@ -287,9 +300,61 @@ export async function ask({ system, messages, maxTokens = config.claude.maxToken
     if (stopReason === "refusal") {
       return { ok: false, error: "refusal", called, errors, trace, envelopes, usd: usdTotal };
     }
+    // A CLIENT-SIDE tool call, on a connection whose tools are all server-side.
+    //
+    // Most of the time an mcp_toolset call comes home as `mcp_tool_use` +
+    // `mcp_tool_result` in the same response: Anthropic ran it. But sometimes
+    // the same tool arrives as an ordinary `tool_use` block, named
+    // "<server>_<tool>", with stop_reason "tool_use" — the API asking US to run
+    // it and hand back a result. Reproduced 2026-09-08: a turn ended on
+    // `tool_use elixir-mcp_feedback` (toolu_...) after two server-side
+    // `mcp_tool_use clans_roster` calls (mcptoolu_...).
+    //
+    // Left unhandled, that response has no text, and the routine runner read
+    // empty text as SKIP: the turn did all its work, spent all its tokens, and
+    // posted nothing. Echoing the assistant turn back without results is not an
+    // option either — the API rejects it ("tool_use ids were found without
+    // tool_result blocks immediately after").
+    //
+    // So we execute it, over the direct MCP client, against the same server and
+    // the same key. This is NOT a tool mirror: the name and arguments are
+    // forwarded opaquely, and nothing here knows what any tool does.
+    if (stopReason === "tool_use") {
+      const pending = response.content.filter((block) => block.type === "tool_use");
+      if (pending.length > 0) {
+        history.push({ role: "assistant", content: response.content });
+        const results = [];
+        for (const block of pending) {
+          const tool = await resolveToolName(block.name);
+          const call = await callTool(tool, block.input ?? {});
+          log.info("client_side_tool_call", { turnId, tool, ok: call.ok });
+          if (!call.ok) {
+            errors.push({ name: tool, detail: String(call.error).slice(0, 400) });
+            trace.push({ kind: "error", name: tool, detail: String(call.error).slice(0, 400) });
+          }
+          results.push({
+            type: "tool_result",
+            tool_use_id: block.id,
+            is_error: !call.ok,
+            content: JSON.stringify(call.ok ? call.body : { error: { message: call.error } }),
+          });
+        }
+        // All results in ONE user message: splitting them teaches the model to
+        // stop making parallel calls.
+        history.push({ role: "user", content: results });
+        continue;
+      }
+    }
+
+    // TWO ways a turn can come back unfinished, and both used to end it.
+    //
+    // `pause_turn` is the documented one: the server-side sampling loop hit its
+    // iteration limit and expects the assistant turn echoed back to resume.
+    //
+    // `pause_turn` means the server-side sampling loop hit its iteration limit.
+    // Echo the assistant turn back and ask again; do NOT add a "continue"
+    // message, the server resumes from the trailing tool block on its own.
     if (stopReason === "pause_turn") {
-      // Resumed, not answered. Without the round count in the footer this looks
-      // identical to a straight run in the transcript.
       history.push({ role: "assistant", content: response.content });
       continue;
     }
@@ -310,8 +375,8 @@ export async function ask({ system, messages, maxTokens = config.claude.maxToken
     stopReason,
     // A max_tokens cutoff otherwise reads as a complete answer.
     truncated: stopReason === "max_tokens" || rounds >= MAX_ROUNDS,
-    model: config.claude.model,
-    effort: config.claude.effort,
+    model,
+    effort,
     serverVersion: state.get("serverVersion"),
   };
 }

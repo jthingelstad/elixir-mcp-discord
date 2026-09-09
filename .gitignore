@@ -7,3 +7,7 @@ node_modules/
 !.env.example
 state/
 *.log
+
+# A private prompt bundle, for an operator who does not want their agent's
+# voice in a public checkout. Point AGENT_DIR at it.
+agent.local/
