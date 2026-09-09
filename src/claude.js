@@ -33,6 +33,8 @@
 import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "./config.js";
+import { costOf } from "./pricing.js";
+import * as budget from "./budget.js";
 import { callTool, resolveToolName } from "./mcp.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
@@ -40,25 +42,6 @@ import * as state from "./state.js";
 const MCP_BETA = "mcp-client-2025-11-20";
 const MAX_ROUNDS = 5;
 const client = new Anthropic();
-
-// USD per million tokens. Used only to report what the experiment costs.
-const PRICING = {
-  "claude-sonnet-5": { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 },
-  "claude-opus-5": { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 },
-  "claude-haiku-4-5": { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.1 },
-};
-
-function costOf(model, usage) {
-  const rate = PRICING[model];
-  if (!rate || !usage) return 0;
-  return (
-    ((usage.input_tokens || 0) * rate.input +
-      (usage.output_tokens || 0) * rate.output +
-      (usage.cache_creation_input_tokens || 0) * rate.cacheWrite +
-      (usage.cache_read_input_tokens || 0) * rate.cacheRead) /
-    1_000_000
-  );
-}
 
 const mcpServers = [
   {
@@ -102,7 +85,9 @@ function describeShape(body) {
   }
   if (!sawArray) return "object";
   const total = counts.join(", ");
-  return total.startsWith("0 ") && counts.length === 1 ? `${total} (EMPTY)` : total;
+  return total.startsWith("0 ") && counts.length === 1
+    ? `${total} (EMPTY)`
+    : total;
 }
 
 function readEnvelope(body) {
@@ -207,8 +192,10 @@ export async function ask({
   // same for both is how a schedule quietly becomes expensive.
   model = config.claude.model,
   effort = config.claude.effort,
-  // Spend is bucketed by routine so "what does this post cost" is answerable.
+  // Spend is bucketed by routine so "what does this post cost" is answerable,
+  // and by LANE so a chatty ask channel cannot spend the schedule's budget.
   routineKey = "unattributed",
+  lane = "routines",
 }) {
   const history = [...messages];
   const started = Date.now();
@@ -266,12 +253,16 @@ export async function ask({
               onEvent?.({ kind: "tool_start", name: block.name || "unknown" });
             } else if (type.endsWith("tool_result") && block.tool_use_id) {
               const start = execStart.get(block.tool_use_id);
-              if (start !== undefined) timings.set(block.tool_use_id, Date.now() - start);
+              if (start !== undefined)
+                timings.set(block.tool_use_id, Date.now() - start);
             }
           } else if (event.type === "content_block_stop") {
             const id = idByIndex.get(event.index);
             if (id) execStart.set(id, Date.now());
-          } else if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
+          } else if (
+            event.type === "content_block_delta" &&
+            event.delta?.type === "text_delta"
+          ) {
             onEvent?.({ kind: "text", text: event.delta.text });
           }
         } catch {
@@ -282,12 +273,21 @@ export async function ask({
       response = await stream.finalMessage();
     } catch (error) {
       log.error("claude_call_failed", { turnId, error: error.message });
-      return { ok: false, error: error.message, called, errors, trace, envelopes, usd: usdTotal };
+      return {
+        ok: false,
+        error: error.message,
+        called,
+        errors,
+        trace,
+        envelopes,
+        usd: usdTotal,
+      };
     }
 
     const usd = costOf(model, response.usage);
     usdTotal += usd;
     state.addSpend(usd, routineKey);
+    budget.record(lane, usd);
 
     const activity = readToolActivity(response.content, timings);
     called.push(...activity.called);
@@ -298,7 +298,15 @@ export async function ask({
     stopReason = response.stop_reason;
 
     if (stopReason === "refusal") {
-      return { ok: false, error: "refusal", called, errors, trace, envelopes, usd: usdTotal };
+      return {
+        ok: false,
+        error: "refusal",
+        called,
+        errors,
+        trace,
+        envelopes,
+        usd: usdTotal,
+      };
     }
     // A CLIENT-SIDE tool call, on a connection whose tools are all server-side.
     //
@@ -320,7 +328,9 @@ export async function ask({
     // the same key. This is NOT a tool mirror: the name and arguments are
     // forwarded opaquely, and nothing here knows what any tool does.
     if (stopReason === "tool_use") {
-      const pending = response.content.filter((block) => block.type === "tool_use");
+      const pending = response.content.filter(
+        (block) => block.type === "tool_use",
+      );
       if (pending.length > 0) {
         history.push({ role: "assistant", content: response.content });
         const results = [];
@@ -329,14 +339,23 @@ export async function ask({
           const call = await callTool(tool, block.input ?? {});
           log.info("client_side_tool_call", { turnId, tool, ok: call.ok });
           if (!call.ok) {
-            errors.push({ name: tool, detail: String(call.error).slice(0, 400) });
-            trace.push({ kind: "error", name: tool, detail: String(call.error).slice(0, 400) });
+            errors.push({
+              name: tool,
+              detail: String(call.error).slice(0, 400),
+            });
+            trace.push({
+              kind: "error",
+              name: tool,
+              detail: String(call.error).slice(0, 400),
+            });
           }
           results.push({
             type: "tool_result",
             tool_use_id: block.id,
             is_error: !call.ok,
-            content: JSON.stringify(call.ok ? call.body : { error: { message: call.error } }),
+            content: JSON.stringify(
+              call.ok ? call.body : { error: { message: call.error } },
+            ),
           });
         }
         // All results in ONE user message: splitting them teaches the model to
@@ -384,4 +403,15 @@ export async function ask({
 export function overDailyCap() {
   if (!config.dailyUsdCap) return false;
   return state.todaySpend() >= config.dailyUsdCap;
+}
+
+/**
+ * May this lane spend? The monthly budget first, then the daily cap on top.
+ * Returns null when there is nothing in the way, or a short reason to show.
+ */
+export function spendBlock(lane) {
+  const verdict = budget.check(lane);
+  if (!verdict.ok) return verdict;
+  if (overDailyCap()) return { ok: false, reason: "daily_cap" };
+  return null;
 }

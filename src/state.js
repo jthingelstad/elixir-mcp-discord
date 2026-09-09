@@ -39,6 +39,15 @@ const DEFAULTS = {
   // weekly meta report worth what it costs", which is the question an operator
   // tuning a schedule actually has.
   spendByRoutine: {},
+  // { "YYYY-MM": { routines: usd, ask: usd } } — the monthly budget ledger,
+  // kept per lane because the schedule's spend and the members' spend are
+  // different people's decisions. Twelve months are retained.
+  budgets: {},
+  // { routines: usd, ask: usd } — the largest single turn each lane has ever
+  // produced. A lane refuses to START a turn that could take it past its
+  // budget, and this is what "could" means: it climbs to meet reality so the
+  // estimate stops being optimistic after the first expensive turn.
+  turnCeilings: {},
   // serverInfo.version from `initialize` — "<contract>+tools.<fingerprint>".
   // Moves when the TOOL SCHEMAS change. Distinct from contractVersion below:
   // different strings from different calls, and storing both in one field logs

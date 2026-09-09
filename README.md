@@ -55,6 +55,7 @@ Clash Royale at all.
 ```
 agent/                 <- yours
   identity.md            voice and house rules, prepended to every prompt
+  models.json            what each model costs, so budgets can be enforced
   routines/*.md          one file per routine
 src/                   <- the runner
 state/state.json       cursors, run ledger, spend. Not game data.
@@ -152,6 +153,53 @@ still marks the run done. A channel that manufactures content on a quiet day
 teaches people to mute it. Routines that may *not* skip post what they said, so
 a prompt bug is visible rather than looking like a quiet week.
 
+## Budgets
+
+Two monthly pots, because two different people spend them:
+
+```
+MONTHLY_BUDGET_USD=20.00       # what the bot does on its own
+ASK_MONTHLY_BUDGET_USD=10.00   # what clan members ask for
+```
+
+The split is the point. Scheduled posts and event briefs cost what your
+routines cost — predictable, and your decision. The ask channel costs whatever
+the clan feels like asking, which is nobody's decision in advance. On one
+shared pot a chatty afternoon silently cancels tomorrow's war-deck nudge, and
+the only symptom is silence.
+
+**They are strict.** The check runs before the call, not after: a lane refuses
+to start a turn that could take it past the line, using the largest turn that
+lane has ever produced as the estimate (floored by `TURN_RESERVE_USD`). So the
+bot stops slightly short of your number rather than slightly past it. A lane
+that runs out says so — in the log for routines, and in the channel for asks,
+in a sentence aimed at a member rather than an operator.
+
+Months are UTC calendar months and nothing rolls over. `npm run routines` and
+`!budget` in Discord both show where you are.
+
+## Choosing a model
+
+`CLAUDE_MODEL` is yours, and any routine can override it in its own front
+matter — a war-deck nudge that reads one field does not need what a weekly meta
+report needs:
+
+```markdown
+---
+trigger: schedule
+model: claude-haiku-4-5
+effort: low
+max_tokens: 2000
+---
+```
+
+Whatever you choose must have a price in `agent/models.json` (which extends the
+catalog in `src/pricing.js`). That file is operator-owned for the same reason
+the prompts are: prices change, and the person paying the bill should be able
+to correct one without a deploy. **An unpriced model stops the bot at boot**
+rather than being billed at zero — budgets you cannot enforce are worse than no
+budgets, because they look like they work.
+
 ## Operating notes
 
 - **Cursors are per routine, and local.** `elixir_events` advances one
@@ -161,9 +209,8 @@ a prompt bug is visible rather than looking like a quiet week.
   rather than draining the backlog into your channel.
 - **Times are yours.** `TIMEZONE` decides what `at: 22:00` means, DST included.
 - **Cost.** Roughly $0.05–0.20 per post. Every ask carries a footer with the
-  tools called and what the turn cost; per-routine daily spend is in
-  `state/state.json` and `npm run routines`. `DAILY_USD_CAP` stops the bot
-  answering past a figure.
+  tools called and what the turn cost; `npm run routines` shows this month
+  against your budgets and per-routine spend today.
 - **A missed run fires late only inside its own catch-up window.** A war-deck
   nudge at 4am because the host was asleep is worse than one that never fires.
 - **Rough edges are expected.** This is a demonstration of a young service, and

@@ -19,6 +19,8 @@
 import { config, provenance } from "./config.js";
 import { initialize, describePrincipal } from "./mcp.js";
 import { loadRoutines } from "./routines.js";
+import * as budget from "./budget.js";
+import { rateFor, UnpricedModel } from "./pricing.js";
 import { runRoutine } from "./run.js";
 import { systemFor, userMessageFor } from "./prompt.js";
 import { renderTrace } from "./trace.js";
@@ -30,12 +32,34 @@ const [command, ...rest] = process.argv.slice(2);
 const flags = new Set(rest.filter((arg) => arg.startsWith("--")));
 const key = rest.find((arg) => !arg.startsWith("--"));
 
+function budgetLines() {
+  return budget.status().map((b) => {
+    const of =
+      b.budget === null ? "no budget set" : `of $${b.budget.toFixed(2)}`;
+    return `  ${b.lane.padEnd(9)} $${b.spent.toFixed(2)} ${of}  (${b.state}, reserve $${b.reserve.toFixed(2)})`;
+  });
+}
+
 function listRoutines() {
   warnAboutShadowedConfig();
   const { routines, errors } = loadRoutines();
-  console.log(`agent dir: ${config.agentDir}   timezone: ${config.timezone}\n`);
+  console.log(`agent dir: ${config.agentDir}   timezone: ${config.timezone}`);
+  console.log(
+    `model: ${config.claude.model} · effort ${config.claude.effort}\n`,
+  );
+  console.log(`budgets (${budget.monthKey()}):`);
+  for (const line of budgetLines()) console.log(line);
+  console.log("");
   const spend = state.todaySpendByRoutine();
   for (const routine of routines) {
+    try {
+      rateFor(routine.model);
+    } catch (error) {
+      if (error instanceof UnpricedModel) {
+        console.error(`✗ ${routine.key}: ${error.message}`);
+        process.exitCode = 1;
+      } else throw error;
+    }
     const when =
       routine.trigger === "schedule"
         ? `${periodKey(lastOccurrence(routine)).slice(11)} ${routine.days ? `days ${routine.days.join(",")}` : "daily"}`
@@ -53,7 +77,8 @@ function listRoutines() {
       ].join(" "),
     );
   }
-  for (const failure of errors) console.error(`✗ ${failure.key}: ${failure.error}`);
+  for (const failure of errors)
+    console.error(`✗ ${failure.key}: ${failure.error}`);
   if (errors.length) process.exitCode = 1;
 }
 
@@ -69,11 +94,15 @@ async function eventsForDryRun(routine) {
   const cursor = state.cursorFor(routine.key);
   if (cursor !== null) {
     const pending = await drain(cursor, routine.topics);
-    if (pending.ok && pending.events.length) return { events: pending.events, note: "pending" };
+    if (pending.ok && pending.events.length)
+      return { events: pending.events, note: "pending" };
   }
   const all = await drain(0, routine.topics);
   if (!all.ok) return { events: [], note: `feed unreadable: ${all.error}` };
-  return { events: all.events.slice(-5), note: "no new events — replaying the newest 5" };
+  return {
+    events: all.events.slice(-5),
+    note: "no new events — replaying the newest 5",
+  };
 }
 
 /** Values coming from the shell rather than .env, which is the trap this
@@ -82,7 +111,9 @@ async function eventsForDryRun(routine) {
 function warnAboutShadowedConfig() {
   for (const entry of provenance) {
     if (entry.source.startsWith("SHELL") || entry.source === "shell") {
-      console.error(`# ${entry.name}=${entry.value} (from your SHELL, not .env)`);
+      console.error(
+        `# ${entry.name}=${entry.value} (from your SHELL, not .env)`,
+      );
     }
   }
 }
@@ -92,7 +123,9 @@ async function tryRoutine() {
   const { routines } = loadRoutines();
   const routine = routines.find((entry) => entry.key === key);
   if (!routine) {
-    console.error(`No routine called "${key ?? ""}". Run \`npm run routines\` to see them.`);
+    console.error(
+      `No routine called "${key ?? ""}". Run \`npm run routines\` to see them.`,
+    );
     process.exit(1);
   }
 
@@ -100,10 +133,15 @@ async function tryRoutine() {
   // service would. It is one HTTP call and it costs nothing.
   const handshake = await initialize();
   if (handshake.ok && handshake.principal) {
-    state.set({ principal: handshake.principal, serverVersion: handshake.version });
+    state.set({
+      principal: handshake.principal,
+      serverVersion: handshake.version,
+    });
     console.error(`# connected as ${describePrincipal(handshake.principal)}`);
   } else if (!handshake.ok) {
-    console.error(`# WARNING: initialize failed (${handshake.error}) — prompt may lack its subject`);
+    console.error(
+      `# WARNING: initialize failed (${handshake.error}) — prompt may lack its subject`,
+    );
   }
 
   let events = null;
@@ -115,7 +153,9 @@ async function tryRoutine() {
 
   if (flags.has("--show-prompt")) {
     console.log("=== SYSTEM ===\n");
-    console.log(systemFor(routine, { includePrompt: routine.trigger === "message" }));
+    console.log(
+      systemFor(routine, { includePrompt: routine.trigger === "message" }),
+    );
     console.log("\n=== USER ===\n");
     console.log(userMessageFor(routine, { events }));
     console.log("\n=== ANSWER ===\n");
@@ -130,7 +170,9 @@ async function tryRoutine() {
     const id = config.channels.get(routine.channel);
     channel = id ? await client.channels.fetch(id) : null;
     if (!channel) {
-      console.error(`channel "${routine.channel}" is not bound or not reachable`);
+      console.error(
+        `channel "${routine.channel}" is not bound or not reachable`,
+      );
       process.exit(1);
     }
   }
@@ -145,7 +187,9 @@ async function tryRoutine() {
   console.log(run.skipped ? "(SKIP — nothing would be posted)\n" : "");
   console.log(run.text);
   console.log("\n---");
-  console.log(renderTrace(run.result, { label: routine.key }) ?? "(no tool activity)");
+  console.log(
+    renderTrace(run.result, { label: routine.key }) ?? "(no tool activity)",
+  );
   console.log(
     `\n${routine.model} · effort ${routine.effort} · $${run.result.usd.toFixed(4)} · ${((Date.now() - started) / 1000).toFixed(1)}s · ${channel ? "POSTED" : "dry run, nothing posted"}`,
   );

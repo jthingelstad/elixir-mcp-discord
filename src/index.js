@@ -14,6 +14,8 @@ import { startEventLoop } from "./events.js";
 import { startScheduler } from "./scheduler.js";
 import { runRoutine } from "./run.js";
 import { loadRoutines, routinesFor } from "./routines.js";
+import { rateFor } from "./pricing.js";
+import * as budget from "./budget.js";
 import { initialize, describePrincipal } from "./mcp.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
@@ -35,12 +37,19 @@ async function resolveChannel(name) {
   if (channelCache.has(name)) return channelCache.get(name);
   const id = config.channels.get(name);
   if (!id) {
-    log.error("channel_unbound", { channel: name, expected: channelEnvName(name) });
+    log.error("channel_unbound", {
+      channel: name,
+      expected: channelEnvName(name),
+    });
     channelCache.set(name, null);
     return null;
   }
   const channel = await client.channels.fetch(id).catch((error) => {
-    log.error("channel_unresolvable", { channel: name, id, error: error.message });
+    log.error("channel_unresolvable", {
+      channel: name,
+      id,
+      error: error.message,
+    });
     return null;
   });
   channelCache.set(name, channel);
@@ -70,11 +79,16 @@ function reportPrincipal(handshake) {
     });
   }
   if (principal?.kind === "agent" && !principal.subject) {
-    log.error("agent_without_clan", { hint: "this agent has no clan; every routine will be lost" });
+    log.error("agent_without_clan", {
+      hint: "this agent has no clan; every routine will be lost",
+    });
   }
 
   const previous = state.get("principal");
-  if (previous?.subject?.tag && previous.subject.tag !== principal?.subject?.tag) {
+  if (
+    previous?.subject?.tag &&
+    previous.subject.tag !== principal?.subject?.tag
+  ) {
     log.warn("principal_subject_changed", {
       from: previous.subject.tag,
       to: principal?.subject?.tag ?? null,
@@ -98,7 +112,10 @@ client.once(Events.ClientReady, async (ready) => {
   if (!handshake.ok) {
     log.error("mcp_unreachable_at_boot", { error: handshake.error });
   } else {
-    if (state.get("serverVersion") && state.get("serverVersion") !== handshake.version) {
+    if (
+      state.get("serverVersion") &&
+      state.get("serverVersion") !== handshake.version
+    ) {
       log.warn("contract_version_changed_at_boot", {
         from: state.get("serverVersion"),
         to: handshake.version,
@@ -110,12 +127,45 @@ client.once(Events.ClientReady, async (ready) => {
 
   const { routines, errors } = loadRoutines();
   for (const failure of errors) log.error("routine_invalid", failure);
+
+  // Every model in play has to have a price, or the budgets below are decoration.
+  // Checked at boot rather than at 01:00 when a routine with an exotic model
+  // silently records $0 against a cap it can never reach.
+  const models = new Set([
+    config.claude.model,
+    ...routines.filter((r) => !r.disabled).map((r) => r.model),
+  ]);
+  for (const model of models) {
+    try {
+      const rate = rateFor(model);
+      log.info("model_priced", {
+        model,
+        input_per_mtok: rate.input,
+        output_per_mtok: rate.output,
+      });
+    } catch (error) {
+      log.error("model_unpriced", { model, error: error.message });
+      throw error;
+    }
+  }
+
+  for (const lane of budget.status()) {
+    log[lane.budget ? "info" : "warn"]("budget", {
+      lane: lane.lane,
+      month: lane.month,
+      spent: lane.spent.toFixed(2),
+      budget: lane.budget ? lane.budget.toFixed(2) : "UNLIMITED",
+      state: lane.state,
+    });
+  }
   for (const routine of routines) {
     log.info("routine_loaded", {
       key: routine.key,
       trigger: routine.trigger,
       channel: routine.channel,
-      when: routine.at ? `${routine.at.hour}:${String(routine.at.minute).padStart(2, "0")}` : undefined,
+      when: routine.at
+        ? `${routine.at.hour}:${String(routine.at.minute).padStart(2, "0")}`
+        : undefined,
       disabled: routine.disabled || undefined,
     });
     if (!routine.disabled) await resolveChannel(routine.channel);
@@ -132,9 +182,25 @@ client.once(Events.ClientReady, async (ready) => {
  *  prompt change in the real channel. Off unless ADMIN_USER_IDS is set. */
 async function handleAdminCommand(message) {
   const [command, key] = message.content.trim().split(/\s+/);
+  if (command === "!budget") {
+    const lines = budget.status().map((b) => {
+      const of = b.budget ? ` of $${b.budget.toFixed(2)}` : " (no budget set)";
+      return `**${b.lane}** — $${b.spent.toFixed(2)}${of} this month · ${b.state}`;
+    });
+    await message.reply(
+      [
+        ...lines,
+        `-# reserve per turn: routines/ask climb to the largest turn seen`,
+      ].join("\n"),
+    );
+    return true;
+  }
   if (command === "!routines") {
     const listed = loadRoutines()
-      .routines.map((r) => `${r.disabled ? "○" : "●"} \`${r.key}\` — ${r.trigger} → #${r.channel}`)
+      .routines.map(
+        (r) =>
+          `${r.disabled ? "○" : "●"} \`${r.key}\` — ${r.trigger} → #${r.channel}`,
+      )
       .join("\n");
     await message.reply(listed || "No routines loaded.");
     return true;
@@ -143,26 +209,38 @@ async function handleAdminCommand(message) {
 
   const routine = loadRoutines().routines.find((entry) => entry.key === key);
   if (!routine) {
-    await message.reply(`No routine called \`${key ?? ""}\`. Try \`!routines\`.`);
+    await message.reply(
+      `No routine called \`${key ?? ""}\`. Try \`!routines\`.`,
+    );
     return true;
   }
   const channel = await resolveChannel(routine.channel);
   if (!channel) {
-    await message.reply(`\`${routine.key}\` posts to \`${routine.channel}\`, which is not bound.`);
+    await message.reply(
+      `\`${routine.key}\` posts to \`${routine.channel}\`, which is not bound.`,
+    );
     return true;
   }
   await message.react("⏳").catch(() => {});
   const run = await runRoutine(routine, { channel, events: null });
-  log.info("routine_run_on_demand", { routine: routine.key, by: message.author.id, ok: run.ok });
+  log.info("routine_run_on_demand", {
+    routine: routine.key,
+    by: message.author.id,
+    ok: run.ok,
+  });
   if (!run.ok) await message.reply(`\`${routine.key}\` failed: ${run.error}`);
-  else if (run.skipped) await message.reply(`\`${routine.key}\` chose to skip.`);
+  else if (run.skipped)
+    await message.reply(`\`${routine.key}\` chose to skip.`);
   return true;
 }
 
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
 
-  if (config.adminUserIds.has(message.author.id) && message.content.startsWith("!")) {
+  if (
+    config.adminUserIds.has(message.author.id) &&
+    message.content.startsWith("!")
+  ) {
     const handled = await handleAdminCommand(message).catch((error) => {
       log.error("admin_command_failed", { error: error.message });
       return true;
@@ -179,7 +257,9 @@ client.on(Events.MessageCreate, async (message) => {
   await handleAsk(message, routine);
 });
 
-client.on(Events.Error, (error) => log.error("discord_error", { error: error.message }));
+client.on(Events.Error, (error) =>
+  log.error("discord_error", { error: error.message }),
+);
 process.on("unhandledRejection", (reason) =>
   log.error("unhandled_rejection", { error: String(reason) }),
 );

@@ -10,15 +10,22 @@
 import { config } from "./config.js";
 import { dueRoutines, currentPeriods } from "./schedule.js";
 import { runRoutine } from "./run.js";
-import { overDailyCap } from "./claude.js";
+import { spendBlock } from "./claude.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
 
 export async function tick(routines, resolveChannel, now = new Date()) {
   const due = dueRoutines(routines, { now, ledger: state.get("runs") || {} });
   if (due.length === 0) return;
-  if (overDailyCap()) {
-    log.warn("scheduled_over_cap", { due: due.map((entry) => entry.routine.key).join(",") });
+  const blocked = spendBlock("routines");
+  if (blocked) {
+    // Deliberately BEFORE the run ledger is marked, so a routine skipped for
+    // budget is not recorded as done: when the month turns over it runs again
+    // rather than having silently missed its window.
+    log.warn("scheduled_over_budget", {
+      reason: blocked.reason,
+      due: due.map((entry) => entry.routine.key).join(","),
+    });
     return;
   }
 
@@ -28,11 +35,17 @@ export async function tick(routines, resolveChannel, now = new Date()) {
     state.markRun(routine.key, periodKey);
     const channel = await resolveChannel(routine.channel);
     if (!channel) {
-      log.error("scheduled_channel_missing", { routine: routine.key, channel: routine.channel });
+      log.error("scheduled_channel_missing", {
+        routine: routine.key,
+        channel: routine.channel,
+      });
       continue;
     }
     await runRoutine(routine, { channel }).catch((error) =>
-      log.error("scheduled_crashed", { routine: routine.key, error: error.message }),
+      log.error("scheduled_crashed", {
+        routine: routine.key,
+        error: error.message,
+      }),
     );
   }
 }

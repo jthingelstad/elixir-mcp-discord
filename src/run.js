@@ -12,7 +12,8 @@
  * Everything else comes through here.
  */
 
-import { ask, overDailyCap } from "./claude.js";
+import { ask, spendBlock } from "./claude.js";
+import { laneFor } from "./budget.js";
 import { detectFriction, sweepFriction } from "./feedback.js";
 import { systemFor, userMessageFor, isSkip } from "./prompt.js";
 import { post, recentPosts } from "./post.js";
@@ -30,19 +31,33 @@ export async function runRoutine(
   routine,
   { channel = null, events = null, dryRun = false, askFn = ask } = {},
 ) {
-  if (overDailyCap()) {
-    log.warn("routine_over_cap", { routine: routine.key });
-    return { ok: false, error: "daily_cap" };
+  const lane = laneFor(routine);
+  const blocked = spendBlock(lane);
+  if (blocked) {
+    // A budget that stops the bot is doing its job, so this is INFO-with-teeth
+    // rather than an error: the operator set the number.
+    log.warn("routine_over_budget", {
+      routine: routine.key,
+      lane,
+      reason: blocked.reason,
+      spent: blocked.spent?.toFixed(2),
+      budget: blocked.budget?.toFixed(2),
+    });
+    return { ok: false, error: `budget:${blocked.reason}` };
   }
 
-  const recent = channel && routine.recall ? await recentPosts(channel, routine.recall) : [];
+  const recent =
+    channel && routine.recall ? await recentPosts(channel, routine.recall) : [];
   const result = await askFn({
     system: systemFor(routine),
-    messages: [{ role: "user", content: userMessageFor(routine, { events, recent }) }],
-    maxTokens: 6000,
+    messages: [
+      { role: "user", content: userMessageFor(routine, { events, recent }) },
+    ],
+    maxTokens: routine.maxTokens,
     model: routine.model,
     effort: routine.effort,
     routineKey: routine.key,
+    lane,
   });
 
   if (!result.ok) {
@@ -61,7 +76,10 @@ export async function runRoutine(
   }
 
   if (skipped) {
-    log.info("routine_skipped", { routine: routine.key, usd: result.usd.toFixed(4) });
+    log.info("routine_skipped", {
+      routine: routine.key,
+      usd: result.usd.toFixed(4),
+    });
     return { ok: true, skipped: true, text, result };
   }
 
@@ -71,7 +89,9 @@ export async function runRoutine(
     if (trace) {
       await last
         .reply({ content: trace, allowedMentions: { repliedUser: false } })
-        .catch((error) => log.warn("trace_post_failed", { error: error.message }));
+        .catch((error) =>
+          log.warn("trace_post_failed", { error: error.message }),
+        );
     }
   }
 
@@ -88,12 +108,19 @@ export async function runRoutine(
   // Friction filing is not an ask-lane feature. A scheduled report that could
   // not get what it needed is the most useful thing this bot produces, and it
   // used to evaporate because nobody was in the channel to notice.
-  const friction = detectFriction({ text, called: result.called, errors: result.errors });
+  const friction = detectFriction({
+    text,
+    called: result.called,
+    errors: result.errors,
+  });
   if (friction) {
     const summary = await sweepFriction({
       question: `Scheduled routine "${routine.key}":\n${routine.prompt}`,
       answer: text,
       friction,
+      // The sweep is a second call caused by this turn, so it is charged where
+      // the turn was.
+      lane,
     }).catch((error) => {
       log.warn("feedback_sweep_crashed", { error: error.message });
       return null;

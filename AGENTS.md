@@ -81,6 +81,31 @@ Since contract 0.37.0 the connection describes itself as data:
 warns at boot if the key is not an agent. Do not go back to regexing the English
 in `instructions` — the wording is tuned for the model and changes often.
 
+## Money is configuration, not code
+
+Two monthly pots, split by who spends them: `MONTHLY_BUDGET_USD` for what the
+bot decides to do (schedules, event briefs) and `ASK_MONTHLY_BUDGET_USD` for
+what clan members ask for. One pot would let a chatty afternoon cancel the
+01:00 war-deck post, with silence as the only symptom.
+
+**Strict means checked BEFORE the call.** A lane refuses to start a turn that
+could take it past its budget, estimating from the largest turn that lane has
+ever produced (floored by `TURN_RESERVE_USD`, which climbs and never drops).
+Checking `spent >= budget` afterwards guarantees an overshoot of one turn a
+month, and a big turn overshoots a lot. Do not "simplify" that to a post-hoc
+check.
+
+The scheduler declines BEFORE marking the run ledger, so a routine skipped for
+budget is not recorded as done and runs again next month rather than having
+silently missed its window.
+
+**The model is the operator's and so is its price.** `CLAUDE_MODEL` plus
+per-routine `model` / `effort` / `max_tokens`, priced from `agent/models.json`
+over the catalog in `src/pricing.js`. An unpriced model throws at boot and on
+call: the old hardcoded table returned $0 for anything it did not know, which
+turned every budget into a number that could not be reached. A budget that
+cannot be enforced is worse than none, because it looks like it works.
+
 ## Things that will bite you
 
 - **Omitting `clan_tag` does not default yet.** Observed 2026-09-08 on contract

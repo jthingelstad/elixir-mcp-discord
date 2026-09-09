@@ -26,7 +26,10 @@ import dotenv from "dotenv";
 
 const loaded = dotenv.config({ quiet: true });
 
-export const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+export const repoRoot = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 
 /**
  * Where each optional value actually came from.
@@ -44,7 +47,8 @@ function tracked(name, fallback) {
   const fromEnv = (process.env[name] || "").trim();
   const fromFile = (loaded.parsed?.[name] || "").trim();
   let source = "default";
-  if (fromEnv && fromFile && fromEnv !== fromFile) source = "SHELL (shadows .env)";
+  if (fromEnv && fromFile && fromEnv !== fromFile)
+    source = "SHELL (shadows .env)";
   else if (fromEnv && fromFile) source = ".env";
   else if (fromEnv) source = "shell";
   provenance.push({ name, value: fromEnv || fallback, source });
@@ -106,7 +110,10 @@ export function readChannels(env = process.env) {
   for (const [key, value] of Object.entries(env)) {
     const match = /^CHANNEL_([A-Z0-9_]+)$/.exec(key);
     if (!match || !String(value).trim()) continue;
-    channels.set(match[1].toLowerCase().replace(/_/g, "-"), String(value).trim());
+    channels.set(
+      match[1].toLowerCase().replace(/_/g, "-"),
+      String(value).trim(),
+    );
   }
   return channels;
 }
@@ -121,10 +128,13 @@ function validTimezone(tz) {
 }
 
 export const config = {
+  // THE MODEL IS THE OPERATOR'S CHOICE. This is the default for every routine
+  // that does not name its own; prices live in agent/models.json, and a model
+  // with no price is refused rather than billed at zero.
   claude: {
     model: tracked("CLAUDE_MODEL", "claude-sonnet-5"),
     effort: tracked("CLAUDE_EFFORT", "medium"),
-    maxTokens: 8000,
+    maxTokens: Number(optional("CLAUDE_MAX_TOKENS", "8000")),
   },
   // Schedules are written in whatever timezone the clan lives in. UTC is the
   // default because it is the only one that is never surprising, but an
@@ -132,20 +142,49 @@ export const config = {
   timezone: (() => {
     const tz = tracked("TIMEZONE", "UTC");
     if (!validTimezone(tz)) {
-      throw new Error(`TIMEZONE "${tz}" is not a recognised IANA zone (e.g. America/Chicago).`);
+      throw new Error(
+        `TIMEZONE "${tz}" is not a recognised IANA zone (e.g. America/Chicago).`,
+      );
     }
     return tz;
   })(),
   eventPollSeconds: Number(optional("EVENT_POLL_SECONDS", "300")),
-  // Soft guard, not a hard gate: the process warns loudly and stops answering
-  // once the day's measured spend crosses this. Unset means no cap.
-  dailyUsdCap: process.env.DAILY_USD_CAP ? Number(process.env.DAILY_USD_CAP) : null,
+
+  // MONTHLY BUDGETS, per lane, in dollars. Unset means unlimited — which is a
+  // choice, not a default anybody should arrive at by accident, so the boot
+  // log says so out loud.
+  //
+  // Two pots because two different people spend them: MONTHLY_BUDGET_USD is
+  // what the bot does on its own (schedules, event briefs — a function of the
+  // routines you wrote), and ASK_MONTHLY_BUDGET_USD is what clan members ask
+  // for. One pot means a chatty afternoon quietly cancels tomorrow's war-deck
+  // nudge and the only symptom is silence.
+  monthlyBudgetUsd: process.env.MONTHLY_BUDGET_USD
+    ? Number(process.env.MONTHLY_BUDGET_USD)
+    : null,
+  askMonthlyBudgetUsd: process.env.ASK_MONTHLY_BUDGET_USD
+    ? Number(process.env.ASK_MONTHLY_BUDGET_USD)
+    : null,
+  // What a single turn is assumed to cost before we have seen one. A lane
+  // refuses to start a turn that could take it past its budget, and this is
+  // the floor for that estimate; the real figure climbs to the largest turn
+  // the lane has actually produced.
+  turnReserveUsd: Number(optional("TURN_RESERVE_USD", "0.30")),
+
+  // Soft guard on top of the monthly budgets: the process stops answering once
+  // the day's measured spend crosses this. Unset means no daily cap.
+  dailyUsdCap: process.env.DAILY_USD_CAP
+    ? Number(process.env.DAILY_USD_CAP)
+    : null,
   // Where the prompts live. Point it at a private directory to keep your own
   // agent's voice out of a public checkout.
   agentDir: path.resolve(repoRoot, optional("AGENT_DIR", "agent")),
   // SCHEDULE_DISABLED is the pre-refactor name and still works; routines are
   // no longer only schedules, hence the better one.
-  disabled: new Set([...list("ROUTINES_DISABLED"), ...list("SCHEDULE_DISABLED")]),
+  disabled: new Set([
+    ...list("ROUTINES_DISABLED"),
+    ...list("SCHEDULE_DISABLED"),
+  ]),
   // Discord ids allowed to run a routine on demand with `!run <key>`.
   adminUserIds: list("ADMIN_USER_IDS"),
   // Logical channel name for maintainer replies to filed feedback. Unset falls

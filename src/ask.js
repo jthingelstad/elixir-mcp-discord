@@ -17,7 +17,8 @@
  * cannot reproduce. So it passes on_behalf_of and lets the server remember.
  */
 
-import { ask, overDailyCap } from "./claude.js";
+import { ask, spendBlock } from "./claude.js";
+import { laneFor } from "./budget.js";
 import { detectFriction, sweepFriction } from "./feedback.js";
 import { systemFor } from "./prompt.js";
 import { chunk } from "./post.js";
@@ -69,7 +70,9 @@ class LiveMessage {
 
 /** The in-progress view: tools as they fire, then prose as it arrives. */
 function renderProgress(toolsSoFar, text) {
-  const lines = toolsSoFar.map((name) => `-# 🔧 \`${name.replace(/^.*__/, "")}\``);
+  const lines = toolsSoFar.map(
+    (name) => `-# 🔧 \`${name.replace(/^.*__/, "")}\``,
+  );
   if (text) {
     lines.push("");
     lines.push(text.length > 1500 ? `${text.slice(0, 1500)}…` : text);
@@ -82,7 +85,10 @@ function renderProgress(toolsSoFar, text) {
 /** Recent channel messages as conversation turns, oldest first. Cheap context —
  *  no summarization, no durable memory. When it scrolls off, it is gone. */
 async function recentTurns(channel, upToId, turns) {
-  const fetched = await channel.messages.fetch({ limit: turns * 2, before: upToId });
+  const fetched = await channel.messages.fetch({
+    limit: turns * 2,
+    before: upToId,
+  });
   const history = [];
   for (const message of [...fetched.values()].reverse()) {
     const content = message.cleanContent?.trim();
@@ -109,16 +115,31 @@ export async function handleAsk(message, routine, { askFn = ask } = {}) {
   const question = message.cleanContent.trim();
   if (!question) return;
 
-  if (overDailyCap()) {
+  const lane = laneFor(routine);
+  const blocked = spendBlock(lane);
+  if (blocked) {
+    // Members are not the operator and cannot fix this, so the reply says what
+    // happened and when it changes, and nothing about configuration.
     await message.reply(
-      "I've hit the daily spend cap for this channel. Resets at midnight UTC.",
+      blocked.reason === "daily_cap"
+        ? "I've hit today's spend cap for this channel. It resets at midnight UTC."
+        : "I've used up this channel's budget for the month. It resets on the 1st — ask your clan leader if you need it raised.",
     );
-    log.warn("ask_over_cap", { routine: routine.key, user: message.author.id });
+    log.warn("ask_over_budget", {
+      routine: routine.key,
+      lane,
+      reason: blocked.reason,
+      user: message.author.id,
+    });
     return;
   }
 
   try {
-    const history = await recentTurns(message.channel, message.id, routine.historyTurns);
+    const history = await recentTurns(
+      message.channel,
+      message.id,
+      routine.historyTurns,
+    );
     const asker = message.member?.displayName || message.author.username;
 
     const placeholder = await message.reply("-# thinking…");
@@ -131,6 +152,7 @@ export async function handleAsk(message, routine, { askFn = ask } = {}) {
       model: routine.model,
       effort: routine.effort,
       routineKey: routine.key,
+      lane,
       messages: [
         ...history,
         {
@@ -161,7 +183,11 @@ export async function handleAsk(message, routine, { askFn = ask } = {}) {
     }
 
     const answer = result.text || "I got nothing back for that.";
-    const friction = detectFriction({ text: answer, called: result.called, errors: result.errors });
+    const friction = detectFriction({
+      text: answer,
+      called: result.called,
+      errors: result.errors,
+    });
 
     // The live message becomes the answer, so the reply the member is already
     // watching turns into the final text rather than being orphaned above it.
@@ -177,7 +203,9 @@ export async function handleAsk(message, routine, { askFn = ask } = {}) {
       if (trace) {
         await sent
           .reply({ content: trace, allowedMentions: { repliedUser: false } })
-          .catch((error) => log.warn("trace_post_failed", { error: error.message }));
+          .catch((error) =>
+            log.warn("trace_post_failed", { error: error.message }),
+          );
       }
     }
 
@@ -196,7 +224,7 @@ export async function handleAsk(message, routine, { askFn = ask } = {}) {
     });
 
     if (friction) {
-      const summary = await sweepFriction({ question, answer, friction });
+      const summary = await sweepFriction({ question, answer, friction, lane });
       if (summary && sent) {
         await sent.reply({
           content: `-# 📮 Filed with Elixir MCP: ${summary}`,
@@ -205,7 +233,12 @@ export async function handleAsk(message, routine, { askFn = ask } = {}) {
       }
     }
   } catch (error) {
-    log.error("ask_crashed", { error: error.message, stack: error.stack?.slice(0, 400) });
-    await message.reply("I fell over answering that. It's logged.").catch(() => {});
+    log.error("ask_crashed", {
+      error: error.message,
+      stack: error.stack?.slice(0, 400),
+    });
+    await message
+      .reply("I fell over answering that. It's logged.")
+      .catch(() => {});
   }
 }

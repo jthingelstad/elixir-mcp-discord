@@ -33,11 +33,27 @@ import * as state from "./state.js";
  *  positive costs one cheap reflection call that ends in NONE, while a false
  *  negative loses the signal permanently. */
 const LIMIT_MARKERS = [
-  "i can't", "i cannot", "i'm not able", "i am not able", "not available",
-  "no tool", "isn't exposed", "is not exposed", "doesn't expose", "does not expose",
-  "isn't recorded", "is not recorded", "no way to", "unable to", "not supported",
-  "doesn't support", "does not support", "couldn't find a tool", "there's no ",
-  "i don't have access", "not something i can",
+  "i can't",
+  "i cannot",
+  "i'm not able",
+  "i am not able",
+  "not available",
+  "no tool",
+  "isn't exposed",
+  "is not exposed",
+  "doesn't expose",
+  "does not expose",
+  "isn't recorded",
+  "is not recorded",
+  "no way to",
+  "unable to",
+  "not supported",
+  "doesn't support",
+  "does not support",
+  "couldn't find a tool",
+  "there's no ",
+  "i don't have access",
+  "not something i can",
 ];
 
 export const FEEDBACK_PROMPT = `
@@ -94,7 +110,12 @@ export function detectFriction({ text, called, errors }) {
  * model decides there is nothing worth filing — that is a normal outcome and
  * not an error.
  */
-export async function sweepFriction({ question, answer, friction }) {
+export async function sweepFriction({
+  question,
+  answer,
+  friction,
+  lane = "routines",
+}) {
   const system = `You are reviewing one exchange between a Clash Royale clan member and an
 agent whose only data source is the Elixir MCP server. Your job is to decide
 whether the agent hit real friction worth reporting to the maintainer, and if
@@ -119,6 +140,8 @@ characters), or exactly NONE if you filed nothing.`;
 
   const result = await ask({
     system,
+    lane,
+    routineKey: "feedback-sweep",
     maxTokens: 3000,
     messages: [
       {
@@ -134,10 +157,17 @@ characters), or exactly NONE if you filed nothing.`;
   }
   const summary = (result.text || "").trim();
   if (!calledFeedback(result.called) || /^none\b/i.test(summary)) {
-    log.info("feedback_sweep_declined", { reason: friction.reason, usd: result.usd.toFixed(4) });
+    log.info("feedback_sweep_declined", {
+      reason: friction.reason,
+      usd: result.usd.toFixed(4),
+    });
     return null;
   }
-  log.info("feedback_filed", { reason: friction.reason, summary, usd: result.usd.toFixed(4) });
+  log.info("feedback_filed", {
+    reason: friction.reason,
+    summary,
+    usd: result.usd.toFixed(4),
+  });
   return summary.slice(0, 200);
 }
 

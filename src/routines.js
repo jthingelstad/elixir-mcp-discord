@@ -46,6 +46,7 @@ const FIELDS = new Set([
   "model",
   "effort",
   "max_chars",
+  "max_tokens",
 ]);
 
 const WEEKDAYS = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
@@ -102,7 +103,10 @@ export function parseRoutine(key, text) {
 
   const trigger = fields.trigger;
   if (!TRIGGERS.has(trigger)) {
-    fail(key, `trigger must be one of ${[...TRIGGERS].join(", ")}, got "${trigger ?? ""}"`);
+    fail(
+      key,
+      `trigger must be one of ${[...TRIGGERS].join(", ")}, got "${trigger ?? ""}"`,
+    );
   }
   if (!fields.channel) fail(key, "needs a channel");
   if (!body) fail(key, "has no prompt");
@@ -112,24 +116,45 @@ export function parseRoutine(key, text) {
     trigger,
     channel: fields.channel.toLowerCase(),
     prompt: body,
-    enabled: fields.enabled === undefined ? true : asBool(key, "enabled", fields.enabled),
-    maySkip: fields.may_skip === undefined ? false : asBool(key, "may_skip", fields.may_skip),
+    enabled:
+      fields.enabled === undefined
+        ? true
+        : asBool(key, "enabled", fields.enabled),
+    maySkip:
+      fields.may_skip === undefined
+        ? false
+        : asBool(key, "may_skip", fields.may_skip),
     // How many of the bot's own recent messages in the destination channel to
     // show the model. This is the cheapest possible memory and it needs no
     // storage: Discord already kept them. Without it a daily routine happily
     // reports the same three players every day and reads like a broken loop.
-    recall: fields.recall === undefined ? 0 : asInt(key, "recall", fields.recall),
+    recall:
+      fields.recall === undefined ? 0 : asInt(key, "recall", fields.recall),
     model: fields.model || config.claude.model,
     effort: fields.effort || config.claude.effort,
-    maxChars: fields.max_chars === undefined ? 1900 : asInt(key, "max_chars", fields.max_chars, { min: 200 }),
+    maxChars:
+      fields.max_chars === undefined
+        ? 1900
+        : asInt(key, "max_chars", fields.max_chars, { min: 200 }),
+    // The output ceiling for one turn. Priced exactly, unlike input, so it is
+    // the part of a turn's cost an operator can actually bound.
+    maxTokens:
+      fields.max_tokens === undefined
+        ? 6000
+        : asInt(key, "max_tokens", fields.max_tokens, { min: 256 }),
   };
 
   if (trigger === "schedule") {
     const at = /^(\d{1,2}):(\d{2})$/.exec(fields.at || "");
-    if (!at) fail(key, `at must be HH:MM in the configured timezone, got "${fields.at ?? ""}"`);
+    if (!at)
+      fail(
+        key,
+        `at must be HH:MM in the configured timezone, got "${fields.at ?? ""}"`,
+      );
     const hour = Number(at[1]);
     const minute = Number(at[2]);
-    if (hour > 23 || minute > 59) fail(key, `at "${fields.at}" is not a real time`);
+    if (hour > 23 || minute > 59)
+      fail(key, `at "${fields.at}" is not a real time`);
     routine.at = { hour, minute };
 
     if (fields.days) {
@@ -142,9 +167,14 @@ export function parseRoutine(key, text) {
     // A missed run fires late only inside this window. A war-deck nudge at 4am
     // because the host was asleep is worse than one that never fires.
     routine.catchUpHours =
-      fields.catch_up_hours === undefined ? 4 : asInt(key, "catch_up_hours", fields.catch_up_hours, { min: 1 });
+      fields.catch_up_hours === undefined
+        ? 4
+        : asInt(key, "catch_up_hours", fields.catch_up_hours, { min: 1 });
   } else if (fields.at || fields.days || fields.catch_up_hours) {
-    fail(key, `at/days/catch_up_hours only mean something for trigger: schedule`);
+    fail(
+      key,
+      `at/days/catch_up_hours only mean something for trigger: schedule`,
+    );
   }
 
   if (trigger === "events") {
@@ -155,7 +185,10 @@ export function parseRoutine(key, text) {
   }
 
   if (trigger === "message") {
-    routine.historyTurns = fields.history_turns === undefined ? 8 : asInt(key, "history_turns", fields.history_turns);
+    routine.historyTurns =
+      fields.history_turns === undefined
+        ? 8
+        : asInt(key, "history_turns", fields.history_turns);
     routine.maxChars = fields.max_chars === undefined ? 2000 : routine.maxChars;
   } else if (fields.history_turns) {
     fail(key, "history_turns only means something for trigger: message");
@@ -163,7 +196,10 @@ export function parseRoutine(key, text) {
 
   // A trace footer is the demonstration in a channel people are watching to
   // judge the answers, and noise in a channel they are reading for the news.
-  routine.trace = fields.trace === undefined ? trigger === "message" : asBool(key, "trace", fields.trace);
+  routine.trace =
+    fields.trace === undefined
+      ? trigger === "message"
+      : asBool(key, "trace", fields.trace);
 
   return routine;
 }
@@ -175,13 +211,22 @@ export function parseRoutine(key, text) {
  * it must not take the other five off the air — and the operator finds out
  * from a log line rather than from a bot that would not start.
  */
-export function loadRoutines({ dir = config.agentDir, disabled = config.disabled } = {}) {
+export function loadRoutines({
+  dir = config.agentDir,
+  disabled = config.disabled,
+} = {}) {
   const routineDir = path.join(dir, "routines");
   let files;
   try {
-    files = fs.readdirSync(routineDir).filter((name) => name.endsWith(".md")).sort();
+    files = fs
+      .readdirSync(routineDir)
+      .filter((name) => name.endsWith(".md"))
+      .sort();
   } catch {
-    return { routines: [], errors: [{ key: routineDir, error: "no routines directory" }] };
+    return {
+      routines: [],
+      errors: [{ key: routineDir, error: "no routines directory" }],
+    };
   }
 
   const routines = [];
@@ -189,7 +234,10 @@ export function loadRoutines({ dir = config.agentDir, disabled = config.disabled
   for (const file of files) {
     const key = file.replace(/\.md$/, "");
     try {
-      const routine = parseRoutine(key, fs.readFileSync(path.join(routineDir, file), "utf8"));
+      const routine = parseRoutine(
+        key,
+        fs.readFileSync(path.join(routineDir, file), "utf8"),
+      );
       routine.disabled = !routine.enabled || disabled.has(key);
       routines.push(routine);
     } catch (error) {
@@ -204,5 +252,7 @@ export function activeRoutines(options) {
 }
 
 export function routinesFor(trigger, options) {
-  return activeRoutines(options).filter((routine) => routine.trigger === trigger);
+  return activeRoutines(options).filter(
+    (routine) => routine.trigger === trigger,
+  );
 }

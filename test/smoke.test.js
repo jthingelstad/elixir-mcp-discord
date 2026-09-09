@@ -33,7 +33,10 @@ function fakeMessage(content) {
         return Promise.resolve();
       },
       reply: (child) => {
-        posted.push({ text: typeof child === "string" ? child : child.content, edits: [] });
+        posted.push({
+          text: typeof child === "string" ? child : child.content,
+          edits: [],
+        });
         return Promise.resolve({});
       },
     });
@@ -61,9 +64,21 @@ const RESULT = {
   errors: [],
   trace: [
     { kind: "thought", text: "Look the player up first." },
-    { kind: "tool", name: "players_search", input: { query: "King Thing" }, shape: "1 matches", ms: 989 },
+    {
+      kind: "tool",
+      name: "players_search",
+      input: { query: "King Thing" },
+      shape: "1 matches",
+      ms: 989,
+    },
   ],
-  envelopes: [{ tool: "players_search", as_of: "2026-09-08T00:54:03.893Z", freshness_seconds: 61 }],
+  envelopes: [
+    {
+      tool: "players_search",
+      as_of: "2026-09-08T00:54:03.893Z",
+      freshness_seconds: 61,
+    },
+  ],
   usd: 0.0421,
   turnId: "abcd1234",
   ms: 9656,
@@ -80,17 +95,36 @@ test("answers a question, replacing the placeholder with the answer", async () =
   await handleAsk(message, ROUTINE, { askFn: async () => RESULT });
 
   assert.ok(posted.length >= 2, "expected an answer and a trace");
-  assert.equal(posted[0].text, RESULT.text, "placeholder should become the answer");
-  assert.ok(posted[0].edits.length > 0, "the answer arrives via edit, not a new message");
-  assert.ok(posted[1].text.includes("abcd1234"), "trace should carry the turn id");
+  assert.equal(
+    posted[0].text,
+    RESULT.text,
+    "placeholder should become the answer",
+  );
+  assert.ok(
+    posted[0].edits.length > 0,
+    "the answer arrives via edit, not a new message",
+  );
+  assert.ok(
+    posted[1].text.includes("abcd1234"),
+    "trace should carry the turn id",
+  );
 });
 
 test("a failed turn reports the failure and does not crash", async () => {
   const { message, posted } = fakeMessage("break please");
   await handleAsk(message, ROUTINE, {
-    askFn: async () => ({ ok: false, error: "boom", called: [], errors: [], trace: [] }),
+    askFn: async () => ({
+      ok: false,
+      error: "boom",
+      called: [],
+      errors: [],
+      trace: [],
+    }),
   });
-  assert.ok(posted[0].text.includes("boom"), "the real error should reach the channel");
+  assert.ok(
+    posted[0].text.includes("boom"),
+    "the real error should reach the channel",
+  );
 });
 
 test("streaming progress reaches the live message", async () => {
@@ -109,7 +143,11 @@ test("streaming progress reaches the live message", async () => {
     live.edits.some((edit) => edit.includes("war_current")),
     "the tool name should appear in the live message while the turn runs",
   );
-  assert.equal(live.text, RESULT.text, "and the live message ends as the answer");
+  assert.equal(
+    live.text,
+    RESULT.text,
+    "and the live message ends as the answer",
+  );
 });
 
 test("the trace carries the diagnostics that make an answer debuggable", () => {
@@ -131,7 +169,14 @@ test("the trace carries the diagnostics that make an answer debuggable", () => {
 test("an empty result is called out, not smoothed over", () => {
   const trace = renderTrace({
     ...RESULT,
-    trace: [{ kind: "tool", name: "players_search", input: {}, shape: "0 matches (EMPTY)" }],
+    trace: [
+      {
+        kind: "tool",
+        name: "players_search",
+        input: {},
+        shape: "0 matches (EMPTY)",
+      },
+    ],
   });
   assert.ok(trace.includes("EMPTY"));
 });
@@ -153,4 +198,18 @@ test("a tool that failed without the error flag is still reported as failed", ()
   });
   assert.ok(trace.includes("⚠️"), "a failure must be visible in the footer");
   assert.ok(trace.includes("elixir_identify"));
+});
+
+test("a member's question is charged to the ask lane", async () => {
+  // The whole point of two pots: clan members driving cost must not be able to
+  // spend the schedule's budget.
+  const { message } = fakeMessage("how am I doing?");
+  let seen = null;
+  await handleAsk(message, ROUTINE, {
+    askFn: async (args) => {
+      seen = args;
+      return RESULT;
+    },
+  });
+  assert.equal(seen.lane, "ask");
 });
