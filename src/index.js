@@ -12,8 +12,8 @@ import { config, provenance, channelEnvName } from "./config.js";
 import { handleAsk } from "./ask.js";
 import { startEventLoop } from "./events.js";
 import { startScheduler } from "./scheduler.js";
-import { runRoutine } from "./run.js";
 import { loadRoutines, routinesFor } from "./routines.js";
+import { registerCommands, handleInteraction } from "./commands.js";
 import { rateFor } from "./pricing.js";
 import * as budget from "./budget.js";
 import { initialize, describePrincipal } from "./mcp.js";
@@ -174,79 +174,22 @@ client.once(Events.ClientReady, async (ready) => {
     log.error("no_active_routines", { dir: config.agentDir });
   }
 
+  await registerCommands(client);
   startEventLoop(() => routinesFor("events"), resolveChannel);
   startScheduler(() => routinesFor("schedule"), resolveChannel);
 });
 
-/** `!run <key>` from an admin, for showing a routine to somebody or checking a
- *  prompt change in the real channel. Off unless ADMIN_USER_IDS is set. */
-async function handleAdminCommand(message) {
-  const [command, key] = message.content.trim().split(/\s+/);
-  if (command === "!budget") {
-    const lines = budget.status().map((b) => {
-      const of = b.budget ? ` of $${b.budget.toFixed(2)}` : " (no budget set)";
-      return `**${b.lane}** — $${b.spent.toFixed(2)}${of} this month · ${b.state}`;
+client.on(Events.InteractionCreate, async (interaction) => {
+  await handleInteraction(interaction, { resolveChannel }).catch((error) => {
+    log.error("interaction_failed", {
+      command: interaction.commandName,
+      error: error.message,
     });
-    await message.reply(
-      [
-        ...lines,
-        `-# reserve per turn: routines/ask climb to the largest turn seen`,
-      ].join("\n"),
-    );
-    return true;
-  }
-  if (command === "!routines") {
-    const listed = loadRoutines()
-      .routines.map(
-        (r) =>
-          `${r.disabled ? "○" : "●"} \`${r.key}\` — ${r.trigger} → #${r.channel}`,
-      )
-      .join("\n");
-    await message.reply(listed || "No routines loaded.");
-    return true;
-  }
-  if (command !== "!run") return false;
-
-  const routine = loadRoutines().routines.find((entry) => entry.key === key);
-  if (!routine) {
-    await message.reply(
-      `No routine called \`${key ?? ""}\`. Try \`!routines\`.`,
-    );
-    return true;
-  }
-  const channel = await resolveChannel(routine.channel);
-  if (!channel) {
-    await message.reply(
-      `\`${routine.key}\` posts to \`${routine.channel}\`, which is not bound.`,
-    );
-    return true;
-  }
-  await message.react("⏳").catch(() => {});
-  const run = await runRoutine(routine, { channel, events: null });
-  log.info("routine_run_on_demand", {
-    routine: routine.key,
-    by: message.author.id,
-    ok: run.ok,
   });
-  if (!run.ok) await message.reply(`\`${routine.key}\` failed: ${run.error}`);
-  else if (run.skipped)
-    await message.reply(`\`${routine.key}\` chose to skip.`);
-  return true;
-}
+});
 
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
-
-  if (
-    config.adminUserIds.has(message.author.id) &&
-    message.content.startsWith("!")
-  ) {
-    const handled = await handleAdminCommand(message).catch((error) => {
-      log.error("admin_command_failed", { error: error.message });
-      return true;
-    });
-    if (handled) return;
-  }
 
   // Routines are re-read per message so a prompt edit takes effect on the next
   // question, not the next restart.

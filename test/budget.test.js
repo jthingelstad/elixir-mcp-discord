@@ -52,11 +52,18 @@ test("a turn that COULD cross the line does not start", () => {
   const verdict = budget.check("routines");
   assert.equal(verdict.ok, false);
   assert.equal(verdict.reason, "reserve", "refused before spending, not after");
-  assert.ok(verdict.spent < verdict.budget, "the budget is not even reached yet");
+  assert.ok(
+    verdict.spent < verdict.budget,
+    "the budget is not even reached yet",
+  );
 });
 
 test("the reserve climbs to the largest turn the lane has seen", () => {
-  assert.equal(budget.reserveFor("routines"), 0.3, "the configured floor first");
+  assert.equal(
+    budget.reserveFor("routines"),
+    0.3,
+    "the configured floor first",
+  );
   budget.record("routines", 0.42);
   assert.equal(
     budget.reserveFor("routines"),
@@ -72,7 +79,11 @@ test("spend is per calendar month, and does not roll over", () => {
   const september = new Date("2026-09-01T00:01:00Z");
   budget.record("routines", 9.9, august);
   assert.equal(budget.check("routines", august).ok, false);
-  assert.equal(budget.spent("routines", september), 0, "a new month is a new pot");
+  assert.equal(
+    budget.spent("routines", september),
+    0,
+    "a new month is a new pot",
+  );
   assert.equal(budget.check("routines", september).ok, true);
 });
 
@@ -91,7 +102,11 @@ test("status reports what an operator needs to decide anything", () => {
   assert.equal(ask.spent, 4.5);
   assert.equal(ask.budget, 5);
   assert.equal(ask.remaining, 0.5);
-  assert.equal(ask.state, "reserved", "half a dollar left, a $0.30 reserve — stopped");
+  assert.equal(
+    ask.state,
+    "reserved",
+    "half a dollar left, a $0.30 reserve — stopped",
+  );
   assert.equal(ask.month, budget.monthKey());
 });
 
@@ -127,4 +142,39 @@ test("a turn is priced from usage, cache reads included", async () => {
     cache_read_input_tokens: 1_000_000,
   });
   assert.equal(Number(usd.toFixed(4)), 2 + 1 + 0.2);
+});
+
+/**
+ * The command surface, as data. Discord interactions are not testable here
+ * without a gateway, but what the commands ARE, and who may use them, is.
+ */
+test("slash commands are declared, gated, and describe themselves", async () => {
+  const { commandDefinitions, isAdmin, budgetReply } =
+    await import("../src/commands.js");
+  const defs = commandDefinitions();
+  assert.deepEqual(defs.map((d) => d.name).sort(), [
+    "budget",
+    "routines",
+    "run",
+  ]);
+  for (const def of defs) {
+    assert.ok(def.description?.length > 10, `${def.name} needs a description`);
+    // Hidden from members in the picker. The id check is the real gate, but a
+    // command that spends money should not be sitting in everyone's menu.
+    assert.ok(def.default_member_permissions, `${def.name} must be gated`);
+  }
+  const run = defs.find((d) => d.name === "run");
+  assert.equal(run.options[0].autocomplete, true, "routine names autocomplete");
+  assert.equal(run.options[0].required, true);
+
+  config.adminUserIds = new Set(["704062105258557511"]);
+  assert.equal(isAdmin("704062105258557511"), true);
+  assert.equal(isAdmin("999"), false, "an allow-list, not a role check");
+
+  config.monthlyBudgetUsd = 40;
+  config.askMonthlyBudgetUsd = 20;
+  const reply = budgetReply();
+  assert.match(reply, /routines/);
+  assert.match(reply, /\$40\.00/);
+  assert.match(reply, /\$20\.00/);
 });

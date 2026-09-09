@@ -94,8 +94,11 @@ called, the shapes they returned and what it cost — without waiting for 12:30
 and without touching the channel. Files are re-read on every run, so editing a
 prompt needs no restart and no deploy.
 
-In Discord, an admin (`ADMIN_USER_IDS`) can also `!run <routine>` and
-`!routines`.
+In Discord, an admin (`ADMIN_USER_IDS`) has slash commands: **`/run`** with
+autocomplete over your routine names, **`/routines`**, and **`/budget`**. They
+are registered to your guild at startup, so they appear immediately — if they
+never show up, the bot was invited without the `applications.commands` scope
+and the boot log says so.
 
 ## How it works
 
@@ -176,7 +179,7 @@ that runs out says so — in the log for routines, and in the channel for asks,
 in a sentence aimed at a member rather than an operator.
 
 Months are UTC calendar months and nothing rolls over. `npm run routines` and
-`!budget` in Discord both show where you are.
+`/budget` in Discord both show where you are.
 
 ## Choosing a model
 

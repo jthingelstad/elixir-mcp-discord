@@ -81,6 +81,22 @@ Since contract 0.37.0 the connection describes itself as data:
 warns at boot if the key is not an agent. Do not go back to regexing the English
 in `instructions` — the wording is tuned for the model and changes often.
 
+## Slash commands, not a bang prefix
+
+`/budget`, `/routines`, `/run` (autocompleting over routine keys), registered
+per guild at startup so they appear instantly. They replaced `!run` / `!routines`,
+which needed MessageContent on every message on the off-chance one began with
+a bang, could not be permission-gated by Discord, listed nothing, described
+nothing, and made a typo indistinguishable from chat.
+
+Admin-gated twice on purpose: `setDefaultMemberPermissions` hides them in the
+picker (a hint a server can override) and `ADMIN_USER_IDS` actually enforces it
+(the rule). `/run` defers its reply — a turn is a model call and Discord wants
+an answer within three seconds.
+
+If the commands never appear, the bot was invited without the
+`applications.commands` scope; registration logs that with the fix.
+
 ## Money is configuration, not code
 
 Two monthly pots, split by who spends them: `MONTHLY_BUDGET_USD` for what the
