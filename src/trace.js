@@ -80,7 +80,8 @@ export function renderTrace(result, { label = "How I got there" } = {}) {
       if (step.ms !== undefined) parts.push(`· ${(step.ms / 1000).toFixed(1)}s`);
       required.push(parts.join(" "));
     } else if (step.kind === "error") {
-      required.push(`> ⚠️ \`${short(step.name)}\` failed: ${clip(step.detail, 200)}`);
+      const code = step.code ? ` (${step.code})` : "";
+      required.push(`> ⚠️ \`${short(step.name)}\` failed${code}: ${clip(step.detail, 200)}`);
     }
   }
 

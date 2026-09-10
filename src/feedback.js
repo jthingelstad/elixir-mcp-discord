@@ -89,13 +89,36 @@ function looksLikeLimit(text) {
   return LIMIT_MARKERS.some((marker) => low.includes(marker));
 }
 
+/**
+ * Error codes that are the service working as designed, not friction. Both are
+ * in the contract's closed set (1.0.0):
+ *
+ *   no_subject      there was nobody to answer about — an unmapped
+ *                   on_behalf_of, or a question with no default player. The
+ *                   agent's next move is to ask who is asking, which the prompt
+ *                   already tells it to do; filing that would report the
+ *                   identity flow as a bug every time a new member speaks.
+ *   quota_exceeded  the ceiling did what it is for. The maintainer sets it and
+ *                   can read it in the audit log; a feedback item adds nothing.
+ *
+ * Every other code — invalid_tag, not_entitled, not_recorded, not_found,
+ * live_unavailable, bad_request, result_too_large — stays a signal.
+ */
+const EXPECTED_ERROR_CODES = new Set(["no_subject", "quota_exceeded"]);
+
+function describeError(e) {
+  return `${e.name}${e.code ? ` [${e.code}]` : ""}: ${e.detail}`;
+}
+
 /** Did this turn hit friction worth a second look? */
 export function detectFriction({ text, called, errors }) {
   if (calledFeedback(called)) return null;
-  if (errors.length > 0) {
+  const unexpected = (errors || []).filter((e) => !EXPECTED_ERROR_CODES.has(e.code));
+  if (unexpected.length > 0) {
     return {
       reason: "tool_error",
-      detail: errors.map((e) => `${e.name}: ${e.detail}`).join(" | "),
+      codes: unexpected.map((e) => e.code).filter(Boolean),
+      detail: unexpected.map(describeError).join(" | "),
     };
   }
   if (looksLikeLimit(text)) {

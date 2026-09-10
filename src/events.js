@@ -37,12 +37,17 @@ import * as state from "./state.js";
  * seen. With a topics filter those can differ — next_cursor tracks matching
  * events — and taking the max only ever costs us re-scanning a few rows the
  * filter would drop anyway.
+ *
+ * `meta` is the envelope of the LAST page read. It carries the hints the loop
+ * runs on (`feedback_responses_pending`, `contract_version`), so it comes back
+ * on every path, including the truncated one.
  */
 const PAGE_LIMIT = 10;
 
 export async function drain(since, topics) {
   const collected = [];
   let cursor = since;
+  let meta = null;
 
   for (let page = 0; page < PAGE_LIMIT; page += 1) {
     const args = { since: cursor, limit: 50, mark_seen: false };
@@ -52,39 +57,43 @@ export async function drain(since, topics) {
 
     const events = result.body?.events || [];
     collected.push(...events);
+    meta = result.body?.meta ?? meta;
 
     const highest = events.reduce((max, e) => Math.max(max, e.event_id ?? 0), cursor);
     cursor = Math.max(result.body?.next_cursor ?? 0, highest);
 
     if (!result.body?.has_more) {
-      return { ok: true, events: collected, cursor, meta: result.body?.meta };
+      return { ok: true, events: collected, cursor, meta };
     }
   }
-  return { ok: true, events: collected, cursor, truncated: true };
+  return { ok: true, events: collected, cursor, meta, truncated: true };
 }
 
 /** Where the feed is right now. First run starts here rather than replaying the
  *  backlog: an agent that wakes up and posts a month of history into a channel
  *  is a worse first impression than posting nothing. Seed, never drain. */
-async function newestEventId() {
+async function newestEvent() {
   const result = await drain(0, null);
-  return result.ok ? result.cursor : null;
+  return result.ok ? { cursor: result.cursor, meta: result.meta } : null;
 }
 
+/** Polls one routine. Returns the envelope of the last `elixir_events`
+ *  response it read (or null when it read none), so the tick can act on the
+ *  hints without a call of its own. */
 async function pollRoutine(routine, channel) {
   const cursor = state.cursorFor(routine.key);
   if (cursor === null) {
-    const newest = await newestEventId();
-    if (newest === null) return;
-    state.setCursor(routine.key, newest);
-    log.info("cursor_seeded", { routine: routine.key, cursor: newest });
-    return;
+    const newest = await newestEvent();
+    if (newest === null) return null;
+    state.setCursor(routine.key, newest.cursor);
+    log.info("cursor_seeded", { routine: routine.key, cursor: newest.cursor });
+    return newest.meta;
   }
 
   const result = await drain(cursor, routine.topics);
   if (!result.ok) {
     log.warn("events_poll_failed", { routine: routine.key, error: result.error, cursor });
-    return;
+    return null;
   }
 
   // Contract drift is worth a log line even when nothing broke: the tool
@@ -98,7 +107,7 @@ async function pollRoutine(routine, channel) {
   if (result.events.length === 0) {
     // Nothing to say, but the cursor may still have moved past filtered rows.
     if (result.cursor > cursor) state.setCursor(routine.key, result.cursor);
-    return;
+    return result.meta;
   }
 
   const run = await runRoutine(routine, { channel, events: result.events });
@@ -113,6 +122,31 @@ async function pollRoutine(routine, channel) {
       posted: !run.skipped,
     });
   }
+  return result.meta;
+}
+
+/**
+ * Whether a tick should read `elixir_my_feedback` at all.
+ *
+ * Since contract 1.0.0 every response — `elixir_events` included — carries
+ * `meta.feedback_responses_pending`, so the feed poll the loop already makes
+ * says whether there is anything to read. Before that hint reached the feed,
+ * this bot re-read its whole feedback ledger every tick to find out: 761 calls
+ * and about 4 MB a week to discover, almost always, nothing (review
+ * 2026-09-10 §4.1), on a call that is metered like any other.
+ *
+ *   - the seeding run always reads: it marks history as already shown (seed,
+ *     never drain), and that has to happen before any hint is trusted;
+ *   - a hint of 0 skips the read;
+ *   - a hint above 0 reads;
+ *   - no hint at all — no event routine polled this tick, or a server older
+ *     than 1.0.0 that does not stamp the feed's envelope — falls back to
+ *     reading. A missing signal degrades to the old cost, never to silence.
+ */
+export function shouldReadFeedback({ seeded, pending }) {
+  if (!seeded) return true;
+  if (pending === undefined || pending === null) return true;
+  return Number(pending) > 0;
 }
 
 /**
@@ -151,18 +185,29 @@ export function startEventLoop(routinesFn, resolveChannel) {
     const feedbackName = config.feedbackChannel || routines[0]?.channel || null;
     const feedbackChannel = feedbackName ? await resolveChannel(feedbackName) : null;
 
-    // First run marks the whole feedback history as already shown. An empty
-    // ledger meeting a year of answered feedback is a channel full of old
-    // news, which is a worse first impression than silence.
-    await postFeedbackResponses(feedbackChannel, { seedOnly: !seeded }).catch((error) =>
-      log.warn("feedback_post_failed", { error: error.message }),
-    );
-
+    // The feed polls run first: their envelopes say whether the maintainer
+    // has answered anything, so the feedback read below is a decision rather
+    // than a habit.
+    let pending;
     for (const routine of routines) {
       const channel = await resolveChannel(routine.channel);
       if (!channel) continue;
-      await pollRoutine(routine, channel).catch((error) =>
-        log.error("events_routine_crashed", { routine: routine.key, error: error.message }),
+      const meta = await pollRoutine(routine, channel).catch((error) => {
+        log.error("events_routine_crashed", { routine: routine.key, error: error.message });
+        return null;
+      });
+      if (meta?.feedback_responses_pending !== undefined) {
+        pending = meta.feedback_responses_pending;
+      }
+    }
+
+    // First run marks the whole feedback history as already shown. An empty
+    // ledger meeting a year of answered feedback is a channel full of old
+    // news, which is a worse first impression than silence.
+    if (shouldReadFeedback({ seeded, pending })) {
+      if (seeded && pending) log.info("feedback_responses_pending", { pending });
+      await postFeedbackResponses(feedbackChannel, { seedOnly: !seeded }).catch((error) =>
+        log.warn("feedback_post_failed", { error: error.message }),
       );
     }
     seeded = true;

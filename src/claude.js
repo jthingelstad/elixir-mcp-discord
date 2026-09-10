@@ -149,8 +149,12 @@ function readToolActivity(content, timings) {
       const failed = block.is_error || Boolean(body?.error);
       if (failed) {
         const detail = (body?.error?.message ?? raw).slice(0, 400);
-        errors.push({ name, detail });
-        trace.push({ kind: "error", name, detail });
+        // The code is from the contract's closed set (no_subject, invalid_tag,
+        // quota_exceeded, ...): the friction sweep decides on it rather than
+        // on the English of the message. Null when the failure had no body.
+        const code = typeof body?.error?.code === "string" ? body.error.code : null;
+        errors.push({ name, code, detail });
+        trace.push({ kind: "error", name, code, detail });
         continue;
       }
       if (step) step.shape = describeShape(body);
@@ -339,13 +343,16 @@ export async function ask({
           const call = await callTool(tool, block.input ?? {});
           log.info("client_side_tool_call", { turnId, tool, ok: call.ok });
           if (!call.ok) {
+            const code = typeof call.body?.error?.code === "string" ? call.body.error.code : null;
             errors.push({
               name: tool,
+              code,
               detail: String(call.error).slice(0, 400),
             });
             trace.push({
               kind: "error",
               name: tool,
+              code,
               detail: String(call.error).slice(0, 400),
             });
           }

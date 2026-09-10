@@ -210,6 +210,10 @@ budgets, because they look like they work.
   eat each other's notifications. Every routine polls with `mark_seen: false`
   and keeps its own position. On first run each seeds from the newest event
   rather than draining the backlog into your channel.
+- **Maintainer replies are read on the server's hint.** Every Elixir MCP
+  response carries `meta.feedback_responses_pending` (contract 1.0.0), so the
+  bot reads `elixir_my_feedback` only when a feed poll says there is something
+  new — not every tick.
 - **Times are yours.** `TIMEZONE` decides what `at: 22:00` means, DST included.
 - **Cost.** Roughly $0.05–0.20 per post. Every ask carries a footer with the
   tools called and what the turn cost; `npm run routines` shows this month
