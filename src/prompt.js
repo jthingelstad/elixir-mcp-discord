@@ -51,9 +51,15 @@ Never paste raw JSON. At most one emoji, usually zero.
 
 Do not open with a greeting or close with a sign-off. Start with the news.`;
 
-const QUOTA = `Prefer recorded data. live_fetch goes out to the collector fleet and draws on a
-daily quota shared with every other consumer — use it only when the answer is
-genuinely impossible without a live read, and never more than once per post.`;
+const QUOTA = `Prefer recorded data. A live read goes out to the collector fleet and draws on a
+daily quota shared with every other consumer — spend one only when a fresh read
+genuinely changes the answer, and never more than once per post.
+
+When it does, ask the recorded tool for it: players_profile, clans_roster,
+war_current and battles_query each take live: true and answer in their normal
+shape. live_fetch is the raw catch-all for an endpoint none of them cover and
+should be rare; it refuses /players/{tag}/battlelog (use battles_query with
+live: true instead).`;
 
 const SKIP = `SILENCE IS A VALID OUTPUT. If there is genuinely nothing worth posting, reply
 with SKIP on a line by itself and nothing else. A quiet day is allowed to be
@@ -97,15 +103,8 @@ export function readIdentity({ dir = config.agentDir } = {}) {
  *
  * This is not the CLAN_TAG that used to sit in .env. Nobody types it, nothing
  * can disagree with the key, and repointing the key repoints this. It is the
- * connection describing itself, recorded at boot.
- *
- * It exists because omitting clan_tag does not currently resolve for an agent:
- * observed 2026-09-08 against contract 0.37.0, `war_current {}` and
- * `clans_roster {}` both answer "not_entitled: No recorded clan membership on
- * this account" on a connection whose own initialize block reports 48 members
- * of POAP KINGS. So the model is told the tag and told to use it when a tool
- * claims not to know. When the server-side default lands, this stays true and
- * stops mattering.
+ * connection describing itself, recorded at boot — context for the model, not
+ * an instruction to pass the tag. Omitting clan_tag resolves server-side.
  */
 export function subjectBlock(principal = state.get("principal")) {
   const subject = principal?.subject;
@@ -114,12 +113,8 @@ export function subjectBlock(principal = state.get("principal")) {
   return `YOUR SUBJECT
 
 You act for ${name}${subject.members ? ` (${subject.members} members at last connect)` : ""}.
-That is what your key is for; the server reported it when you connected.
-
-Omit clan_tag and it should mean this clan. If a tool answers that there is no
-recorded clan membership, that is a defaulting failure and not the truth — pass
-clan_tag: "${subject.tag}" explicitly and carry on, then file it once with
-elixir_feedback.`;
+That is what your key is for; the server reported it when you connected. Omit
+clan_tag and it means this clan.`;
 }
 
 export function systemFor(routine, { identity = readIdentity(), includePrompt = false, subject = subjectBlock() } = {}) {

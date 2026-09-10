@@ -35,9 +35,9 @@ can be judged in seconds instead of at 01:00.
 
 **No clan in this repo. None.** No tag in `.env`, no tag in a prompt, no tag in
 `src/`. The agent key knows which clan it acts for; a second copy could disagree
-with it, and `CLAN_TAG` existing is what let every prompt paper over the fact
-that omitting `clan_tag` does not actually work yet (see below). A test asserts
-no shipped routine contains a CR tag. Do not reintroduce one.
+with it, and `CLAN_TAG` existing is what let every prompt paper over a
+server-side defaulting bug for weeks instead of getting it fixed (see below). A
+test asserts no shipped routine contains a CR tag. Do not reintroduce one.
 
 **No local data. None.** No database, no roster cache, no nickname table, no
 Clash Royale API key, no memory across restarts beyond cursors, a run ledger and
@@ -72,8 +72,9 @@ Riding Jamie's account, this bot could answer "what players do you track?" with
 his personal claimed-player list, and on first boot it posted eight of his
 answered feedback items into a public channel. Both are impossible by
 construction now: the agent surface publishes 36 tools, and
-`elixir_my_players`, `elixir_add_player` and `elixir_add_clan` are absent *and*
-refused on call. **So do not add them to a prompt.**
+`elixir_my_players`, `elixir_track_player` and `elixir_track_clan` (the
+`elixir_add_*` names before contract 1.0.0) are absent *and* refused on call.
+**So do not add them to a prompt.**
 
 Since contract 0.37.0 the connection describes itself as data:
 `initialize._meta["elixir.poapkings.com/principal"]` carries `kind` and
@@ -124,15 +125,27 @@ cannot be enforced is worse than none, because it looks like it works.
 
 ## Things that will bite you
 
-- **Omitting `clan_tag` does not default yet.** Observed 2026-09-08 on contract
-  0.37.0: `war_current {}` and `clans_roster {}` both return
-  `not_entitled: No recorded clan membership on this account` on a connection
-  whose own principal block reports 48 members of POAP KINGS. Docs and the
-  server's own instructions say otherwise. `subjectBlock()` in `src/prompt.js`
-  names the tag from the *server's* principal block and tells the model to pass
-  it explicitly when a tool claims not to know — config-free, and it disappears
-  when the server-side default lands. **Filed upstream; fix belongs in
-  elixir-mcp, not here.**
+- **Omitting `clan_tag` defaults to the agent's clan — since 2026-09-09.**
+  Before that (observed 2026-09-08 on contract 0.37.0) `war_current {}` and
+  `clans_roster {}` answered `not_entitled: No recorded clan membership` on a
+  connection whose own principal block named the clan, and `subjectBlock()` in
+  `src/prompt.js` carried a workaround telling the model to pass the tag
+  explicitly when a tool claimed not to know. That instruction is gone (1.0.0
+  pass); the block still names the subject as context. If a bare call ever
+  answers `no_subject` again, that is a server regression to file, not a reason
+  to teach the model the tag.
+- **The feedback ledger is read on the hint, not on the clock.** Since 1.0.0
+  every response — `elixir_events` included — carries
+  `meta.feedback_responses_pending`; `startEventLoop` reads
+  `elixir_my_feedback` only when the last feed poll said it is non-zero, and
+  always on the seeding run. Before that gate the bot re-read its whole ledger
+  every 300 s: 761 metered calls a week to learn nothing. A tick with no hint
+  at all (no event routine, or a pre-1.0.0 server) reads as it used to, so a
+  missing signal never turns into silence.
+- **Tool errors carry a code.** `readToolActivity` keeps `error.code` (from
+  the contract's closed set) beside the message, and `detectFriction` decides
+  on it: `no_subject` (ask who is asking) and `quota_exceeded` (the ceiling
+  working) are expected flows and never trigger the sweep.
 - **A turn can end with a CLIENT-side `tool_use` on an all-server-side
   connection.** With an `mcp_toolset`, most calls come home as
   `mcp_tool_use`/`mcp_tool_result` in one response — but sometimes the API
