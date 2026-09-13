@@ -9,7 +9,8 @@
 
 import { Client, GatewayIntentBits, Partials, Events } from "discord.js";
 import { config, provenance, channelEnvName } from "./config.js";
-import { handleAsk } from "./ask.js";
+import { handleAsk, isThreadOf } from "./ask.js";
+import { handleReaction } from "./reactions.js";
 import { startEventLoop } from "./events.js";
 import { startScheduler } from "./scheduler.js";
 import { loadRoutines, routinesFor } from "./routines.js";
@@ -25,8 +26,13 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    // Reader 👍 / 👎 on a post is feedback; see src/reactions.js.
+    GatewayIntentBits.GuildMessageReactions,
   ],
-  partials: [Partials.Channel],
+  // A reaction on a message posted before this process started arrives with
+  // the message, the reaction and sometimes the user uncached; partials let
+  // the event through so it can be fetched.
+  partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User],
 });
 
 /** Logical channel name -> Discord channel, resolved once and remembered. A
@@ -189,15 +195,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.on(Events.MessageCreate, async (message) => {
-  if (message.author.bot) return;
+  if (message.author.bot || message.system) return;
 
   // Routines are re-read per message so a prompt edit takes effect on the next
-  // question, not the next restart.
-  const routine = routinesFor("message").find(
-    (entry) => config.channels.get(entry.channel) === message.channelId,
-  );
+  // question, not the next restart. A message in a thread under the routine's
+  // channel is a follow-up in that conversation.
+  const routine = routinesFor("message").find((entry) => {
+    const id = config.channels.get(entry.channel);
+    return id === message.channelId || isThreadOf(message.channel, id);
+  });
   if (!routine) return;
   await handleAsk(message, routine);
+});
+
+client.on(Events.MessageReactionAdd, async (reaction, user) => {
+  await handleReaction(reaction, user).catch((error) =>
+    log.error("reaction_failed", { error: error.message }),
+  );
 });
 
 client.on(Events.Error, (error) =>

@@ -254,3 +254,88 @@ test("the result shape counts rows, not the contract's notes", async () => {
   assert.equal(describeShape({ notes: ["a"], season_id: 136, meta: {} }), "object");
   assert.equal(describeShape({ players: [], notes: ["a"] }), "0 players (EMPTY)");
 });
+
+/**
+ * Threads. A new question opens one and is answered inside it; a follow-up in
+ * the thread sees the starter and the thread, and nothing from anyone else.
+ */
+function threadedMessage(content, { thread = true, inThread = false, starter = null, threadMessages = [] } = {}) {
+  const posted = [];
+  const mk = (where) => (body) => {
+    const text = typeof body === "string" ? body : body.content;
+    const entry = { text, where, edits: [], id: `m${posted.length + 1}` };
+    posted.push(entry);
+    return Promise.resolve({
+      id: entry.id,
+      edit: (next) => ((entry.edits.push(next), (entry.text = next)), Promise.resolve()),
+      reply: (child) => mk(where)(child),
+    });
+  };
+  const threadObj = {
+    id: "thread-1",
+    isThread: () => true,
+    parentId: "2",
+    send: mk("thread"),
+    messages: { fetch: () => Promise.resolve(new Map(threadMessages.map((m, i) => [String(i), m]))) },
+    fetchStarterMessage: () => Promise.resolve(starter),
+  };
+  const channel = inThread
+    ? threadObj
+    : { id: "2", isThread: () => false, send: mk("channel"), messages: { fetch: () => Promise.resolve(new Map()) } };
+  const message = {
+    id: "q1",
+    cleanContent: content,
+    author: { id: "42", username: "tester", bot: false },
+    member: { displayName: "Tester" },
+    reply: mk("channel"),
+    channel,
+    startThread: thread
+      ? ({ name }) => ((threadObj.name = name), Promise.resolve(threadObj))
+      : () => Promise.reject(new Error("Missing Permissions")),
+  };
+  return { posted, message, threadObj };
+}
+
+test("a new question opens a thread named after it and is answered there", async () => {
+  const { posted, message, threadObj } = threadedMessage("what are the top meta decks this week?");
+  let seen = null;
+  await handleAsk(message, ROUTINE, { askFn: async (args) => ((seen = args), RESULT) });
+  assert.equal(threadObj.name, "what are the top meta decks this week?");
+  assert.ok(posted.every((p) => p.where === "thread"), "nothing lands in the channel itself");
+  assert.equal(posted[0].text, RESULT.text);
+  assert.equal(seen.messages.length, 1, "a new question carries no history");
+});
+
+test("a follow-up in the thread sees the starter and the thread only", async () => {
+  const starter = { id: "q0", cleanContent: "how am I playing?", author: { id: "42", username: "tester", bot: false } };
+  const earlier = [
+    { id: "a0", cleanContent: "55-38 this month.", author: { bot: true } },
+    { id: "a0t", cleanContent: "-# **How I got there** · `x`", author: { bot: true } },
+  ];
+  const { message } = threadedMessage("and last month?", { inThread: true, starter, threadMessages: earlier });
+  let seen = null;
+  await handleAsk(message, ROUTINE, { askFn: async (args) => ((seen = args), RESULT) });
+  const contents = seen.messages.map((m) => m.content);
+  assert.match(contents[0], /how am I playing\?/, "the starter opens the history");
+  assert.equal(contents[1], "55-38 this month.");
+  assert.match(contents[2], /and last month\?/);
+  assert.equal(contents.length, 3, "the trace footer is not a turn");
+});
+
+test("without thread permissions the bot answers in the channel", async () => {
+  const { posted, message } = threadedMessage("hello?", { thread: false });
+  await handleAsk(message, ROUTINE, { askFn: async () => RESULT });
+  assert.ok(posted.length > 0);
+  assert.ok(posted.every((p) => p.where === "channel"));
+  assert.equal(posted[0].text, RESULT.text);
+});
+
+test("every message a turn produced points back at the turn", async () => {
+  const state = await import("../src/state.js");
+  const { posted, message } = threadedMessage("who plays Mortar best?");
+  await handleAsk(message, ROUTINE, { askFn: async () => RESULT });
+  for (const p of posted) {
+    assert.equal(state.turnForMessage(p.id)?.turnId, RESULT.turnId, `${p.id} (${p.text.slice(0, 20)})`);
+  }
+  assert.equal(state.turnForMessage(posted[0].id).question, "who plays Mortar best?");
+});

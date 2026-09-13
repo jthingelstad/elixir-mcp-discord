@@ -18,13 +18,13 @@ export function chunk(text, limit = DISCORD_LIMIT) {
   return parts;
 }
 
-/** Posts a message, splitting it if it is long. Returns the last message sent. */
+/** Posts a message, splitting it if it is long. Returns every message sent, in order. */
 export async function post(channel, text, limit = DISCORD_LIMIT) {
-  let last = null;
+  const sent = [];
   for (const part of chunk(text, limit)) {
-    last = await channel.send(part);
+    sent.push(await channel.send(part));
   }
-  return last;
+  return sent;
 }
 
 /**

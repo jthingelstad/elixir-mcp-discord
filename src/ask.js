@@ -17,13 +17,59 @@
  * cannot reproduce. So it passes on_behalf_of and lets the server remember.
  */
 
-import { ask, spendBlock } from "./claude.js";
+import { ask, spendBlock, cacheShare } from "./claude.js";
 import { laneFor } from "./budget.js";
 import { detectFriction, sweepFriction, looksUngrounded } from "./feedback.js";
 import { systemFor } from "./prompt.js";
 import { chunk } from "./post.js";
 import { renderTrace, errorFooter, UNGROUNDED_FOOTER } from "./trace.js";
+import { turnRecord } from "./run.js";
 import { log } from "./log.js";
+import * as state from "./state.js";
+
+/**
+ * ONE THREAD PER QUESTION.
+ *
+ * A question in the ask channel gets its own thread, and the answer, its
+ * footer and any follow-ups live there. Before this the channel was one long
+ * conversation: history was channel-wide, so a member's question arrived with
+ * another member's context in the window, and "same as above — here's where
+ * you stand" was the model answering one person from what it had told
+ * another. A thread is the conversation boundary Discord already has.
+ *
+ * Follow-ups are messages in the thread; a new top-level message is a new
+ * conversation with no history, on purpose. Thread creation needs the Create
+ * Public Threads permission; without it the bot answers in the channel as it
+ * used to, and says so once in the log.
+ */
+const THREAD_ARCHIVE_MINUTES = 1440;
+let threadsUnavailable = false;
+
+export function threadName(question) {
+  const flat = question.replace(/\s+/g, " ").trim();
+  return (flat.length > 90 ? `${flat.slice(0, 89)}…` : flat) || "question";
+}
+
+export function isThreadOf(channel, parentId) {
+  return Boolean(channel?.isThread?.() && channel.parentId === parentId);
+}
+
+async function threadFor(message) {
+  if (threadsUnavailable || typeof message.startThread !== "function") return null;
+  try {
+    return await message.startThread({
+      name: threadName(message.cleanContent),
+      autoArchiveDuration: THREAD_ARCHIVE_MINUTES,
+    });
+  } catch (error) {
+    threadsUnavailable = true;
+    log.warn("thread_create_failed", {
+      error: error.message,
+      hint: "grant Create Public Threads and Send Messages in Threads; answering in the channel until restart",
+    });
+    return null;
+  }
+}
 
 /**
  * A Discord message edited on a throttle, which is as close to streaming as
@@ -100,22 +146,32 @@ export function isConversational(message) {
   return true;
 }
 
-async function recentTurns(channel, upToId, turns) {
-  const fetched = await channel.messages.fetch({
+function asTurn(message) {
+  const content = message.cleanContent.trim();
+  return {
+    role: message.author.bot ? "assistant" : "user",
+    content: message.author.bot
+      ? content
+      : `${message.member?.displayName || message.author.username} (discord:${message.author.id}): ${content}`,
+  };
+}
+
+/** A thread's history, oldest first: the message that started it, then what
+ *  was said in it before this message. */
+async function recentTurns(thread, upToId, turns) {
+  const fetched = await thread.messages.fetch({
     // Each exchange is an answer plus a footer or two, so over-fetch and filter.
     limit: Math.min(100, turns * 4),
     before: upToId,
   });
   const history = [];
+  // The starter lives in the parent channel, not in the thread's own messages.
+  const starter = await thread.fetchStarterMessage?.().catch(() => null);
+  if (starter && isConversational(starter)) history.push(asTurn(starter));
   for (const message of [...fetched.values()].reverse()) {
     if (!isConversational(message)) continue;
-    const content = message.cleanContent.trim();
-    history.push({
-      role: message.author.bot ? "assistant" : "user",
-      content: message.author.bot
-        ? content
-        : `${message.member?.displayName || message.author.username} (discord:${message.author.id}): ${content}`,
-    });
+    if (starter && message.id === starter.id) continue;
+    history.push(asTurn(message));
   }
   // The API requires the first turn to be a user turn.
   while (history.length && history[0].role !== "user") history.shift();
@@ -152,14 +208,19 @@ export async function handleAsk(message, routine, { askFn = ask } = {}) {
   }
 
   try {
-    const history = await recentTurns(
-      message.channel,
-      message.id,
-      routine.historyTurns,
-    );
+    const inThread = Boolean(message.channel?.isThread?.());
+    const history = inThread
+      ? await recentTurns(message.channel, message.id, routine.historyTurns)
+      : [];
     const asker = message.member?.displayName || message.author.username;
 
-    const placeholder = await message.reply("-# thinking…");
+    // A new question opens a thread and is answered inside it; a follow-up is
+    // already in one. If threads are not available, reply in place.
+    const thread = inThread ? null : await threadFor(message);
+    const target = thread ?? message.channel;
+    const placeholder = thread
+      ? await thread.send("-# thinking…")
+      : await message.reply("-# thinking…");
     const live = new LiveMessage(placeholder);
     const toolsSoFar = [];
     let streamed = "";
@@ -210,29 +271,43 @@ export async function handleAsk(message, routine, { askFn = ask } = {}) {
     // watching turns into the final text rather than being orphaned above it.
     const parts = chunk(answer, routine.maxChars);
     await live.finish(parts[0]);
+    const produced = [placeholder];
     let sent = placeholder;
     for (const part of parts.slice(1)) {
-      sent = await message.channel.send(part);
+      sent = await target.send(part);
+      produced.push(sent);
     }
 
     const footnote = async (content, what) => {
       if (!sent || !content) return;
-      await sent
+      const note = await sent
         .reply({ content, allowedMentions: { repliedUser: false } })
-        .catch((error) => log.warn(`${what}_post_failed`, { error: error.message }));
+        .catch((error) => {
+          log.warn(`${what}_post_failed`, { error: error.message });
+          return null;
+        });
+      produced.push(note);
     };
     if (routine.trace) await footnote(renderTrace(result), "trace");
     else await footnote(errorFooter(result), "error_footer");
     const ungrounded = looksUngrounded({ text: answer, called: result.called });
     if (ungrounded) await footnote(UNGROUNDED_FOOTER, "ungrounded_footer");
 
+    state.rememberTurn(
+      result.turnId,
+      turnRecord({ routine, lane, question, text: answer, result, channelId: target?.id }),
+      produced.map((m) => m?.id),
+    );
+
     log.info("ask_answered", {
       routine: routine.key,
       turnId: result.turnId,
       user: message.author.id,
+      thread: thread ? "new" : inThread ? "follow-up" : "none",
       tools: result.called.length,
       toolNames: result.called.join(","),
       usd: result.usd.toFixed(4),
+      cache: result.usage ? `${Math.round(cacheShare(result.usage) * 100)}%` : undefined,
       ms: result.ms,
       rounds: result.rounds,
       stopReason: result.stopReason,

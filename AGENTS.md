@@ -41,9 +41,10 @@ test asserts no shipped routine contains a CR tag. Do not reintroduce one.
 
 **No local data. None.** No database, no roster cache, no nickname table, no
 Clash Royale API key, no memory across restarts beyond cursors, a run ledger, a
-spend counter and each routine's own last few posts. Every fact in a reply came from an MCP tool call in that turn. A
-local shortcut makes the demo *flatter* than reality, and we would conclude MCP
-is ready when something else was quietly propping it up.
+spend counter, each routine's own last few posts and the turns it produced (so a
+reaction can find them). Every fact in a reply came from an MCP tool call in that
+turn. A local shortcut makes the demo *flatter* than reality, and we would
+conclude MCP is ready when something else was quietly propping it up.
 
 **No local fallback.** elixir-bot's MCP client falls back to local tables on
 failure; this one has nothing to fall back to and says so out loud. An outage
@@ -175,6 +176,25 @@ cannot be enforced is worse than none, because it looks like it works.
   `EVENT_POLL_SECONDS=300` explicitly because the agent has no ceiling and the
   preview wants joins posted within minutes; the shipped default is for
   everyone else.
+- **The ask lane answers in a thread per question — since 2026-09-13.**
+  History used to be channel-wide, so one member's question arrived with
+  another's context and the model once answered "same as above" to the
+  wrong person. `handleAsk` starts a thread from a top-level message and
+  answers inside it; a message whose channel `isThreadOf` the routine's
+  channel is a follow-up and gets the thread's history (starter first). If
+  `startThread` fails (permissions) the lane falls back to replying in place
+  until restart. Do not put history back on the channel.
+- **Reactions are feedback.** `src/reactions.js`: 👎 sweeps the turn (one
+  reflection, at most one filing, request ids quoted), 👍 files praise with
+  no model call. `state.rememberTurn` records every message id a turn
+  produced — the post AND its footers — so a reaction on either resolves.
+  Needs the `GuildMessageReactions` intent and Message/Reaction/User
+  partials, or reactions on posts older than the process never arrive.
+- **Cache breakpoints on the toolset and the system block.** Verified live:
+  a second consecutive turn was 89% cache reads and cost a third of the
+  first. Keep the system block a stable prefix — the asker's id rides in the
+  user turn for exactly this reason — and keep `cache_control` on the
+  `mcp_toolset`; the trace footer's `cache N%` is how you notice it broke.
 - **Tool errors carry a code.** `readToolActivity` keeps `error.code` (from
   the contract's closed set) beside the message, and `detectFriction` decides
   on it: `no_subject` (ask who is asking) and `quota_exceeded` (the ceiling

@@ -12,7 +12,7 @@
  * Everything else comes through here.
  */
 
-import { ask, spendBlock } from "./claude.js";
+import { ask, spendBlock, cacheShare } from "./claude.js";
 import { laneFor } from "./budget.js";
 import { detectFriction, sweepFriction, looksUngrounded } from "./feedback.js";
 import { systemFor, userMessageFor, isSkip } from "./prompt.js";
@@ -24,10 +24,32 @@ import * as state from "./state.js";
 /** Reply under the last message of a post without pinging anyone; a failure
  *  to attach a footer must never undo the post. */
 async function footnote(last, content, what) {
-  if (!last || !content) return;
-  await last
+  if (!last || !content) return null;
+  return last
     .reply({ content, allowedMentions: { repliedUser: false } })
-    .catch((error) => log.warn(`${what}_post_failed`, { error: error.message }));
+    .catch((error) => {
+      log.warn(`${what}_post_failed`, { error: error.message });
+      return null;
+    });
+}
+
+/** What a reaction sweep needs to know about a turn, kept small. */
+export function turnRecord({ routine, lane, question, text, result, channelId }) {
+  const requestIds = [
+    ...(result.envelopes || []).map((e) => e.request_id),
+    ...(result.errors || []).map((e) => e.requestId),
+  ].filter(Boolean);
+  return {
+    routine: routine.key,
+    lane,
+    question: String(question || "").slice(0, 700),
+    answer: String(text || "").slice(0, 1200),
+    called: result.called || [],
+    errors: (result.errors || []).map((e) => ({ name: e.name, code: e.code, detail: String(e.detail || "").slice(0, 200) })),
+    requestIds: [...new Set(requestIds)].slice(0, 12),
+    channelId: channelId || null,
+    at: new Date().toISOString(),
+  };
 }
 
 /**
@@ -98,19 +120,28 @@ export async function runRoutine(
     return { ok: true, skipped: true, text, result };
   }
 
-  const last = await post(channel, text, routine.maxChars);
+  const sent = await post(channel, text, routine.maxChars);
+  const last = sent.at(-1) ?? null;
   state.rememberPost(routine.key, text);
+  const notes = [];
   if (routine.trace) {
-    await footnote(last, renderTrace(result, { label: routine.key }), "trace");
+    notes.push(await footnote(last, renderTrace(result, { label: routine.key }), "trace"));
   } else {
     // No trace, but a reader still gets the two caveats that change whether
     // the numbers above can be trusted.
-    await footnote(last, errorFooter(result), "error_footer");
+    notes.push(await footnote(last, errorFooter(result), "error_footer"));
   }
   if (looksUngrounded({ text, called: result.called, events })) {
     log.warn("routine_ungrounded", { routine: routine.key, turnId: result.turnId });
-    await footnote(last, UNGROUNDED_FOOTER, "ungrounded_footer");
+    notes.push(await footnote(last, UNGROUNDED_FOOTER, "ungrounded_footer"));
   }
+  // Every message this turn produced points back at the turn, so a reaction
+  // on any of them — the post, its footer — finds the same record.
+  state.rememberTurn(
+    result.turnId,
+    turnRecord({ routine, lane, question: routine.prompt, text, result, channelId: channel.id }),
+    [...sent, ...notes].map((m) => m?.id),
+  );
 
   log.info("routine_posted", {
     routine: routine.key,
@@ -118,6 +149,7 @@ export async function runRoutine(
     tools: result.called.length,
     toolNames: result.called.join(","),
     usd: result.usd.toFixed(4),
+    cache: result.usage ? `${Math.round(cacheShare(result.usage) * 100)}%` : undefined,
     ms: result.ms,
     chars: text.length,
   });

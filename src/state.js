@@ -66,10 +66,18 @@ const DEFAULTS = {
   // spotlight the feed's and the movers' posts as "what I said recently" and
   // never its own, so it demonstrated rival scouting three days out of five.
   lastPosts: {},
+  // The last few hundred turns, keyed by turn id, plus which Discord messages
+  // each one produced — so a reader's 👍 / 👎 on a post can be joined back to
+  // the question, the tools called and the server's request ids. Own output
+  // again: nothing here is a fact about the game.
+  turns: {},
+  turnOrder: [],
+  messageTurns: {},
 };
 
 const LAST_POSTS_KEEP = 10;
 const LAST_POST_CHARS = 700;
+const TURNS_KEEP = 200;
 
 function read() {
   try {
@@ -115,6 +123,45 @@ export function rememberPost(routineKey, text) {
 export function recentOwnPosts(routineKey, count) {
   if (!count) return [];
   return (read().lastPosts?.[routineKey] || []).slice(0, count);
+}
+
+/** Record a turn and the message ids it produced, pruning the oldest. */
+export function rememberTurn(turnId, record, messageIds = []) {
+  if (!turnId) return;
+  const state = read();
+  const turns = { ...(state.turns || {}) };
+  const order = (state.turnOrder || []).filter((id) => id !== turnId);
+  const messageTurns = { ...(state.messageTurns || {}) };
+  turns[turnId] = { ...record, reactions: turns[turnId]?.reactions || {} };
+  order.push(turnId);
+  for (const id of messageIds) if (id) messageTurns[String(id)] = turnId;
+  while (order.length > TURNS_KEEP) {
+    const gone = order.shift();
+    delete turns[gone];
+    for (const [mid, tid] of Object.entries(messageTurns)) if (tid === gone) delete messageTurns[mid];
+  }
+  write({ ...state, turns, turnOrder: order, messageTurns });
+}
+
+/** The turn that produced a Discord message, or null. */
+export function turnForMessage(messageId) {
+  const state = read();
+  const turnId = state.messageTurns?.[String(messageId)];
+  if (!turnId || !state.turns?.[turnId]) return null;
+  return { turnId, ...state.turns[turnId] };
+}
+
+/** Claim a reaction kind for a turn. False if it was already handled. */
+export function markReaction(turnId, kind, value = true) {
+  const state = read();
+  const turn = state.turns?.[turnId];
+  if (!turn) return false;
+  const reactions = { ...(turn.reactions || {}) };
+  if (value && reactions[kind]) return false;
+  if (value) reactions[kind] = new Date().toISOString();
+  else delete reactions[kind];
+  write({ ...state, turns: { ...state.turns, [turnId]: { ...turn, reactions } } });
+  return true;
 }
 
 export function markRun(routineKey, periodKey) {

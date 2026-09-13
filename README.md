@@ -128,6 +128,15 @@ If Elixir MCP is down, this bot says so and stops. It has nothing else to
 consult. That makes it an honest instrument: when an answer is good, the MCP
 server earned it.
 
+### One thread per question
+
+A question in the ask channel opens a thread named after it, and the answer,
+its footer and any follow-ups live there. History is the thread's — the
+question that started it and what was said since — never another member's
+conversation. A new top-level message is a new conversation. The bot needs
+the *Create Public Threads* and *Send Messages in Threads* permissions;
+without them it answers in the channel and says so in the log.
+
 ### It does not know who you are
 
 A member connecting their own agent has added their own player, so their agent
@@ -224,8 +233,12 @@ budgets, because they look like they work.
   bot reads `elixir_my_feedback` only when a feed poll says there is something
   new — not every tick.
 - **Times are yours.** `TIMEZONE` decides what `at: 22:00` means, DST included.
-- **Cost.** Roughly $0.05–0.20 per post. Every ask carries a footer with the
-  tools called and what the turn cost; `npm run routines` shows this month
+- **Cost.** Roughly $0.03–0.15 per post. The tool surface and the system
+  block are cache breakpoints, so a turn that follows another within the
+  cache window pays the cache-read rate for most of what it sends; the footer
+  shows the share (`cache 89%`), because a cache that quietly stops hitting
+  is a cost regression nobody would otherwise see. Every ask carries a footer
+  with the tools called and what the turn cost; `npm run routines` shows this month
   against your budgets and per-routine spend today.
 - **A missed run fires late only inside its own catch-up window.** A war-deck
   nudge at 4am because the host was asleep is worse than one that never fires.

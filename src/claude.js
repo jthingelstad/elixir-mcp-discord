@@ -51,7 +51,47 @@ const mcpServers = [
     authorization_token: config.mcp.token,
   },
 ];
-const tools = [{ type: "mcp_toolset", mcp_server_name: config.mcp.serverName }];
+/**
+ * PROMPT CACHING. Two breakpoints, on the two things that are the same on
+ * every turn: the tool surface and the system block.
+ *
+ * Fifty tool schemas from the server are most of a turn's input tokens, and
+ * the system block (mechanics, identity, the standing brief) is built to be a
+ * stable prefix — the per-asker id rides in the user turn for that reason.
+ * The prefix is cached in the order tools → system → messages, so a
+ * breakpoint on each means a routine that reads two small results pays the
+ * cache-read rate for the bulk of what it sends. The usage block says how
+ * much was actually served from cache; the trace footer shows it, because a
+ * cache that silently stopped hitting is a cost regression nobody would see.
+ */
+const tools = [
+  {
+    type: "mcp_toolset",
+    mcp_server_name: config.mcp.serverName,
+    cache_control: { type: "ephemeral" },
+  },
+];
+
+function systemBlocks(system) {
+  if (Array.isArray(system)) return system;
+  return [{ type: "text", text: system, cache_control: { type: "ephemeral" } }];
+}
+
+/** What a turn sent and where it came from, summed across rounds. */
+function addUsage(total, usage) {
+  return {
+    input: total.input + (usage?.input_tokens || 0),
+    cacheRead: total.cacheRead + (usage?.cache_read_input_tokens || 0),
+    cacheWrite: total.cacheWrite + (usage?.cache_creation_input_tokens || 0),
+    output: total.output + (usage?.output_tokens || 0),
+  };
+}
+
+/** The share of prompt tokens served from cache, 0..1. */
+export function cacheShare(usage) {
+  const prompt = (usage?.input || 0) + (usage?.cacheRead || 0) + (usage?.cacheWrite || 0);
+  return prompt ? (usage.cacheRead || 0) / prompt : 0;
+}
 
 /** An mcp_tool_result's content is a string or an array of text blocks. */
 function resultText(content) {
@@ -225,6 +265,7 @@ export async function ask({
   const trace = [];
   const envelopes = [];
   let usdTotal = 0;
+  let usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
   let text = "";
   let rounds = 0;
   let stopReason = null;
@@ -239,7 +280,7 @@ export async function ask({
         model,
         max_tokens: maxTokens,
         betas: [MCP_BETA],
-        system,
+        system: systemBlocks(system),
         messages: history,
         mcp_servers: mcpServers,
         tools,
@@ -301,6 +342,7 @@ export async function ask({
 
     const usd = costOf(model, response.usage);
     usdTotal += usd;
+    usage = addUsage(usage, response.usage);
     state.addSpend(usd, routineKey);
     budget.record(lane, usd);
 
@@ -399,6 +441,7 @@ export async function ask({
     trace,
     envelopes,
     usd: usdTotal,
+    usage,
     turnId,
     ms: Date.now() - started,
     rounds,

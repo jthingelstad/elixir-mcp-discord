@@ -33,6 +33,7 @@
  */
 
 import { unexpectedErrors, tallyCalls } from "./feedback.js";
+import { cacheShare } from "./claude.js";
 
 const TRACE_LIMIT = 1900;
 
@@ -84,10 +85,12 @@ export function renderTrace(result, { label = "How I got there" } = {}) {
   // completeness caveat that explains why the number is wrong.
   const head = `-# **${label}** · \`${result.turnId}\``;
 
+  const cached = result.usage ? cacheShare(result.usage) : 0;
   const footer = [
     result.model,
     `effort ${result.effort}`,
     `$${result.usd.toFixed(4)}`,
+    result.usage ? `cache ${Math.round(cached * 100)}%` : null,
     `${(result.ms / 1000).toFixed(1)}s`,
     result.rounds > 1 ? `${result.rounds} rounds` : null,
     result.stopReason,
