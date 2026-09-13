@@ -1,6 +1,6 @@
 /**
- * The event lane — Elixir MCP's feed, read on a timer, handed to whichever
- * routines subscribe to the topics that arrived.
+ * The event lane — Elixir MCP's activity feed, read on a timer, handed to
+ * whichever routines find something in it worth a post.
  *
  * This is the routine recipe from Elixir MCP's own docs running as a real
  * thing instead of a worked example: read `elixir_events` from a saved cursor,
@@ -11,13 +11,14 @@
  *
  * Polling is plumbing and plumbing should not cost a model call, so this file
  * talks to MCP directly (src/mcp.js). The model is only involved once there is
- * something to write about.
+ * something to write about — and since contract 2.0.0 (2026-09-13) deciding
+ * THAT is this file's job too, see `noteworthy`.
  *
  * CURSORS: we pass `mark_seen: false` on every poll and keep our own position
- * per routine in state.json. `events_seen_through` is a single per-account
- * marker, so acknowledging would consume events belonging to anything else
- * polling this account — and with two event routines here, each other's. The
- * local cursor also means a restart can never skip an event it failed to post.
+ * per routine in state.json. The seen bookmark is a single per-account
+ * instant, so acknowledging would move the window for anything else polling
+ * this account — and with two event routines here, each other's. The local
+ * cursor also means a restart can never skip a window it failed to post.
  */
 
 import { callTool } from "./mcp.js";
@@ -28,69 +29,96 @@ import { log } from "./log.js";
 import * as state from "./state.js";
 
 /**
- * Reads every event after `since`, following the server's paging contract:
- * responses carry `next_cursor` and `has_more`, and the tool's own note says to
- * pass next_cursor back as `since`. Capped at PAGE_LIMIT pages so a pathological
- * feed can never spin here.
+ * One read of the activity feed from `from` (an ISO instant) to now.
  *
- * The returned cursor takes the max of `next_cursor` and the highest event_id
- * seen. With a topics filter those can differ — next_cursor tracks matching
- * events — and taking the max only ever costs us re-scanning a few rows the
- * filter would drop anyway.
+ * Since contract 2.0.0 the feed is not rows of events but ONE ENTRY PER
+ * SUBJECT summarizing the whole window — for an agent, the clan it acts for,
+ * with its members inside. Sections are always present and null when nothing
+ * happened; `sections` trims the wire to the ones a routine handles.
+ * `has_more` is always false, so there is no paging: `next_cursor` is the
+ * window's end and goes back as `from` next time.
  *
- * `meta` is the envelope of the LAST page read. It carries the hints the loop
- * runs on (`feedback_responses_pending`, `contract_version`), so it comes back
- * on every path, including the truncated one.
+ * `meta` is the envelope; it carries the hints the loop runs on
+ * (`feedback_responses_pending`, `contract_version`).
  */
-const PAGE_LIMIT = 10;
-
-export async function drain(since, topics) {
-  const collected = [];
-  let cursor = since;
-  let meta = null;
-
-  for (let page = 0; page < PAGE_LIMIT; page += 1) {
-    const args = { since: cursor, limit: 50, mark_seen: false };
-    if (topics) args.topics = topics;
-    const result = await callTool("elixir_events", args);
-    if (!result.ok) return { ok: false, error: result.error };
-
-    const events = result.body?.events || [];
-    collected.push(...events);
-    meta = result.body?.meta ?? meta;
-
-    const highest = events.reduce((max, e) => Math.max(max, e.event_id ?? 0), cursor);
-    cursor = Math.max(result.body?.next_cursor ?? 0, highest);
-
-    if (!result.body?.has_more) {
-      return { ok: true, events: collected, cursor, meta };
-    }
-  }
-  return { ok: true, events: collected, cursor, meta, truncated: true };
+export async function read(from, { sections = null, verbosity = "full" } = {}) {
+  const args = { mark_seen: false, verbosity };
+  if (from) args.from = from;
+  if (sections?.length) args.sections = sections;
+  const result = await callTool("elixir_events", args);
+  if (!result.ok) return { ok: false, error: result.error };
+  const body = result.body ?? {};
+  return {
+    ok: true,
+    entries: body.entries ?? [],
+    quiet: body.quiet ?? [],
+    window: body.window ?? null,
+    cursor: body.next_cursor ?? null,
+    meta: body.meta ?? null,
+  };
 }
 
-/** Where the feed is right now. First run starts here rather than replaying the
- *  backlog: an agent that wakes up and posts a month of history into a channel
- *  is a worse first impression than posting nothing. Seed, never drain. */
-async function newestEvent() {
-  const result = await drain(0, null);
-  return result.ok ? { cursor: result.cursor, meta: result.meta } : null;
+/**
+ * Whether a window's entries carry anything a routine would post about.
+ *
+ * A clan entry arrives on EVERY read — "a clan's silence is the clan's
+ * activity" — and in an active clan `activity` and `standouts.most_battles`
+ * are non-empty in almost every five-minute window. A lane that ran the model
+ * on each poll would post 288 times a day. So a routine names the sections it
+ * cares about, and something is noteworthy when a notable was recorded or
+ * any list inside those sections holds a RECORD — an object with fields: a
+ * join under `roster`, a return under `presence`, a finished week under
+ * `war.resolved`. Numbers alone (battles played, a boat's fame, the
+ * disclosed rungs `[5, 10, 20]`) never count: they are always there.
+ *
+ * Shape-agnostic on purpose: lists are looked for, not named, so a section
+ * the server adds a list to is noticed without a release here.
+ */
+export function noteworthy(entries, sections = null) {
+  const hasItems = (value) => {
+    if (Array.isArray(value)) return value.some((item) => item && typeof item === "object");
+    if (value && typeof value === "object") return Object.values(value).some(hasItems);
+    return false;
+  };
+  return (entries ?? []).some((entry) => {
+    if (Array.isArray(entry.notables) && entry.notables.length > 0) return true;
+    const keys = sections?.length ? sections : Object.keys(entry);
+    return keys.some((key) => {
+      if (["notables", "window", "summary"].includes(key)) return false;
+      return hasItems(entry[key]);
+    });
+  });
+}
+
+/** An ISO instant, or null: cursors from before 2.0.0 were integer event
+ *  ids, and one of those means "never seeded" now. */
+function isoCursor(value) {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : null;
+}
+
+/** Where the feed is right now. First run starts here rather than replaying
+ *  the last day: an agent that wakes up and posts history into a channel is
+ *  a worse first impression than posting nothing. Seed, never drain. */
+async function seedCursor() {
+  const now = new Date().toISOString();
+  const result = await read(now, { verbosity: "compact" });
+  return result.ok ? { cursor: result.cursor ?? now, meta: result.meta } : null;
 }
 
 /** Polls one routine. Returns the envelope of the last `elixir_events`
  *  response it read (or null when it read none), so the tick can act on the
  *  hints without a call of its own. */
 async function pollRoutine(routine, channel) {
-  const cursor = state.cursorFor(routine.key);
+  const cursor = isoCursor(state.cursorFor(routine.key));
   if (cursor === null) {
-    const newest = await newestEvent();
-    if (newest === null) return null;
-    state.setCursor(routine.key, newest.cursor);
-    log.info("cursor_seeded", { routine: routine.key, cursor: newest.cursor });
-    return newest.meta;
+    const seeded = await seedCursor();
+    if (seeded === null) return null;
+    state.setCursor(routine.key, seeded.cursor);
+    log.info("cursor_seeded", { routine: routine.key, cursor: seeded.cursor });
+    return seeded.meta;
   }
 
-  const result = await drain(cursor, routine.topics);
+  const result = await read(cursor, { sections: routine.sections });
   if (!result.ok) {
     log.warn("events_poll_failed", { routine: routine.key, error: result.error, cursor });
     return null;
@@ -104,20 +132,21 @@ async function pollRoutine(routine, channel) {
     state.set({ contractVersion: version });
   }
 
-  if (result.events.length === 0) {
-    // Nothing to say, but the cursor may still have moved past filtered rows.
-    if (result.cursor > cursor) state.setCursor(routine.key, result.cursor);
+  if (!noteworthy(result.entries, routine.sections)) {
+    // A quiet window: move on without a model call.
+    if (result.cursor) state.setCursor(routine.key, result.cursor);
     return result.meta;
   }
 
-  const run = await runRoutine(routine, { channel, events: result.events });
-  // Advance only after a successful turn, so a failure re-runs the batch
-  // rather than dropping it. A skip counts: the routine saw them and declined.
+  const run = await runRoutine(routine, { channel, events: result.entries });
+  // Advance only after a successful turn, so a failure re-runs the window
+  // rather than dropping it. A skip counts: the routine saw it and declined.
   if (run.ok) {
     state.setCursor(routine.key, result.cursor);
     log.info("events_consumed", {
       routine: routine.key,
-      events: result.events.length,
+      entries: result.entries.length,
+      window: result.window ? `${result.window.from}..${result.window.to}` : undefined,
       cursor: result.cursor,
       posted: !run.skipped,
     });

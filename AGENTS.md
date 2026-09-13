@@ -32,6 +32,15 @@ Files are re-read on every use. **A prompt change is never a deploy and never a
 restart** — that is deliberate, and `npm run try <routine>` exists so a prompt
 can be judged in seconds instead of at 01:00.
 
+**But a prompt FORMAT change is a code deploy.** On 2026-09-13 routine files
+carrying a new front-matter field (`description:`) were copied into a live
+instance still running code that rejected unknown fields; every routine failed
+to parse and for six hours the bot had no schedules, no feed lane and no ask
+lane, and logged nothing. Restart an instance on the new code BEFORE syncing
+files that use a new field. `activeRoutines` now logs `routine_invalid` on
+change and `no_routines_load` when nothing loads; the ask lane logs
+`message_unclaimed` when a bound channel speaks and no message routine exists.
+
 ## The rules that are the whole point
 
 **No clan in this repo. None.** No tag in `.env`, no tag in a prompt, no tag in
@@ -269,9 +278,20 @@ cannot be enforced is worse than none, because it looks like it works.
   came back as `elixir-mcp_feedback`; stripping the server name gives
   `feedback`, which is not a tool. `resolveToolName` matches against the live
   `tools/list`.
-- **The event cursor is per ACCOUNT, not per key.** `elixir_events` advances one
-  `events_seen_through` marker for the whole account. Every event routine polls
-  with `mark_seen: false` and keeps its own cursor in `state/state.json`. Never
+- **The feed is one entry per subject since contract 2.0.0 (2026-09-13).**
+  No topic rows, no integer event ids, no `topics` argument: `elixir_events`
+  returns `entries[]` (for an agent, ONE clan entry, members inside it) over
+  `window {from,to}`, sections null when nothing happened, `next_cursor` an
+  ISO instant. A clan entry arrives on EVERY read, so `noteworthy()` in
+  `src/events.js` decides whether to spend a model call: a notable, or a
+  list holding a record inside the sections the routine named (`sections:`
+  front matter). Numbers and lists of numbers never count. A routine file
+  still saying `topics:` fails to parse with the migration in the message.
+  `war_day_open` and `clan_pulse` no longer exist; a war-day post is a
+  schedule routine's job (`game_clock` says when).
+- **The seen bookmark is per ACCOUNT (an agent is its own account).** Every
+  event routine polls with `mark_seen: false` and keeps its own ISO cursor
+  in `state/state.json`; a pre-2.0.0 integer cursor re-seeds from now. Never
   flip that to `true` as a "simplification".
 - **Seed, don't drain.** First run reads the newest event id and starts there;
   the scheduler marks every routine's current period as done; the feedback

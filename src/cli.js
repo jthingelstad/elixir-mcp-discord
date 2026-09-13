@@ -24,7 +24,7 @@ import { rateFor, UnpricedModel } from "./pricing.js";
 import { runRoutine } from "./run.js";
 import { systemFor, userMessageFor } from "./prompt.js";
 import { renderTrace } from "./trace.js";
-import { drain } from "./events.js";
+import { read, noteworthy } from "./events.js";
 import * as state from "./state.js";
 import { lastOccurrence, periodKey } from "./schedule.js";
 
@@ -64,7 +64,7 @@ function listRoutines() {
       routine.trigger === "schedule"
         ? `${periodKey(lastOccurrence(routine)).slice(11)} ${routine.days ? `days ${routine.days.join(",")}` : "daily"}`
         : routine.trigger === "events"
-          ? routine.topics.join(",")
+          ? `feed: ${routine.sections?.join(",") ?? "all sections"}`
           : "on message";
     console.log(
       [
@@ -83,25 +83,30 @@ function listRoutines() {
 }
 
 /**
- * Events for a dry run of an event routine.
+ * Feed entries for a dry run of an event routine.
  *
  * Its real cursor is never advanced here — a rehearsal must not consume the
- * feed. On a quiet feed it falls back to the newest few events of the right
- * topics, because "no events, nothing to show" is a useless answer to somebody
- * trying to improve the wording of the brief.
+ * feed. When the window since the cursor holds nothing noteworthy (or there
+ * is no cursor yet) it reads the last 24 hours instead, because "nothing
+ * happened, nothing to show" is a useless answer to somebody trying to
+ * improve the wording of the brief.
  */
 async function eventsForDryRun(routine) {
   const cursor = state.cursorFor(routine.key);
-  if (cursor !== null) {
-    const pending = await drain(cursor, routine.topics);
-    if (pending.ok && pending.events.length)
-      return { events: pending.events, note: "pending" };
+  const seeded = typeof cursor === "string";
+  if (seeded) {
+    const pending = await read(cursor, { sections: routine.sections });
+    if (pending.ok && noteworthy(pending.entries, routine.sections))
+      return { events: pending.entries, note: `pending since ${cursor}` };
   }
-  const all = await drain(0, routine.topics);
-  if (!all.ok) return { events: [], note: `feed unreadable: ${all.error}` };
+  const day = await read(null, { sections: routine.sections });
+  if (!day.ok) return { events: [], note: `feed unreadable: ${day.error}` };
+  const why = seeded ? "nothing new since the cursor" : "no cursor yet (seeds on the first live poll)";
   return {
-    events: all.events.slice(-5),
-    note: "no new events — replaying the newest 5",
+    events: day.entries,
+    note: noteworthy(day.entries, routine.sections)
+      ? `${why} — showing the last 24 hours`
+      : `${why}, and nothing noteworthy in the last 24 hours either — the live lane would not have fired`,
   };
 }
 

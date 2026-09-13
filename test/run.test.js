@@ -315,9 +315,9 @@ test("a post that states figures without a tool call is caveated", async () => {
   assert.match(channel.sent[0].replies[0], /No tool was called/);
   // An event brief written from the feed alone is grounded by the feed.
   const feed = fakeChannel();
-  await runRoutine(routine({ trigger: "events", channel: "pulse", topics: "member_joined" }), {
+  await runRoutine(routine({ trigger: "events", channel: "pulse", sections: "roster" }), {
     channel: feed,
-    events: [{ event_id: 9, topic: "member_joined" }],
+    events: [{ kind: "clan_activity", roster: { joined: { items: [{ name: "A" }, { name: "B" }], more: 0 } } }],
     askFn: async () => answer("2 members joined.", { called: [], trace: [] }),
   });
   assert.equal(feed.sent[0].replies.length, 0);

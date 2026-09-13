@@ -123,7 +123,7 @@ export function routinesReply(routines = loadRoutines().routines) {
         r.trigger === "schedule"
           ? `${String(r.at.hour).padStart(2, "0")}:${String(r.at.minute).padStart(2, "0")}${r.days ? ` on ${r.days.join(",")}` : " daily"}`
           : r.trigger === "events"
-            ? r.topics.join(", ")
+            ? `feed: ${r.sections?.join(", ") ?? "all sections"}`
             : "on message";
       return `${r.disabled ? "○" : "●"} \`${r.key}\` — ${r.trigger} → #${r.channel} · ${when} · ${r.model}${r.description ? `\n-# ${r.description}` : ""}`;
     })

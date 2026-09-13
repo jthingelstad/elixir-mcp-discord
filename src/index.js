@@ -220,11 +220,19 @@ client.on(Events.MessageCreate, async (message) => {
   // Routines are re-read per message so a prompt edit takes effect on the next
   // question, not the next restart. A message in a thread under the routine's
   // channel is a follow-up in that conversation.
-  const routine = routinesFor("message").find((entry) => {
+  const askRoutines = routinesFor("message");
+  const routine = askRoutines.find((entry) => {
     const id = config.channels.get(entry.channel);
     return id === message.channelId || isThreadOf(message.channel, id);
   });
-  if (!routine) return;
+  if (!routine) {
+    // A member speaking in a bound channel while NO message routine exists
+    // is the ask lane being off the air (see activeRoutines), not chatter.
+    if (askRoutines.length === 0 && [...config.channels.values()].includes(message.channelId)) {
+      log.warn("message_unclaimed", { channel: message.channelId, hint: "no message routine loaded; see routine_invalid above" });
+    }
+    return;
+  }
   await handleAsk(message, routine);
 });
 

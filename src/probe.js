@@ -54,13 +54,15 @@ if (!clock.ok) {
 }
 console.log(`ok    key authenticated`);
 
-const events = await callTool("elixir_events", { limit: 1, mark_seen: false });
+const events = await callTool("elixir_events", { mark_seen: false, verbosity: "compact" });
 if (!events.ok) {
   console.error(`FAIL  elixir_events: ${events.error}`);
   process.exit(1);
 }
 const cursors = state.get("cursors") || {};
 const positions = Object.entries(cursors).map(([key, at]) => `${key}=${at}`).join(", ");
-console.log(`ok    event feed readable; local cursors = ${positions || "unset (seed on first poll)"}`);
-console.log(`      pending on account = ${events.body?.meta?.events_pending ?? "?"}`);
+const entries = events.body?.entries ?? [];
+console.log(`ok    activity feed readable; ${entries.length} subject(s) in the last day: ${entries.map((e) => e.name).join(", ") || "none"}`);
+console.log(`      local cursors = ${positions || "unset (seed on first poll)"}`);
+console.log(`      contract ${events.body?.meta?.contract_version ?? "?"} · feedback responses pending = ${events.body?.meta?.feedback_responses_pending ?? "?"}`);
 console.log(`      spend today = $${state.todaySpend().toFixed(4)}`);

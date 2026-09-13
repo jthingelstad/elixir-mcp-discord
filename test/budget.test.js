@@ -26,7 +26,7 @@ beforeEach(() => {
 const routine = (trigger) =>
   parseRoutine(
     "r",
-    `---\ntrigger: ${trigger}\nchannel: c\n${trigger === "schedule" ? "at: 01:00\n" : ""}${trigger === "events" ? "topics: clan_pulse\n" : ""}---\nprompt`,
+    `---\ntrigger: ${trigger}\nchannel: c\n${trigger === "schedule" ? "at: 01:00\n" : ""}${trigger === "events" ? "sections: roster\n" : ""}---\nprompt`,
   );
 
 test("who drives the cost decides which pot it comes out of", () => {

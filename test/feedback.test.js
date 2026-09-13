@@ -91,6 +91,6 @@ test("figures with no tool call are ungrounded, unless the feed supplied them", 
   const { looksUngrounded } = await import("../src/feedback.js");
   assert.equal(looksUngrounded({ text: "You are 55-38 this month.", called: [] }), true);
   assert.equal(looksUngrounded({ text: "You are 55-38 this month.", called: ["players_summary"] }), false);
-  assert.equal(looksUngrounded({ text: "Two members joined.", called: [], events: [{ event_id: 1 }] }), false);
+  assert.equal(looksUngrounded({ text: "Two members joined.", called: [], events: [{ kind: "clan_activity" }] }), false);
   assert.equal(looksUngrounded({ text: "Which player are you?", called: [] }), false, "no figures, no problem");
 });

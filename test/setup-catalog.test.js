@@ -78,14 +78,14 @@ test("moving a schedule rewrites only the at: line", () => {
   assert.ok(moved.includes("Body with at: 01:00 in it."), "the prompt body is untouched");
   assert.ok(moved.includes("catch_up_hours: 3"));
   assert.throws(() => rewriteAt(text, "25:00"), /not HH:MM/);
-  assert.throws(() => rewriteAt("---\ntrigger: events\nchannel: x\ntopics: a\n---\nb", "01:00"), /no at:/);
+  assert.throws(() => rewriteAt("---\ntrigger: events\nchannel: x\nsections: roster\n---\nb", "01:00"), /no at:/);
 });
 
 test("the monthly estimate counts schedules and events, never the ask lane", () => {
   const estimate = estimateMonthly([
     { key: "daily", trigger: "schedule" },
     { key: "weekly", trigger: "schedule", days: [0] },
-    { key: "feed", trigger: "events", topics: ["a"] },
+    { key: "feed", trigger: "events", sections: ["roster"] },
     { key: "ask", trigger: "message" },
   ]);
   assert.equal(estimate.runs, 30 + 4 + 30);

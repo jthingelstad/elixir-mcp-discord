@@ -151,7 +151,7 @@ export function userMessageFor(routine, { events, recent } = {}) {
   const parts = [routine.prompt];
   if (events?.length) {
     parts.push(
-      `EVENTS FROM THE ELIXIR MCP FEED — these are nods, not reports. Drill with the tools where it earns its place.\n\n${JSON.stringify(events, null, 2)}`,
+      `FROM THE ELIXIR MCP ACTIVITY FEED — one entry per subject for the window shown, sections null when nothing happened. These are facts with their own as_of, not a report; drill with the tools where it earns its place, and never announce the time from them.\n\n${JSON.stringify(events, null, 2)}`,
     );
   }
   if (recent?.length) {

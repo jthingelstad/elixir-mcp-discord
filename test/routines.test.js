@@ -27,16 +27,20 @@ test("a schedule routine parses its clock, days and window", () => {
   assert.equal(routine.trace, false, "only message routines trace by default");
 });
 
-test("an events routine must name topics, and a schedule routine must not", () => {
-  const events = parseRoutine("feed", doc({ trigger: "events", channel: "pulse", topics: "[clan_pulse, war_day_open]" }));
-  assert.deepEqual(events.topics, ["clan_pulse", "war_day_open"]);
+test("an events routine names the feed sections it reads; topics is gone and says so", () => {
+  const events = parseRoutine("feed", doc({ trigger: "events", channel: "pulse", sections: "[roster, presence]" }));
+  assert.deepEqual(events.sections, ["roster", "presence"]);
+  const all = parseRoutine("feed", doc({ trigger: "events", channel: "pulse" }));
+  assert.equal(all.sections, null, "no sections means the whole entry");
+  // The pre-2.0.0 field. A routine file from before the feed changed shape
+  // must fail loudly with the migration in the message, not load and never fire.
   assert.throws(
-    () => parseRoutine("feed", doc({ trigger: "events", channel: "pulse" })),
-    /must name its topics/,
+    () => parseRoutine("feed", doc({ trigger: "events", channel: "pulse", topics: "clan_pulse" })),
+    /topics is gone.*sections/,
   );
   assert.throws(
-    () => parseRoutine("x", doc({ trigger: "schedule", channel: "pulse", at: "01:00", topics: "clan_pulse" })),
-    /topics only mean something/,
+    () => parseRoutine("x", doc({ trigger: "schedule", channel: "pulse", at: "01:00", sections: "roster" })),
+    /sections only mean something/,
   );
 });
 
@@ -99,4 +103,29 @@ test("a routine can be turned off by key without editing it", () => {
   const { routines } = loadRoutines({ disabled: new Set(["meta-report"]) });
   assert.equal(routines.find((routine) => routine.key === "meta-report").disabled, true);
   assert.equal(routines.find((routine) => routine.key === "ask").disabled, false);
+});
+
+test("a routine file the runner cannot parse is logged, once, and loudly when nothing loads", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { activeRoutines } = await import("../src/routines.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "emd-routines-"));
+  fs.mkdirSync(path.join(dir, "routines"));
+  fs.writeFileSync(path.join(dir, "routines", "feed.md"), "---\ntrigger: events\nchannel: pulse\nfuture_field: 1\n---\nx\n");
+  const lines = [];
+  const original = console.error;
+  console.error = (line) => lines.push(String(line));
+  try {
+    assert.deepEqual(activeRoutines({ dir, disabled: new Set() }), []);
+    assert.ok(lines.some((l) => l.includes("routine_invalid") && l.includes("future_field")), "the parse error is logged");
+    assert.ok(lines.some((l) => l.includes("no_routines_load")), "nothing loading is its own alarm");
+    lines.length = 0;
+    activeRoutines({ dir, disabled: new Set() });
+    assert.equal(lines.length, 0, "the same failure is not repeated every tick");
+    fs.writeFileSync(path.join(dir, "routines", "feed.md"), "---\ntrigger: events\nchannel: pulse\n---\nx\n");
+    assert.equal(activeRoutines({ dir, disabled: new Set() }).length, 1);
+  } finally {
+    console.error = original;
+  }
 });

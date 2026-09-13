@@ -10,7 +10,7 @@
  * wanted to be an example had a roster of somebody's actual channels in it.
  *
  * Now the trigger is a field. `message` fires when a human speaks in the
- * routine's channel, `events` fires when Elixir MCP's feed carries a topic the
+ * routine's channel, `events` fires when Elixir MCP's feed carries something the
  * routine subscribes to, and `schedule` fires on a clock. Everything else —
  * what to say, which channel, how often, which model — is front matter and
  * prose in `agent/routines/*.md`, which an operator owns and this repository
@@ -25,6 +25,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
+import { log } from "./log.js";
 
 const TRIGGERS = new Set(["message", "events", "schedule"]);
 
@@ -41,7 +42,7 @@ const FIELDS = new Set([
   "at",
   "days",
   "catch_up_hours",
-  "topics",
+  "sections",
   "may_skip",
   "recall",
   "history_turns",
@@ -100,6 +101,12 @@ export function splitFrontMatter(text) {
 export function parseRoutine(key, text) {
   const { fields, body } = splitFrontMatter(text);
   if (!fields) fail(key, "no front matter — a routine starts with a --- block");
+  // `topics` was the pre-2.0.0 feed: rows of typed events to subscribe to.
+  // The feed is now one entry per subject with named sections. A file from
+  // before must fail with the migration in the message, not as "unknown".
+  if (fields.topics !== undefined) {
+    fail(key, "topics is gone (elixir_events 2.0.0 has no topics); name the feed sections this routine reads with sections: roster, presence, war");
+  }
   for (const field of Object.keys(fields)) {
     if (!FIELDS.has(field)) fail(key, `unknown field "${field}"`);
   }
@@ -181,11 +188,13 @@ export function parseRoutine(key, text) {
     );
   }
 
+  // A routine says which feed sections it reads (all, if it says nothing).
+  // Naming a section is also what makes a window noteworthy — see
+  // noteworthy() in events.js.
   if (trigger === "events") {
-    if (!fields.topics) fail(key, "an events routine must name its topics");
-    routine.topics = asList(fields.topics);
-  } else if (fields.topics) {
-    fail(key, "topics only mean something for trigger: events");
+    routine.sections = fields.sections ? asList(fields.sections) : null;
+  } else if (fields.sections) {
+    fail(key, "sections only mean something for trigger: events");
   }
 
   if (trigger === "message") {
@@ -251,8 +260,37 @@ export function loadRoutines({
   return { routines, errors };
 }
 
+/**
+ * What failed to parse the last time the runner looked, as one string, so a
+ * change in the set of broken files is logged once rather than every tick —
+ * and a file that comes back is logged too.
+ *
+ * This exists because of 2026-09-13: routine files with a front-matter field
+ * the RUNNING code did not know were copied into a live instance, every file
+ * failed to parse, and for six hours the bot had no schedules, no feed lane
+ * and no ask lane while logging nothing at all. Files are re-read on every
+ * tick precisely so a prompt edit needs no restart, which means a prompt
+ * edit can also take the bot off the air with no restart. The parse errors
+ * were being returned and dropped. Now they are the loudest thing in the log.
+ */
+let lastErrorSignature = null;
+
 export function activeRoutines(options) {
-  return loadRoutines(options).routines.filter((routine) => !routine.disabled);
+  const { routines, errors } = loadRoutines(options);
+  const signature = errors.map((e) => `${e.key}: ${e.error}`).sort().join("\n");
+  if (signature !== lastErrorSignature) {
+    for (const failure of errors) log.error("routine_invalid", failure);
+    if (errors.length && routines.length === 0) {
+      log.error("no_routines_load", {
+        failed: errors.length,
+        hint: "every routine file failed to parse — nothing will run, answer or post until they do; a field the running code does not know needs a restart on newer code",
+      });
+    } else if (lastErrorSignature && errors.length === 0) {
+      log.info("routines_recovered", { loaded: routines.length });
+    }
+    lastErrorSignature = signature;
+  }
+  return routines.filter((routine) => !routine.disabled);
 }
 
 export function routinesFor(trigger, options) {
