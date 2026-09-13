@@ -1,10 +1,11 @@
 # A container for operators who would rather not manage node on the host.
 #
+#   I=~/.elixir-mcp-discord/myclan        # an instance made by `npm run setup`
 #   docker build -t elixir-mcp-discord .
-#   docker run -d --name elixir-mcp-discord --restart unless-stopped \
-#     --env-file .env \
-#     -v "$PWD/state:/app/state" \
-#     -v "$PWD/agent:/app/agent" \
+#   docker run -d --name elixir-mcp-discord-myclan --restart unless-stopped \
+#     --env-file $I/.env \
+#     -v "$I/state:/app/state" \
+#     -v "$I/agent:/app/agent" \
 #     elixir-mcp-discord
 #
 # Two mounts are the whole point: state/ so cursors, the run ledger and spend

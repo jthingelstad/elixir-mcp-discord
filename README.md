@@ -15,6 +15,22 @@ which already knows which clan it acts for, and everything it says comes from
 files you own. Point it at your own agent key and your own channels and it is
 your bot — no fork, no code to edit.
 
+## Quick start
+
+```bash
+git clone https://github.com/jthingelstad/elixir-mcp-discord && cd elixir-mcp-discord
+npm install
+npm run setup -- ~/.elixir-mcp-discord/myclan     # guided: keys, Discord app, routines, channels
+```
+
+That is the whole install. Setup asks for each thing, tries it against the
+service it is for before writing anything, and at the end offers to start the
+bot as a service. You need three things in hand: an **Elixir MCP agent key**
+(elixir.poapkings.com > Account > Agents > Create agent), a **Claude API
+key** (console.anthropic.com), and a **Discord application** with a bot token
+(discord.com/developers). Setup explains the rest as it goes, including the
+invite link.
+
 ## The whole idea
 
 One unit of behaviour, three ways to trigger it:
@@ -46,53 +62,89 @@ stood out, one line each, leading with the number that makes it interesting.
 If nothing genuinely stood out, reply with exactly SKIP.
 ```
 
-Drop that in `agent/routines/`, and it runs. Delete it and it stops. The code
-is a runner: it holds the Discord connection, the model call, the run ledger,
+Drop that in your instance's `agent/routines/`, and it runs. Delete it and it
+stops. The code is a runner: it holds the Discord connection, the model call, the run ledger,
 the cost accounting and the feedback plumbing, and it holds no opinions about
 Clash Royale at all.
 
 ## Layout
 
 ```
-agent/                 <- yours
-  identity.md            voice and house rules, prepended to every prompt
-  models.json            what each model costs, so budgets can be enforced
-  routines/*.md          one file per routine
-src/                   <- the runner
-state/state.json       cursors, run ledger, spend. Not game data.
+elixir-mcp-discord/          <- the code (this checkout)
+  src/                          the runner: Discord, the model call, the ledger, feedback
+  agent/                        the EXAMPLE prompts that setup offers you
+  scripts/                      service installers
+
+~/.elixir-mcp-discord/myclan/  <- an INSTANCE (yours; setup creates it)
+  .env                          keys, ids, budgets — wiring only
+  agent/
+    identity.md                 voice and house rules, prepended to every prompt
+    models.json                 what each model costs, so budgets can be enforced
+    routines/*.md               one file per routine, chosen and then rewritten by you
+  state/state.json              cursors, run ledger, spend. Not game data.
 ```
 
-The **working directory is the instance**: `.env`, `agent/` and `state/` are
-read from wherever the process starts, and the checkout is just where the
-code is. Running from the checkout works as you would expect; running from
-somewhere else is how one checkout serves several clans (see
-[Several bots](#several-bots-one-checkout)), and how a public checkout keeps
-your agent's voice and your keys out of it.
+The **instance is a directory** and the checkout is only where the code is.
+Every command reads the instance from the working directory or from
+`INSTANCE_DIR`; the boot log's first lines say which `.env`, `agent/` and
+`state/` a process actually read. Keeping the instance outside the checkout
+is what keeps your keys and your agent's voice out of a public repository,
+and it is what lets one checkout run several clans.
 
 ## Setup
 
-```bash
-npm install
-cp .env.example .env      # then fill it in
-npm run probe             # verify the key, the surface, the feed
-npm run routines          # what will run, and where
-npm start
-```
+`npm run setup -- <instance-dir>` is the whole process for one bot, in order,
+with every step tried before anything is written:
 
-You need an **agent** key: Elixir MCP > Account > Agents > Create agent. It has
-its own URL (`/a/<id>/mcp`), its own event feed and its own feedback inbox, and
-its "me" is the clan rather than a person. A personal key works at a different
-door and would answer as *you* — `npm run probe` says which one you have, and
-the service logs a warning at boot if it is not an agent.
+1. **Elixir** — the key must open an *agent* door with a clan. An agent has
+   its own URL (`/a/<id>/mcp`), its own event feed and its own feedback
+   inbox, and its "me" is the clan rather than a person; a personal key
+   would answer as *you*, and setup refuses it.
+2. **Claude** — the key must return the model you chose, and the model must
+   have a price in `models.json`.
+3. **Discord** — the token must belong to the application id you gave, with
+   the Message Content intent on, in the server you named. Not invited yet?
+   It prints the invite link with both scopes and exactly the permission bits
+   the lanes need, and waits.
+4. **Routines** — a checklist of everything in the checkout's
+   `agent/routines`, each with its one-line `description`. Chosen files are
+   copied into the instance; a file already there is **never overwritten**
+   (that rewrite is yours), and one chosen off goes to `ROUTINES_DISABLED`
+   rather than being deleted.
+5. **Schedule** — your timezone, then each scheduled routine's time, written
+   back into the instance's copy.
+6. **Channels** — lists the server's text channels, asks which one each
+   routine posts to, and checks the bot's effective permissions there
+   (including thread permissions for an ask channel), naming what to grant.
+   Create the channels in Discord first; the bot does not need Manage
+   Channels and never asks for it.
+7. **Identity** — a sentence or two about this clan, appended to
+   `identity.md` under its own heading; after that the file is yours.
+8. **Budgets** — an estimate from the routines you chose, then the two pots.
+9. **Admins** — each user id checked to be a member of the server.
+10. Writes `.env`, prints what runs where and when, and offers to install and
+    start the service, showing the boot check's lines from the log.
+
+Every failure comes with its fix and a chance to retry; `skip` moves on.
+Re-running keeps every value on Enter, so it is also how you rotate one key,
+move one channel, add a routine or change a time. `--check` runs the same
+validation with no prompts and writes nothing.
+
+`.env.example` documents every knob, including the optional ones setup does
+not ask about (`DAILY_USD_CAP`, `CLAUDE_EFFORT`, `FEEDBACK_CHANNEL`, …). Edit
+the instance's `.env` by hand for those; setup carries them over untouched.
 
 ## Iterating on prompts
 
 This is the part that matters, because the prompts are the product:
 
 ```bash
+export INSTANCE_DIR=~/.elixir-mcp-discord/myclan  # once per shell
 npm run try notable-movers                  # run it now, print it, post nothing
 npm run try meta-report -- --show-prompt    # also print the assembled prompt
 npm run try clan-feed -- --post             # actually post it
+npm run probe                               # the key, the surface, the feed
+npm run routines                            # what will run, where, and this month's spend
 ```
 
 A dry run makes a real model call and shows you the answer, the tools it
@@ -101,8 +153,9 @@ and without touching the channel. Files are re-read on every run, so editing a
 prompt needs no restart and no deploy.
 
 In Discord, an admin (`ADMIN_USER_IDS`) has slash commands: **`/run`** with
-autocomplete over your routine names, **`/routines`**, and **`/budget`**. They
-are registered to your guild at startup, so they appear immediately — if they
+autocomplete over your routine names, **`/routines`**, and **`/budget`**
+(prefixed, e.g. `/pk-run`, if the instance sets `COMMAND_PREFIX`). They are
+registered to your guild at startup, so they appear immediately — if they
 never show up, the bot was invited without the `applications.commands` scope
 and the boot log says so.
 
@@ -194,7 +247,8 @@ that runs out says so — in the log for routines, and in the channel for asks,
 in a sentence aimed at a member rather than an operator.
 
 Months are UTC calendar months and nothing rolls over. `npm run routines` and
-`/budget` in Discord both show where you are.
+`/budget` in Discord both show where you are; `npm run setup` suggests a
+starting number from the routines you chose.
 
 ## Choosing a model
 
@@ -221,10 +275,11 @@ budgets, because they look like they work.
 ## Operating notes
 
 - **Cursors are per routine, and local.** `elixir_events` advances one
-  `events_seen_through` marker per *account*, so two consumers on one account
-  eat each other's notifications. Every routine polls with `mark_seen: false`
-  and keeps its own position. On first run each seeds from the newest event
-  rather than draining the backlog into your channel.
+  `events_seen_through` marker per *account* (an agent is its own account),
+  so two consumers on one key eat each other's notifications. Every routine
+  polls with `mark_seen: false` and keeps its own position. On first run each
+  seeds from the newest event rather than draining the backlog into your
+  channel.
 - **A routine remembers what it posted.** `recall: 3` hands the model that
   routine's last three posts, from its own ledger in `state/`, so a daily
   spotlight can rotate and a movers post does not name the same three players
@@ -260,11 +315,9 @@ budgets, because they look like they work.
 
 ## Several bots, one checkout
 
-One clan is one instance: one directory with a `.env`, an `agent/` and a
-`state/`, started from the checkout's `src/index.js`. Three clans on one
-Discord server is three such directories, each with its own Discord
-application, its own Elixir MCP agent and its own Claude key, and nothing
-shared but the code:
+Three clans on one Discord server is three instance directories, each with
+its own Discord application, its own Elixir MCP agent and its own Claude key,
+and nothing shared but the code:
 
 ```
 ~/.elixir-mcp-discord/
@@ -273,51 +326,20 @@ shared but the code:
   rookies/   .env  agent/  state/
 ```
 
-```bash
-npm run setup -- ~/.elixir-mcp-discord/kings          # guided; creates the directory
-./scripts/instance.sh ~/.elixir-mcp-discord/kings probe
-./scripts/instance.sh ~/.elixir-mcp-discord/kings try war-deck-check
-./scripts/install-launchd.sh ~/.elixir-mcp-discord/kings
-```
+Run `npm run setup` once per directory. Two things to know:
 
-`npm run setup` is the whole process for one bot, in order, with every step
-tried before anything is written:
+- Slash commands are registered per Discord application, so three bots in one
+  server each bring a `/run` and Discord tells them apart only by avatar. Set
+  `COMMAND_PREFIX` per instance (`pk`, `si`, …) and they become `/pk-run`,
+  `/si-run`: an admin cannot run one clan's routine on another by picking the
+  wrong avatar.
+- Bots ignore each other's messages and reactions; each listens only on its
+  own `CHANNEL_*` ids, which setup and the boot check both verify are in the
+  guild and usable.
 
-1. **Elixir** — the key must open an *agent* door with a clan.
-2. **Claude** — the key must return the model you chose, and the model must
-   have a price.
-3. **Discord** — the token must belong to the application id you gave, with
-   the Message Content intent on, in the server you named. Not invited yet?
-   It prints the invite link with both scopes and exactly the permission bits
-   the lanes need, and waits.
-4. **Routines** — a checklist of everything in `agent/routines`, each with
-   its one-line `description`. Chosen files are copied into the instance; a
-   file already there is **never overwritten** (that rewrite is yours), and
-   one chosen off goes to `ROUTINES_DISABLED` rather than being deleted.
-5. **Schedule** — your timezone, then each scheduled routine's time, written
-   back into the instance's copy.
-6. **Channels** — lists the server's text channels, asks which one each
-   routine posts to, and checks the bot's effective permissions there
-   (including thread permissions for an ask channel), naming what to grant.
-7. **Identity** — a sentence or two about this clan, appended to
-   `identity.md` under its own heading; after that the file is yours.
-8. **Budgets** — an estimate from the routines you chose, then the two pots.
-9. **Admins** — each user id checked to be a member of the server.
-10. Writes `.env`, prints what runs where and when, and offers to install and
-    start the service, showing the boot check's lines from the log.
-
-Every failure comes with its fix and a chance to retry; `skip` moves on.
-Re-running keeps every value on Enter, so it is also how you rotate one key,
-move one channel, add a routine or change a time. `--check` runs the same
-validation with no prompts and writes nothing.
-
-Slash commands are registered per Discord application, so three bots in one
-server each bring a `/run` and Discord tells them apart only by avatar. Set
-`COMMAND_PREFIX` per instance (`pk`, `si`, …) and they become `/pk-run`,
-`/si-run`: an admin cannot run one clan's routine on another by picking the
-wrong avatar. Bots ignore each other's messages and reactions; each listens
-only on its own `CHANNEL_*` ids, which the boot check verifies are in the
-guild and usable.
+Each instance's prompts are its own — that is how a clan decides how its bot
+engages — so `agent/` is copied, not shared. A code change is a restart per
+instance; a prompt change is never either.
 
 ## Tests
 
@@ -334,32 +356,32 @@ symbol is a runtime `ReferenceError`, and members found out instead.
 
 ## Running it as a service
 
+Setup offers this at the end; the installers also run on their own.
+
 **macOS (launchd):**
 
 ```bash
-./scripts/install-launchd.sh              # this checkout is the instance
-./scripts/install-launchd.sh ~/.elixir-mcp-discord/kings   # a named instance
-./scripts/install-launchd.sh [instance] uninstall
-tail -f ~/Library/Logs/elixir-mcp-discord/com.poapkings.elixir-mcp-discord.log
-# a named instance logs to …/com.poapkings.elixir-mcp-discord.<name>.log
+./scripts/install-launchd.sh ~/.elixir-mcp-discord/myclan     # label com.poapkings.elixir-mcp-discord.myclan
+./scripts/install-launchd.sh ~/.elixir-mcp-discord/myclan uninstall
+tail -f ~/Library/Logs/elixir-mcp-discord/com.poapkings.elixir-mcp-discord.myclan.log
 ```
 
 **Linux (systemd user unit):**
 
 ```bash
-./scripts/install-systemd.sh              # this checkout is the instance
-./scripts/install-systemd.sh ~/.elixir-mcp-discord/kings   # unit elixir-mcp-discord-kings
-./scripts/install-systemd.sh [instance] uninstall
-journalctl --user -u elixir-mcp-discord -f
+./scripts/install-systemd.sh ~/.elixir-mcp-discord/myclan     # unit elixir-mcp-discord-myclan
+./scripts/install-systemd.sh ~/.elixir-mcp-discord/myclan uninstall
+journalctl --user -u elixir-mcp-discord-myclan -f
 loginctl enable-linger $USER              # keep it running after you log out
 ```
 
 **Docker:**
 
 ```bash
+I=~/.elixir-mcp-discord/myclan
 docker build -t elixir-mcp-discord .
-docker run -d --name elixir-mcp-discord --restart unless-stopped \
-  --env-file .env -v "$PWD/state:/app/state" -v "$PWD/agent:/app/agent" \
+docker run -d --name elixir-mcp-discord-myclan --restart unless-stopped \
+  --env-file $I/.env -v "$I/state:/app/state" -v "$I/agent:/app/agent" \
   elixir-mcp-discord
 ```
 
@@ -367,10 +389,15 @@ Both service templates are rendered rather than committed, because a unit file
 is nothing but absolute paths and yours are not these. Three things in them are
 deliberate: `node` is referenced by absolute path (neither launchd nor systemd
 reads your shell profile); the working directory is the instance so its
-`.env`, `agent/` and `state/` are the ones found; and the restart throttle is 30 seconds so a job that dies on startup
-leaves a legible crash loop in the log instead of drowning it. The container
-mounts `state/` and `agent/` so cursors and budgets survive a replacement and
-a prompt edit needs no rebuild.
+`.env`, `agent/` and `state/` are the ones found; and the restart throttle is
+30 seconds so a job that dies on startup leaves a legible crash loop in the
+log instead of drowning it. The container mounts the instance's `state/` and
+`agent/` so cursors and budgets survive a replacement and a prompt edit needs
+no rebuild.
+
+Every boot checks the channels again — in the guild, the role can see, post
+and read history, plus threads for an ask channel — and complains in the log
+and in the first channel that works. The lanes that work keep working.
 
 ## License
 

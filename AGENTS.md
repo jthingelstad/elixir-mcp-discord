@@ -8,9 +8,10 @@ and secret-safety rules are two levels up in `~/Projects/AGENTS.md`.
 ## What this is
 
 A public reference implementation: a Discord bot for a Clash Royale clan powered
-entirely by Elixir MCP. It runs POAP KINGS' **Testing** channels
-(`#ask-elixir-mcp`, `#elixir-mcp`), and it is simultaneously a working preview
-for clan members and an example anyone can install.
+entirely by Elixir MCP. It runs three clans' channels on the POAP KINGS
+Discord server as three instances (see "Three bots, one checkout" below),
+and it is simultaneously a working preview for clan members and an example
+anyone can install.
 
 The preview exists to answer one question: **is Elixir MCP good enough to
 replace elixir-bot's native Clash Royale data?** The long-term direction is that
@@ -65,9 +66,9 @@ gitignored. Check `git ls-files` before assuming something is untracked. Since
 
 ## Three bots, one checkout — since 2026-09-13
 
-The **working directory is the instance.** `.env`, `agent/` and `state/`
-resolve against `process.cwd()`, never against the checkout (`instanceDir`
-in `src/config.js`, `STATE_PATH` in `src/state.js`). The live instances are
+The **instance is a directory** — the cwd, or `INSTANCE_DIR`. `.env`,
+`agent/` and `state/` resolve against it, never against the checkout
+(`instanceDir` in `src/config.js`, `STATE_PATH` in `src/state.js`). The live instances are
 
     ~/.elixir-mcp-discord/poapkings/     POAP KINGS   /pk-*   com.poapkings.elixir-mcp-discord.poapkings
     ~/.elixir-mcp-discord/shipit/        Ship It!     /si-*   com.poapkings.elixir-mcp-discord.shipit
@@ -78,9 +79,11 @@ three Discord applications in ONE server, each with its own two channels
 feed cursor and feedback inbox are its own) and its own Claude key. Logs are
 `~/Library/Logs/elixir-mcp-discord/<label>.log`.
 
-- **There is no `.env` in the checkout any more**, so `npm run try` from here
-  fails with "missing ELIXIR_MCP_URL". That is correct. Use
-  `./scripts/instance.sh <instance-dir> try <routine>` / `probe` / `routines`.
+- **There is no `.env` in the checkout any more**, so a bare `npm run try`
+  fails and says so. The instance is the cwd OR `INSTANCE_DIR`:
+  `INSTANCE_DIR=~/.elixir-mcp-discord/shipit npm run try <routine>` / `probe`
+  / `routines`. (Your shell's `CLAUDE_EFFORT=high` shadows every instance's
+  .env for CLI runs — the provenance line says so; launchd is unaffected.)
 - **`npm run setup -- <instance-dir>` is the whole process** (`src/setup.js`,
   helpers in `src/setup-catalog.js`, `src/discord-rest.js`, `src/env-file.js`):
   Elixir key, Claude key and Discord app each tried against its service BEFORE

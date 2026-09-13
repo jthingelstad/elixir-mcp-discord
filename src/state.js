@@ -18,12 +18,12 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { instanceDir } from "./config.js";
 
-// Relative to the cwd — the INSTANCE directory, not the checkout. Several
-// instances of one checkout must never share a state file; see instanceDir
-// in config.js.
+// Relative to the INSTANCE directory, not the checkout. Several instances of
+// one checkout must never share a state file; see instanceDir in config.js.
 export const STATE_PATH = path.resolve(
-  process.cwd(),
+  instanceDir,
   process.env.STATE_PATH || path.join("state", "state.json"),
 );
 

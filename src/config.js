@@ -24,32 +24,34 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 
-const loaded = dotenv.config({ quiet: true });
-
 export const repoRoot = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
 
 /**
- * THE WORKING DIRECTORY IS THE INSTANCE.
+ * THE INSTANCE IS A DIRECTORY: `.env`, `agent/` and `state/` live together in
+ * it, and the checkout is only where the code is. It is the working
+ * directory, or INSTANCE_DIR when that is set — the second form exists
+ * because `npm run` always changes into the checkout, and `npm run try` is
+ * the most important command in the repo.
  *
- * dotenv reads `.env` from the cwd, and so do the agent dir and the state
- * file by default. One checkout of this code can therefore run several bots
- * — three clans on one server, each its own Discord app, Elixir agent and
- * Claude key — by starting the same `src/index.js` from three directories:
+ * One checkout can therefore run several bots — three clans on one server,
+ * each its own Discord app, Elixir agent and Claude key — by starting the
+ * same `src/index.js` against three directories:
  *
  *   ~/.elixir-mcp-discord/<name>/   .env  agent/  state/state.json
  *
  * The defaults used to resolve against the CHECKOUT, which is identical when
  * you run from the checkout and silently wrong when you do not: two instances
  * that both forgot STATE_PATH would share one cursor and one budget ledger,
- * and the only symptom would be a feed post missing from one channel. So the
- * instance directory is the cwd, and the boot log prints where each file came
- * from.
+ * and the only symptom would be a feed post missing from one channel. So
+ * everything resolves against the instance, and the boot log prints where
+ * each file came from.
  */
-export const instanceDir = process.cwd();
-export const envFile = path.resolve(instanceDir, ".env");
+export const instanceDir = path.resolve(process.env.INSTANCE_DIR || process.cwd());
+export const envFile = path.join(instanceDir, ".env");
+const loaded = dotenv.config({ path: envFile, quiet: true });
 export const envLoaded = Boolean(loaded.parsed);
 
 /**
@@ -80,7 +82,7 @@ function required(name) {
   const value = (process.env[name] || "").trim();
   if (!value) {
     throw new Error(
-      `Missing required environment variable ${name}. Copy .env.example to .env and fill it in.`,
+      `Missing ${name}: no usable .env in ${instanceDir}. Run \`npm run setup -- <instance-dir>\`, then \`INSTANCE_DIR=<instance-dir> npm run ...\`.`,
     );
   }
   return value;

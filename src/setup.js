@@ -505,7 +505,7 @@ if (interactive) {
   heading("run it");
   const installer = os.platform() === "darwin" ? "install-launchd.sh" : os.platform() === "linux" ? "install-systemd.sh" : null;
   if (!installer) {
-    note(`start it with: ./scripts/instance.sh ${instanceDir} start`);
+    note(`start it with: INSTANCE_DIR=${instanceDir} npm start`);
   } else if (await yesNo(`Install and start it now as a service (${installer})?`, true)) {
     const label = `com.poapkings.elixir-mcp-discord.${path.basename(instanceDir)}`;
     const logFile = path.join(os.homedir(), "Library", "Logs", "elixir-mcp-discord", `${label}.log`);
@@ -531,4 +531,7 @@ if (interactive) {
   }
 } else if (!checkOnly) {
   note(`next: ./scripts/install-launchd.sh ${instanceDir}`);
+}
+if (!checkOnly && unresolved.length === 0) {
+  note(`try a prompt any time: INSTANCE_DIR=${instanceDir} npm run try <routine>`);
 }
