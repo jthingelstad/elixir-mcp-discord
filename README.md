@@ -61,7 +61,12 @@ src/                   <- the runner
 state/state.json       cursors, run ledger, spend. Not game data.
 ```
 
-Set `AGENT_DIR` to keep `agent/` somewhere private if your checkout is public.
+The **working directory is the instance**: `.env`, `agent/` and `state/` are
+read from wherever the process starts, and the checkout is just where the
+code is. Running from the checkout works as you would expect; running from
+somewhere else is how one checkout serves several clans (see
+[Several bots](#several-bots-one-checkout)), and how a public checkout keeps
+your agent's voice and your keys out of it.
 
 ## Setup
 
@@ -242,8 +247,52 @@ budgets, because they look like they work.
   against your budgets and per-routine spend today.
 - **A missed run fires late only inside its own catch-up window.** A war-deck
   nudge at 4am because the host was asleep is worse than one that never fires.
+- **Every channel is checked at boot.** For each channel a routine uses, the
+  bot confirms it is in `DISCORD_GUILD_ID` and that its role can see it, post
+  in it and read its history — plus create and post in threads for an ask
+  channel. Each failure is an `ERROR` line naming the exact permission, and
+  the bot says so in the first channel that *does* work, so a pasted id one
+  channel off is a complaint at boot rather than a routine that spends a
+  model call and posts nothing.
 - **Rough edges are expected.** This is a demonstration of a young service, and
   what it cannot do yet is as interesting as what it can.
+
+## Several bots, one checkout
+
+One clan is one instance: one directory with a `.env`, an `agent/` and a
+`state/`, started from the checkout's `src/index.js`. Three clans on one
+Discord server is three such directories, each with its own Discord
+application, its own Elixir MCP agent and its own Claude key, and nothing
+shared but the code:
+
+```
+~/.elixir-mcp-discord/
+  kings/     .env  agent/  state/
+  shipit/    .env  agent/  state/
+  rookies/   .env  agent/  state/
+```
+
+```bash
+mkdir -p ~/.elixir-mcp-discord/kings && cp -R agent ~/.elixir-mcp-discord/kings/
+cp .env.example ~/.elixir-mcp-discord/kings/.env     # then fill it in
+./scripts/instance.sh ~/.elixir-mcp-discord/kings probe
+./scripts/instance.sh ~/.elixir-mcp-discord/kings try war-deck-check
+./scripts/install-launchd.sh ~/.elixir-mcp-discord/kings
+```
+
+Each instance's prompts are its own — that is how a clan decides how its
+agent engages — so `agent/` is copied, not shared. `npm run …` always changes
+into the checkout, which is the wrong directory for an instance; `scripts/instance.sh`
+runs the same commands from the right one, and the boot log's `instance`
+line says which `.env`, `agent/` and `state/` a process actually read.
+
+Slash commands are registered per Discord application, so three bots in one
+server each bring a `/run` and Discord tells them apart only by avatar. Set
+`COMMAND_PREFIX` per instance (`pk`, `si`, …) and they become `/pk-run`,
+`/si-run`: an admin cannot run one clan's routine on another by picking the
+wrong avatar. Bots ignore each other's messages and reactions; each listens
+only on its own `CHANNEL_*` ids, which the boot check verifies are in the
+guild and usable.
 
 ## Tests
 
@@ -263,16 +312,19 @@ symbol is a runtime `ReferenceError`, and members found out instead.
 **macOS (launchd):**
 
 ```bash
-./scripts/install-launchd.sh              # install + start at login
-./scripts/install-launchd.sh uninstall    # stop + remove
+./scripts/install-launchd.sh              # this checkout is the instance
+./scripts/install-launchd.sh ~/.elixir-mcp-discord/kings   # a named instance
+./scripts/install-launchd.sh [instance] uninstall
 tail -f ~/Library/Logs/elixir-mcp-discord/com.poapkings.elixir-mcp-discord.log
+# a named instance logs to …/com.poapkings.elixir-mcp-discord.<name>.log
 ```
 
 **Linux (systemd user unit):**
 
 ```bash
-./scripts/install-systemd.sh              # install + start
-./scripts/install-systemd.sh uninstall
+./scripts/install-systemd.sh              # this checkout is the instance
+./scripts/install-systemd.sh ~/.elixir-mcp-discord/kings   # unit elixir-mcp-discord-kings
+./scripts/install-systemd.sh [instance] uninstall
 journalctl --user -u elixir-mcp-discord -f
 loginctl enable-linger $USER              # keep it running after you log out
 ```
@@ -289,8 +341,8 @@ docker run -d --name elixir-mcp-discord --restart unless-stopped \
 Both service templates are rendered rather than committed, because a unit file
 is nothing but absolute paths and yours are not these. Three things in them are
 deliberate: `node` is referenced by absolute path (neither launchd nor systemd
-reads your shell profile); the working directory is the checkout so `.env` is
-found; and the restart throttle is 30 seconds so a job that dies on startup
+reads your shell profile); the working directory is the instance so its
+`.env`, `agent/` and `state/` are the ones found; and the restart throttle is 30 seconds so a job that dies on startup
 leaves a legible crash loop in the log instead of drowning it. The container
 mounts `state/` and `agent/` so cursors and budgets survive a replacement and
 a prompt edit needs no rebuild.

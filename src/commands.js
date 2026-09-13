@@ -12,6 +12,13 @@
  * global ones take up to an hour to propagate, and this bot belongs to one
  * clan's server anyway.
  *
+ * Commands are registered per APPLICATION, so several bots in one server each
+ * bring their own `/run`. Discord shows the bot's avatar beside each in the
+ * picker and routes the interaction to the right app, so nothing breaks — but
+ * an admin typing `/run` sees three identical entries and runs a routine on
+ * the wrong clan by picking the wrong avatar. COMMAND_PREFIX names them apart:
+ * `/pk-run`, `/pk-budget`, `/pk-routines`.
+ *
  * Every command here spends money, so all of them are admin-gated twice: a
  * default permission that hides them from members in the picker, and an
  * explicit id check that actually enforces it. The first is a UI hint the
@@ -31,18 +38,29 @@ import { runRoutine } from "./run.js";
 import * as budget from "./budget.js";
 import { log } from "./log.js";
 
+/** The registered name for a base command: `run` or, with a prefix, `pk-run`. */
+export function commandName(base, prefix = config.commandPrefix) {
+  return prefix ? `${prefix}-${base}` : base;
+}
+
+/** The base command an interaction is for, or null if it is not ours. */
+export function baseCommand(name, prefix = config.commandPrefix) {
+  if (!prefix) return name;
+  return name.startsWith(`${prefix}-`) ? name.slice(prefix.length + 1) : null;
+}
+
 export function commandDefinitions() {
   return [
     new SlashCommandBuilder()
-      .setName("budget")
+      .setName(commandName("budget"))
       .setDescription("What this bot has spent this month, per lane")
       .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
     new SlashCommandBuilder()
-      .setName("routines")
+      .setName(commandName("routines"))
       .setDescription("What this bot runs, when, and where it posts")
       .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
     new SlashCommandBuilder()
-      .setName("run")
+      .setName(commandName("run"))
       .setDescription("Run one routine now and post it to its channel")
       .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
       .addStringOption((option) =>
@@ -66,7 +84,7 @@ export async function registerCommands(client) {
     );
     log.info("commands_registered", {
       guild: config.discord.guildId,
-      commands: "budget,routines,run",
+      commands: ["budget", "routines", "run"].map((c) => `/${commandName(c)}`).join(","),
     });
   } catch (error) {
     log.error("commands_registration_failed", {
@@ -123,6 +141,8 @@ export async function handleInteraction(interaction, { resolveChannel }) {
     return;
   }
   if (!interaction.isChatInputCommand()) return;
+  const command = baseCommand(interaction.commandName);
+  if (!command) return;
 
   if (!isAdmin(interaction.user.id)) {
     await interaction.reply({
@@ -137,7 +157,7 @@ export async function handleInteraction(interaction, { resolveChannel }) {
     return;
   }
 
-  if (interaction.commandName === "budget") {
+  if (command === "budget") {
     await interaction.reply({
       content: budgetReply(),
       flags: MessageFlags.Ephemeral,
@@ -145,7 +165,7 @@ export async function handleInteraction(interaction, { resolveChannel }) {
     return;
   }
 
-  if (interaction.commandName === "routines") {
+  if (command === "routines") {
     await interaction.reply({
       content: routinesReply(),
       flags: MessageFlags.Ephemeral,
@@ -153,7 +173,7 @@ export async function handleInteraction(interaction, { resolveChannel }) {
     return;
   }
 
-  if (interaction.commandName === "run") {
+  if (command === "run") {
     const key = interaction.options.getString("routine");
     const routine = loadRoutines().routines.find((r) => r.key === key);
     if (!routine) {

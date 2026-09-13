@@ -8,13 +8,21 @@
  */
 
 import { Client, GatewayIntentBits, Partials, Events } from "discord.js";
-import { config, provenance, channelEnvName } from "./config.js";
+import {
+  config,
+  provenance,
+  channelEnvName,
+  instanceDir,
+  envFile,
+  envLoaded,
+} from "./config.js";
 import { handleAsk, isThreadOf } from "./ask.js";
 import { handleReaction } from "./reactions.js";
 import { startEventLoop } from "./events.js";
 import { startScheduler } from "./scheduler.js";
 import { loadRoutines, routinesFor } from "./routines.js";
 import { registerCommands, handleInteraction } from "./commands.js";
+import { checkChannelPermissions } from "./permissions.js";
 import { rateFor } from "./pricing.js";
 import * as budget from "./budget.js";
 import { initialize, describePrincipal } from "./mcp.js";
@@ -104,7 +112,16 @@ function reportPrincipal(handshake) {
 }
 
 client.once(Events.ClientReady, async (ready) => {
-  log.info("discord_ready", { user: ready.user.tag });
+  log.info("discord_ready", { user: ready.user.tag, guild: config.discord.guildId });
+  // Which instance this is, first. One checkout can run several bots, and a
+  // log line that does not say whose .env it read is a log line that will be
+  // read as another clan's.
+  log[envLoaded ? "info" : "warn"]("instance", {
+    dir: instanceDir,
+    env: envLoaded ? envFile : `${envFile} (not found; shell environment only)`,
+    agent: config.agentDir,
+    state: state.STATE_PATH,
+  });
   for (const entry of provenance) {
     const shadowed = entry.source.startsWith("SHELL");
     log[shadowed ? "warn" : "info"]("config_resolved", {
@@ -179,6 +196,9 @@ client.once(Events.ClientReady, async (ready) => {
   if (routines.every((routine) => routine.disabled)) {
     log.error("no_active_routines", { dir: config.agentDir });
   }
+  // Loud, per channel, before anything runs: a wrong id or a missing
+  // permission is a routine that spends a model call and then cannot post.
+  await checkChannelPermissions({ client, routines, resolveChannel });
 
   await registerCommands(client);
   startEventLoop(() => routinesFor("events"), resolveChannel);

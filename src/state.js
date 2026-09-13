@@ -18,12 +18,14 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const STATE_PATH = process.env.STATE_PATH
-  ? path.resolve(process.env.STATE_PATH)
-  : path.join(here, "..", "state", "state.json");
+// Relative to the cwd — the INSTANCE directory, not the checkout. Several
+// instances of one checkout must never share a state file; see instanceDir
+// in config.js.
+export const STATE_PATH = path.resolve(
+  process.cwd(),
+  process.env.STATE_PATH || path.join("state", "state.json"),
+);
 
 const DEFAULTS = {
   // { [routineKey]: eventId }. A key absent means "start from now" and is
@@ -60,6 +62,10 @@ const DEFAULTS = {
   // a log line rather than a channel quietly reporting on strangers.
   principal: null,
   answeredFeedbackIds: [],
+  // Fingerprint of the channel problems last announced in Discord at boot, so
+  // a crash loop with a bad channel id complains once, not every thirty
+  // seconds. null once every channel checks out.
+  channelProblems: null,
   // { [routineKey]: [text, ...] } — the last few posts EACH ROUTINE made,
   // newest first. This is the bot's own output, not game data, and it is the
   // routine's memory of itself: reading the channel instead gave a daily

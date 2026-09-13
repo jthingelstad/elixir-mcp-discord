@@ -60,7 +60,45 @@ via anything but `on_behalf_of` + `elixir_identify` (or `players_search`) is the
 leak that would make this demo lie.
 
 **Public repo, no secrets.** `.env` and `.env.*` are gitignored, `state/` is
-gitignored. Check `git ls-files` before assuming something is untracked.
+gitignored. Check `git ls-files` before assuming something is untracked. Since
+2026-09-13 the live instances keep nothing in the checkout at all — see below.
+
+## Three bots, one checkout — since 2026-09-13
+
+The **working directory is the instance.** `.env`, `agent/` and `state/`
+resolve against `process.cwd()`, never against the checkout (`instanceDir`
+in `src/config.js`, `STATE_PATH` in `src/state.js`). The live instances are
+
+    ~/.elixir-mcp-discord/poapkings/     POAP KINGS   /pk-*   com.poapkings.elixir-mcp-discord.poapkings
+    ~/.elixir-mcp-discord/shipit/        Ship It!     /si-*   com.poapkings.elixir-mcp-discord.shipit
+    ~/.elixir-mcp-discord/elixirkings/   Elixir Kings /ek-*   com.poapkings.elixir-mcp-discord.elixirkings
+
+three Discord applications in ONE server, each with its own two channels
+(`ask`, `pulse`), its own Elixir agent (an agent is its own account, so its
+feed cursor and feedback inbox are its own) and its own Claude key. Logs are
+`~/Library/Logs/elixir-mcp-discord/<label>.log`.
+
+- **There is no `.env` in the checkout any more**, so `npm run try` from here
+  fails with "missing ELIXIR_MCP_URL". That is correct. Use
+  `./scripts/instance.sh <instance-dir> try <routine>` / `probe` / `routines`.
+- **Prompts are per instance and diverge on purpose** — each clan's `agent/`
+  is how that clan decides how its bot engages. The checkout's `agent/` is the
+  example everyone else copies; editing it changes no live bot. A change
+  meant for all three is three edits (or a copy).
+- **A code change is a restart of each instance**, prompts hot-load as ever.
+  Restart one first: `launchctl kickstart -k gui/$(id -u)/<label>`.
+- **`COMMAND_PREFIX` keeps the slash commands apart.** Discord registers
+  commands per application; three unprefixed `/run`s differ only by avatar.
+  `baseCommand` strips the prefix on the way in and returns null for a name
+  that is not ours.
+- **Channels are checked at boot** (`src/permissions.js`): in the guild, text
+  channel, role has View/Send/ReadHistory, plus CreatePublicThreads and
+  SendMessagesInThreads where a message routine listens. Every failure is an
+  `ERROR` with the permission named, plus one Discord post in the first
+  usable channel, deduplicated by a fingerprint in `state.channelProblems`
+  so a crash loop does not repeat it. The bot keeps running — the lanes that
+  work should — but a pasted id from the wrong clan's channel is now a loud
+  boot, not a stranger's clan report.
 
 ## It is an AGENT, not Jamie
 

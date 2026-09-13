@@ -32,6 +32,27 @@ export const repoRoot = path.join(
 );
 
 /**
+ * THE WORKING DIRECTORY IS THE INSTANCE.
+ *
+ * dotenv reads `.env` from the cwd, and so do the agent dir and the state
+ * file by default. One checkout of this code can therefore run several bots
+ * — three clans on one server, each its own Discord app, Elixir agent and
+ * Claude key — by starting the same `src/index.js` from three directories:
+ *
+ *   ~/.elixir-mcp-discord/<name>/   .env  agent/  state/state.json
+ *
+ * The defaults used to resolve against the CHECKOUT, which is identical when
+ * you run from the checkout and silently wrong when you do not: two instances
+ * that both forgot STATE_PATH would share one cursor and one budget ledger,
+ * and the only symptom would be a feed post missing from one channel. So the
+ * instance directory is the cwd, and the boot log prints where each file came
+ * from.
+ */
+export const instanceDir = process.cwd();
+export const envFile = path.resolve(instanceDir, ".env");
+export const envLoaded = Boolean(loaded.parsed);
+
+/**
  * Where each optional value actually came from.
  *
  * dotenv does NOT override an existing process.env entry, so a variable
@@ -182,9 +203,16 @@ export const config = {
   dailyUsdCap: process.env.DAILY_USD_CAP
     ? Number(process.env.DAILY_USD_CAP)
     : null,
-  // Where the prompts live. Point it at a private directory to keep your own
-  // agent's voice out of a public checkout.
-  agentDir: path.resolve(repoRoot, optional("AGENT_DIR", "agent")),
+  // Where the prompts live: `agent/` in the instance directory. Relative paths
+  // resolve against the cwd, not the checkout — see instanceDir above.
+  agentDir: path.resolve(instanceDir, optional("AGENT_DIR", "agent")),
+  // Optional prefix for the slash commands. Three bots in one server each
+  // register their own `/run`, and Discord tells them apart only by the
+  // bot's avatar in the picker; `COMMAND_PREFIX=pk` makes this one's
+  // `/pk-run` and leaves nothing to squint at.
+  commandPrefix: optional("COMMAND_PREFIX", "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, ""),
   // SCHEDULE_DISABLED is the pre-refactor name and still works; routines are
   // no longer only schedules, hence the better one.
   disabled: new Set([

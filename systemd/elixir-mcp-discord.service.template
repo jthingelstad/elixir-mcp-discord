@@ -11,9 +11,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=__REPO__
+# The working directory IS the instance: dotenv reads its .env, and agent/ and
+# state/ resolve against it. One checkout, several bots.
+WorkingDirectory=__INSTANCE__
 ExecStart=__NODE__ __REPO__/src/index.js
-# dotenv reads .env from the working directory; nothing else is needed here.
 Restart=always
 # A job that dies on startup (bad token, missing .env) would otherwise respawn
 # instantly forever. Thirty seconds keeps a real crash loop legible in the journal.
