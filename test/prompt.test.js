@@ -68,7 +68,7 @@ test("events and recent posts reach the user turn, not the system prompt", () =>
     recent: ["**War decks** — 3 untouched."],
   });
   assert.match(message, /"event_id": 7/);
-  assert.match(message, /ALREADY POSTED/);
+  assert.match(message, /WHAT THIS ROUTINE POSTED RECENTLY/);
   assert.match(message, /3 untouched/);
 });
 

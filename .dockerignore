@@ -1,0 +1,12 @@
+node_modules
+state
+.env
+.env.*
+!.env.example
+.git
+test
+launchd
+systemd
+scripts
+*.log
+agent.local

@@ -40,8 +40,8 @@ server-side defaulting bug for weeks instead of getting it fixed (see below). A
 test asserts no shipped routine contains a CR tag. Do not reintroduce one.
 
 **No local data. None.** No database, no roster cache, no nickname table, no
-Clash Royale API key, no memory across restarts beyond cursors, a run ledger and
-a spend counter. Every fact in a reply came from an MCP tool call in that turn. A
+Clash Royale API key, no memory across restarts beyond cursors, a run ledger, a
+spend counter and each routine's own last few posts. Every fact in a reply came from an MCP tool call in that turn. A
 local shortcut makes the demo *flatter* than reality, and we would conclude MCP
 is ready when something else was quietly propping it up.
 
@@ -142,6 +142,39 @@ cannot be enforced is worse than none, because it looks like it works.
   every 300 s: 761 metered calls a week to learn nothing. A tick with no hint
   at all (no event routine, or a pre-1.0.0 server) reads as it used to, so a
   missing signal never turns into silence.
+- **Recall is per ROUTINE, from its own ledger — since 2026-09-13.** Before
+  that `recall: N` fetched the channel's last N bot messages, which in a
+  shared channel were the feed's and the movers' posts and never the
+  routine's own: the capability spotlight demonstrated rival scouting three
+  days out of five with `recall: 5` in force. `state.rememberPost` /
+  `recentOwnPosts` are the ledger; the channel read is only the fallback for a
+  routine that has never posted since the ledger existed.
+- **Failed calls get a footer even without a trace.** On 2026-09-11 a
+  spotlight presented pros-collection stats after four of its eight calls had
+  failed, and the only sign was the sweep note under it saying "possible
+  fabricated data". The maintainer's reply (#33) asked the preview for a
+  consumer-side guard. `errorFooter` in `src/trace.js` is it, and the prompt
+  now says stop after two identical failures. Do not make the footer
+  conditional on `trace`.
+- **A reply with figures and no tool call is caveated.** "How am I playing?"
+  was once answered from the previous exchange with zero calls. `looksUngrounded`
+  is the check; events handed to a routine count as a source. Do not file it
+  as hub friction — it is this consumer's behaviour, not the server's.
+- **Eight tool calls in a turn is friction.** `detectFriction` files
+  `many_calls` above `MANY_CALLS`; a movers run once made thirteen
+  per-member calls and never told anyone. Errors and the trace carry
+  `meta.request_id`, and the sweep hands failing ids to the model so a filing
+  names the exact call.
+- **Ask history skips footers and pinned messages.** `isConversational` in
+  `src/ask.js` drops bot messages starting with `-#` (traces, filed notes,
+  the placeholder) and anything pinned; before that the model read its own
+  tool arguments and cost lines as prior answers.
+- **The feed poll defaults to 1800 s.** Five minutes was 288 metered calls a
+  day for a feed that is empty most of the time — over half a member's daily
+  allowance, and against the hub's own "hourly is plenty". This install sets
+  `EVENT_POLL_SECONDS=300` explicitly because the agent has no ceiling and the
+  preview wants joins posted within minutes; the shipped default is for
+  everyone else.
 - **Tool errors carry a code.** `readToolActivity` keeps `error.code` (from
   the contract's closed set) beside the message, and `detectFriction` decides
   on it: `no_subject` (ask who is asking) and `quota_exceeded` (the ceiling

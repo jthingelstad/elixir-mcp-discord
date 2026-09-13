@@ -19,10 +19,10 @@
 
 import { ask, spendBlock } from "./claude.js";
 import { laneFor } from "./budget.js";
-import { detectFriction, sweepFriction } from "./feedback.js";
+import { detectFriction, sweepFriction, looksUngrounded } from "./feedback.js";
 import { systemFor } from "./prompt.js";
 import { chunk } from "./post.js";
-import { renderTrace } from "./trace.js";
+import { renderTrace, errorFooter, UNGROUNDED_FOOTER } from "./trace.js";
 import { log } from "./log.js";
 
 /**
@@ -82,17 +82,34 @@ function renderProgress(toolsSoFar, text) {
   return lines.join("\n");
 }
 
-/** Recent channel messages as conversation turns, oldest first. Cheap context —
- *  no summarization, no durable memory. When it scrolls off, it is gone. */
+/**
+ * Recent channel messages as conversation turns, oldest first. Cheap context —
+ * no summarization, no durable memory. When it scrolls off, it is gone.
+ *
+ * Not every bot message is a turn. Trace footers, filed-feedback notes and the
+ * "thinking…" placeholder all begin with Discord's small-text marker, and a
+ * pinned message is a notice rather than an answer. Fed back as assistant
+ * turns, the model was reading its own tool arguments and cost lines as
+ * things it had said to the member.
+ */
+export function isConversational(message) {
+  const content = message.cleanContent?.trim();
+  if (!content) return false;
+  if (message.pinned) return false;
+  if (message.author?.bot && content.startsWith("-#")) return false;
+  return true;
+}
+
 async function recentTurns(channel, upToId, turns) {
   const fetched = await channel.messages.fetch({
-    limit: turns * 2,
+    // Each exchange is an answer plus a footer or two, so over-fetch and filter.
+    limit: Math.min(100, turns * 4),
     before: upToId,
   });
   const history = [];
   for (const message of [...fetched.values()].reverse()) {
-    const content = message.cleanContent?.trim();
-    if (!content) continue;
+    if (!isConversational(message)) continue;
+    const content = message.cleanContent.trim();
     history.push({
       role: message.author.bot ? "assistant" : "user",
       content: message.author.bot
@@ -198,16 +215,16 @@ export async function handleAsk(message, routine, { askFn = ask } = {}) {
       sent = await message.channel.send(part);
     }
 
-    if (routine.trace && sent) {
-      const trace = renderTrace(result);
-      if (trace) {
-        await sent
-          .reply({ content: trace, allowedMentions: { repliedUser: false } })
-          .catch((error) =>
-            log.warn("trace_post_failed", { error: error.message }),
-          );
-      }
-    }
+    const footnote = async (content, what) => {
+      if (!sent || !content) return;
+      await sent
+        .reply({ content, allowedMentions: { repliedUser: false } })
+        .catch((error) => log.warn(`${what}_post_failed`, { error: error.message }));
+    };
+    if (routine.trace) await footnote(renderTrace(result), "trace");
+    else await footnote(errorFooter(result), "error_footer");
+    const ungrounded = looksUngrounded({ text: answer, called: result.called });
+    if (ungrounded) await footnote(UNGROUNDED_FOOTER, "ungrounded_footer");
 
     log.info("ask_answered", {
       routine: routine.key,
@@ -220,6 +237,7 @@ export async function handleAsk(message, routine, { askFn = ask } = {}) {
       rounds: result.rounds,
       stopReason: result.stopReason,
       truncated: result.truncated || undefined,
+      ungrounded: ungrounded || undefined,
       friction: friction?.reason,
     });
 

@@ -210,6 +210,15 @@ budgets, because they look like they work.
   eat each other's notifications. Every routine polls with `mark_seen: false`
   and keeps its own position. On first run each seeds from the newest event
   rather than draining the backlog into your channel.
+- **A routine remembers what it posted.** `recall: 3` hands the model that
+  routine's last three posts, from its own ledger in `state/`, so a daily
+  spotlight can rotate and a movers post does not name the same three players
+  every morning. It is the bot's own output, not game data.
+- **Failed calls are visible under the post.** When a turn's tool calls
+  errored, a one-line footer says which and how many, whether or not the
+  routine shows a trace; a reply that states figures without having called a
+  tool gets a footer saying so. The footers name the server's `request_id`
+  so a screenshot can be joined to the exact call.
 - **Maintainer replies are read on the server's hint.** Every Elixir MCP
   response carries `meta.feedback_responses_pending` (contract 1.0.0), so the
   bot reads `elixir_my_feedback` only when a feed poll says there is something
@@ -236,7 +245,9 @@ prompt assembly, and the ask path end to end. That last one exists because a
 refactor once deleted `LiveMessage` and every static check passed — a missing
 symbol is a runtime `ReferenceError`, and members found out instead.
 
-## Running it as a service (macOS)
+## Running it as a service
+
+**macOS (launchd):**
 
 ```bash
 ./scripts/install-launchd.sh              # install + start at login
@@ -244,12 +255,32 @@ symbol is a runtime `ReferenceError`, and members found out instead.
 tail -f ~/Library/Logs/elixir-mcp-discord/com.poapkings.elixir-mcp-discord.log
 ```
 
-The repo ships a template rather than a plist, because a plist is nothing but
-absolute paths and yours are not these. Three things in it are deliberate:
-`node` is referenced by absolute path (launchd never reads your shell profile);
-`PATH` is set explicitly (launchd hands a job a minimal environment); and
-`ThrottleInterval` is 30 so a job that dies on startup leaves a legible crash
-loop in the log instead of drowning it.
+**Linux (systemd user unit):**
+
+```bash
+./scripts/install-systemd.sh              # install + start
+./scripts/install-systemd.sh uninstall
+journalctl --user -u elixir-mcp-discord -f
+loginctl enable-linger $USER              # keep it running after you log out
+```
+
+**Docker:**
+
+```bash
+docker build -t elixir-mcp-discord .
+docker run -d --name elixir-mcp-discord --restart unless-stopped \
+  --env-file .env -v "$PWD/state:/app/state" -v "$PWD/agent:/app/agent" \
+  elixir-mcp-discord
+```
+
+Both service templates are rendered rather than committed, because a unit file
+is nothing but absolute paths and yours are not these. Three things in them are
+deliberate: `node` is referenced by absolute path (neither launchd nor systemd
+reads your shell profile); the working directory is the checkout so `.env` is
+found; and the restart throttle is 30 seconds so a job that dies on startup
+leaves a legible crash loop in the log instead of drowning it. The container
+mounts `state/` and `agent/` so cursors and budgets survive a replacement and
+a prompt edit needs no rebuild.
 
 ## License
 

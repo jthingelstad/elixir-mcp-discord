@@ -1,6 +1,7 @@
 /**
  * Tiny JSON file store: one event cursor per routine, the scheduled-run
- * ledger, today's measured spend, and the last surface version we saw.
+ * ledger, today's measured spend, each routine's own last few posts, and the
+ * last surface version we saw.
  *
  * This is the only thing that survives a restart, and it is deliberately not
  * game data. Nothing here caches an answer, a roster or a player: every fact
@@ -59,7 +60,16 @@ const DEFAULTS = {
   // a log line rather than a channel quietly reporting on strangers.
   principal: null,
   answeredFeedbackIds: [],
+  // { [routineKey]: [text, ...] } — the last few posts EACH ROUTINE made,
+  // newest first. This is the bot's own output, not game data, and it is the
+  // routine's memory of itself: reading the channel instead gave a daily
+  // spotlight the feed's and the movers' posts as "what I said recently" and
+  // never its own, so it demonstrated rival scouting three days out of five.
+  lastPosts: {},
 };
+
+const LAST_POSTS_KEEP = 10;
+const LAST_POST_CHARS = 700;
 
 function read() {
   try {
@@ -91,6 +101,20 @@ export function cursorFor(routineKey) {
 export function setCursor(routineKey, cursor) {
   const state = read();
   write({ ...state, cursors: { ...state.cursors, [routineKey]: cursor } });
+}
+
+/** Remember what a routine just posted, so its next run can avoid repeating it. */
+export function rememberPost(routineKey, text) {
+  const state = read();
+  const previous = state.lastPosts?.[routineKey] || [];
+  const kept = [String(text).slice(0, LAST_POST_CHARS), ...previous].slice(0, LAST_POSTS_KEEP);
+  write({ ...state, lastPosts: { ...(state.lastPosts || {}), [routineKey]: kept } });
+}
+
+/** A routine's own recent posts, newest first. */
+export function recentOwnPosts(routineKey, count) {
+  if (!count) return [];
+  return (read().lastPosts?.[routineKey] || []).slice(0, count);
 }
 
 export function markRun(routineKey, periodKey) {

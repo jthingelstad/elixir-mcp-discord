@@ -14,11 +14,21 @@
 
 import { ask, spendBlock } from "./claude.js";
 import { laneFor } from "./budget.js";
-import { detectFriction, sweepFriction } from "./feedback.js";
+import { detectFriction, sweepFriction, looksUngrounded } from "./feedback.js";
 import { systemFor, userMessageFor, isSkip } from "./prompt.js";
 import { post, recentPosts } from "./post.js";
-import { renderTrace } from "./trace.js";
+import { renderTrace, errorFooter, UNGROUNDED_FOOTER } from "./trace.js";
 import { log } from "./log.js";
+import * as state from "./state.js";
+
+/** Reply under the last message of a post without pinging anyone; a failure
+ *  to attach a footer must never undo the post. */
+async function footnote(last, content, what) {
+  if (!last || !content) return;
+  await last
+    .reply({ content, allowedMentions: { repliedUser: false } })
+    .catch((error) => log.warn(`${what}_post_failed`, { error: error.message }));
+}
 
 /**
  * @param {object} routine  parsed routine
@@ -46,8 +56,13 @@ export async function runRoutine(
     return { ok: false, error: `budget:${blocked.reason}` };
   }
 
-  const recent =
-    channel && routine.recall ? await recentPosts(channel, routine.recall) : [];
+  // What THIS routine said last, from its own ledger. The channel is the
+  // fallback for a routine that has never posted since the ledger existed —
+  // and a rough one: in a shared channel it hands back other routines' posts.
+  let recent = routine.recall ? state.recentOwnPosts(routine.key, routine.recall) : [];
+  if (recent.length === 0 && channel && routine.recall) {
+    recent = await recentPosts(channel, routine.recall);
+  }
   const result = await askFn({
     system: systemFor(routine),
     messages: [
@@ -84,15 +99,17 @@ export async function runRoutine(
   }
 
   const last = await post(channel, text, routine.maxChars);
-  if (routine.trace && last) {
-    const trace = renderTrace(result, { label: routine.key });
-    if (trace) {
-      await last
-        .reply({ content: trace, allowedMentions: { repliedUser: false } })
-        .catch((error) =>
-          log.warn("trace_post_failed", { error: error.message }),
-        );
-    }
+  state.rememberPost(routine.key, text);
+  if (routine.trace) {
+    await footnote(last, renderTrace(result, { label: routine.key }), "trace");
+  } else {
+    // No trace, but a reader still gets the two caveats that change whether
+    // the numbers above can be trusted.
+    await footnote(last, errorFooter(result), "error_footer");
+  }
+  if (looksUngrounded({ text, called: result.called, events })) {
+    log.warn("routine_ungrounded", { routine: routine.key, turnId: result.turnId });
+    await footnote(last, UNGROUNDED_FOOTER, "ungrounded_footer");
   }
 
   log.info("routine_posted", {

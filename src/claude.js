@@ -73,12 +73,13 @@ function resultText(content) {
  * model that narrated smoothly around the hole. "1 player" and "0 players" read
  * identically in prose and could not be more different.
  */
-function describeShape(body) {
+export function describeShape(body) {
   if (!body || typeof body !== "object") return null;
   const counts = [];
   let sawArray = false;
   for (const [key, value] of Object.entries(body)) {
-    if (key === "meta" || !Array.isArray(value)) continue;
+    // `notes` is the contract's per-call prose (one sentence each), not rows.
+    if (key === "meta" || key === "notes" || !Array.isArray(value)) continue;
     sawArray = true;
     counts.push(`${value.length} ${key}`);
     if (counts.length === 2) break;
@@ -99,6 +100,10 @@ function readEnvelope(body) {
     freshness_seconds: meta.freshness_seconds ?? null,
     completeness_note: meta.completeness_note ?? null,
     contract_version: meta.contract_version ?? null,
+    // Minted per call and stamped into meta (protocol#request_id). It is what
+    // the maintainer opens when a filing names a call, and what the trace
+    // shows so a screenshot of a wrong answer can be joined to the audit row.
+    request_id: meta.request_id ?? null,
   };
 }
 
@@ -147,17 +152,23 @@ function readToolActivity(content, timings) {
       // model would report "linked!" while nothing had been written. Observed
       // 2026-09-08: two elixir_identify calls stored nothing and said they had.
       const failed = block.is_error || Boolean(body?.error);
+      // A refusal keeps its request_id (the response cap says so explicitly),
+      // so an error can be reported by id as well as by message.
+      const requestId = typeof body?.meta?.request_id === "string" ? body.meta.request_id : null;
       if (failed) {
         const detail = (body?.error?.message ?? raw).slice(0, 400);
         // The code is from the contract's closed set (no_subject, invalid_tag,
         // quota_exceeded, ...): the friction sweep decides on it rather than
         // on the English of the message. Null when the failure had no body.
         const code = typeof body?.error?.code === "string" ? body.error.code : null;
-        errors.push({ name, code, detail });
-        trace.push({ kind: "error", name, code, detail });
+        errors.push({ name, code, detail, requestId });
+        trace.push({ kind: "error", name, code, detail, requestId });
         continue;
       }
-      if (step) step.shape = describeShape(body);
+      if (step) {
+        step.shape = describeShape(body);
+        step.requestId = requestId;
+      }
       const envelope = readEnvelope(body);
       if (envelope) envelopes.push({ tool: name, ...envelope });
     }
@@ -344,17 +355,10 @@ export async function ask({
           log.info("client_side_tool_call", { turnId, tool, ok: call.ok });
           if (!call.ok) {
             const code = typeof call.body?.error?.code === "string" ? call.body.error.code : null;
-            errors.push({
-              name: tool,
-              code,
-              detail: String(call.error).slice(0, 400),
-            });
-            trace.push({
-              kind: "error",
-              name: tool,
-              code,
-              detail: String(call.error).slice(0, 400),
-            });
+            const requestId = typeof call.body?.meta?.request_id === "string" ? call.body.meta.request_id : null;
+            const failure = { name: tool, code, detail: String(call.error).slice(0, 400), requestId };
+            errors.push(failure);
+            trace.push({ kind: "error", ...failure });
           }
           results.push({
             type: "tool_result",

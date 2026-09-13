@@ -238,3 +238,87 @@ test("the runner charges the lane the trigger belongs to", async () => {
   assert.equal(seen.routineKey, "war-deck-check");
   assert.equal(seen.maxTokens, 6000, "the routine's own output ceiling");
 });
+
+/**
+ * A routine remembers what IT posted, and reads that back next time — not
+ * whatever the channel happened to hold, which in a shared channel was other
+ * routines' posts and never its own.
+ */
+test("recall comes from the routine's own ledger, newest first", async () => {
+  const fs = await import("node:fs");
+  const state = await import("../src/state.js");
+  fs.rmSync(process.env.STATE_PATH, { force: true });
+  const channel = fakeChannel();
+  const spotlight = routine({ trigger: "schedule", channel: "pulse", at: "17:00", recall: 2 });
+
+  const prompts = [];
+  const run = async (text) =>
+    runRoutine(spotlight, {
+      channel,
+      askFn: async ({ messages }) => {
+        prompts.push(messages[0].content);
+        return answer(text);
+      },
+    });
+  await run("**Rival scouting** — De stichting, 0 fame.");
+  await run("**Meta decks** — Cannon cycle, 87%.");
+  await run("**Card levels** — King Thing +1.2.");
+
+  assert.doesNotMatch(prompts[0], /WHAT THIS ROUTINE POSTED/, "nothing to recall on the first run");
+  assert.match(prompts[1], /Rival scouting/);
+  assert.match(prompts[2], /Meta decks/);
+  assert.match(prompts[2], /Rival scouting/);
+  assert.deepEqual(
+    state.recentOwnPosts("war-deck-check", 5).map((t) => t.slice(0, 6)),
+    ["**Card", "**Meta", "**Riva"],
+    "newest first, only this routine's posts",
+  );
+  fs.rmSync(process.env.STATE_PATH, { force: true });
+});
+
+test("failed calls are visible under a post even without a trace", async () => {
+  // The 2026-09-11 spotlight: pros stats presented after four of eight calls
+  // failed, and the reader saw a confident post. The footer is the guard.
+  const channel = fakeChannel();
+  await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "17:00" }), {
+    channel,
+    askFn: async () =>
+      answer("**Pros run** Barbarian Barrel 51%.", {
+        called: ["war_rivals", "battles_meta_cards", "battles_meta_cards", "battles_meta_cards"],
+        errors: [
+          { name: "battles_meta_cards", code: null, detail: "Connection closed", requestId: "7272147a-206a" },
+          { name: "battles_meta_cards", code: null, detail: "Connection closed", requestId: "7256268f-19c5" },
+        ],
+      }),
+  });
+  const footer = channel.sent[0].replies[0];
+  assert.match(footer, /^-# ⚠️ 2 of 4 tool calls failed: battles_meta_cards ×2/);
+  assert.match(footer, /req 7272147a, 7256268f/);
+});
+
+test("expected error codes do not earn a footer", async () => {
+  const channel = fakeChannel();
+  await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "17:00" }), {
+    channel,
+    askFn: async () =>
+      answer("Who are you?", { called: ["players_summary"], errors: [{ name: "players_summary", code: "no_subject", detail: "Nobody." }] }),
+  });
+  assert.equal(channel.sent[0].replies.length, 0);
+});
+
+test("a post that states figures without a tool call is caveated", async () => {
+  const channel = fakeChannel();
+  await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "17:00" }), {
+    channel,
+    askFn: async () => answer("King Thing is 55-38 this month.", { called: [], trace: [] }),
+  });
+  assert.match(channel.sent[0].replies[0], /No tool was called/);
+  // An event brief written from the feed alone is grounded by the feed.
+  const feed = fakeChannel();
+  await runRoutine(routine({ trigger: "events", channel: "pulse", topics: "member_joined" }), {
+    channel: feed,
+    events: [{ event_id: 9, topic: "member_joined" }],
+    askFn: async () => answer("2 members joined.", { called: [], trace: [] }),
+  });
+  assert.equal(feed.sent[0].replies.length, 0);
+});

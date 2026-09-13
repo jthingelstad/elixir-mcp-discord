@@ -213,3 +213,44 @@ test("a member's question is charged to the ask lane", async () => {
   });
   assert.equal(seen.lane, "ask");
 });
+
+test("the conversation history skips footers, placeholders and pinned notices", async () => {
+  const { isConversational } = await import("../src/ask.js");
+  const bot = (cleanContent, extra = {}) => ({ cleanContent, author: { bot: true }, ...extra });
+  const human = (cleanContent) => ({ cleanContent, author: { bot: false } });
+  assert.equal(isConversational(bot("King Thing is 55-38.")), true);
+  assert.equal(isConversational(bot("-# **How I got there** · `abcd1234`\n> 🔧 `players_search`")), false);
+  assert.equal(isConversational(bot("-# 📮 Filed with Elixir MCP: …")), false);
+  assert.equal(isConversational(bot("-# thinking…")), false);
+  assert.equal(isConversational(bot("**How to use this channel**", { pinned: true })), false);
+  assert.equal(isConversational(human("-# whispering")), true, "a member's small text is still a turn");
+  assert.equal(isConversational(human("")), false);
+});
+
+test("an answer with figures and no tool call is caveated under the reply", async () => {
+  const { message, posted } = fakeMessage("how am I playing?");
+  await handleAsk(message, ROUTINE, {
+    askFn: async () => ({ ...RESULT, text: "Same as above: 55-38, 59.1%.", called: [], trace: [] }),
+  });
+  assert.ok(posted.some((p) => p.text.includes("No tool was called")), "the caveat must be visible");
+});
+
+test("the trace names the request id of a failed call and of the last envelope", () => {
+  const trace = renderTrace({
+    ...RESULT,
+    envelopes: [{ tool: "players_search", as_of: "2026-09-08T00:54:03.893Z", request_id: "dc5ec8de-b919-4934" }],
+    trace: [
+      ...RESULT.trace,
+      { kind: "error", name: "battles_query", code: "bad_request", detail: "inverted window", requestId: "7272147a-206a" },
+    ],
+  });
+  assert.ok(trace.includes("req `dc5ec8de`"), "envelope request id");
+  assert.ok(trace.includes("req `7272147a`"), "failed call request id");
+});
+
+test("the result shape counts rows, not the contract's notes", async () => {
+  const { describeShape } = await import("../src/claude.js");
+  assert.equal(describeShape({ rivals: [1, 2, 3, 4], notes: ["a", "b", "c"], meta: {} }), "4 rivals");
+  assert.equal(describeShape({ notes: ["a"], season_id: 136, meta: {} }), "object");
+  assert.equal(describeShape({ players: [], notes: ["a"] }), "0 players (EMPTY)");
+});

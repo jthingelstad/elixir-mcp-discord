@@ -18,6 +18,10 @@ Drill only where it earns its place. A single join does not need three tool
 calls. If you cannot corroborate something the feed said, report the feed's
 version and say that is what was recorded.
 
+`war_day_open` means the day is open, nothing more. Report the day, the boat
+fame and the standings; do not report deck usage minutes after the reset —
+nobody has played yet, and the evening deck check covers it.
+
 `member_left` is raw: the game's API does not distinguish leaving from being
 kicked, and neither should you. Note the departure; do not narrate a reason.
 

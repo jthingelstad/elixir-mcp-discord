@@ -148,7 +148,13 @@ export const config = {
     }
     return tz;
   })(),
-  eventPollSeconds: Number(optional("EVENT_POLL_SECONDS", "300")),
+  // How often the feed is read. Thirty minutes, not five: every poll is a
+  // metered call against the OWNER's budget, the feed is empty most of the
+  // time, and the hub's own agents page says hourly is plenty. Five minutes
+  // is 288 calls a day for the feed alone — more than half a member's whole
+  // daily allowance — which is fine for an unlimited agent and a bad default
+  // for an example project.
+  eventPollSeconds: Number(optional("EVENT_POLL_SECONDS", "1800")),
 
   // MONTHLY BUDGETS, per lane, in dollars. Unset means unlimited — which is a
   // choice, not a default anybody should arrive at by accident, so the boot
@@ -185,7 +191,7 @@ export const config = {
     ...list("ROUTINES_DISABLED"),
     ...list("SCHEDULE_DISABLED"),
   ]),
-  // Discord ids allowed to run a routine on demand with `!run <key>`.
+  // Discord ids allowed to use the admin slash commands (/run, /routines, /budget).
   adminUserIds: list("ADMIN_USER_IDS"),
   // Logical channel name for maintainer replies to filed feedback. Unset falls
   // back to the first event routine's channel.

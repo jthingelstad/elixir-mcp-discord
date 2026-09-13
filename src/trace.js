@@ -24,13 +24,46 @@
  *                         and routines may each pick their own.
  *   contract fingerprint  when an answer changes shape between two days, this
  *                         says whether the bot saw the old surface or the new.
+ *   request id            the server's own id for the last call (and for each
+ *                         failed one), so a report can name the exact request.
  *
  * Any routine can ask for one with `trace: true`; message routines get it by
  * default, because that is the channel where people are judging the answers
  * rather than reading the news.
  */
 
+import { unexpectedErrors, tallyCalls } from "./feedback.js";
+
 const TRACE_LIMIT = 1900;
+
+const shortId = (id) => (id ? String(id).slice(0, 8) : null);
+
+/**
+ * The one line a reader gets when a post was built on failed calls, whether
+ * or not the routine shows a trace.
+ *
+ * On 2026-09-11 a spotlight presented pros-collection card stats after four of
+ * its eight calls had failed, and the only sign was a sweep note under it
+ * saying "possible fabricated data". The maintainer's reply (#33) asked this
+ * preview to stop publishing a claimed comparison over failed reads. This is
+ * the deterministic half: the failures are visible under every post that had
+ * them. The prompt carries the other half (stop retrying, leave the part out).
+ */
+export function errorFooter(result) {
+  const failed = unexpectedErrors(result.errors);
+  if (failed.length === 0) return null;
+  const total = (result.called || []).length;
+  const ids = failed.map((e) => shortId(e.requestId)).filter(Boolean);
+  const which = tallyCalls(failed.map((e) => `${e.name}${e.code ? ` (${e.code})` : ""}`));
+  return clip(
+    `-# ⚠️ ${failed.length} of ${total} tool calls failed: ${which}${ids.length ? ` · req ${ids.join(", ")}` : ""}. Figures that depended on them may be missing or wrong.`,
+    400,
+  );
+}
+
+/** The caveat under a reply that stated figures without reading anything this turn. */
+export const UNGROUNDED_FOOTER =
+  "-# ⚠️ No tool was called for this reply, so any figures in it are repeated from earlier in the conversation, not re-read.";
 
 export function clip(text, max) {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
@@ -81,7 +114,8 @@ export function renderTrace(result, { label = "How I got there" } = {}) {
       required.push(parts.join(" "));
     } else if (step.kind === "error") {
       const code = step.code ? ` (${step.code})` : "";
-      required.push(`> ⚠️ \`${short(step.name)}\` failed${code}: ${clip(step.detail, 200)}`);
+      const req = step.requestId ? ` · req \`${shortId(step.requestId)}\`` : "";
+      required.push(`> ⚠️ \`${short(step.name)}\` failed${code}: ${clip(step.detail, 200)}${req}`);
     }
   }
 
@@ -91,6 +125,7 @@ export function renderTrace(result, { label = "How I got there" } = {}) {
       envelope.as_of ? `as_of ${envelope.as_of.slice(11, 16)}Z` : null,
       envelope.recorded_since ? `recorded since ${envelope.recorded_since.slice(0, 10)}` : null,
       agoLabel(envelope.freshness_seconds),
+      envelope.request_id ? `req \`${shortId(envelope.request_id)}\`` : null,
     ].filter(Boolean);
     if (bits.length) required.push(`> 📅 ${bits.join(" · ")}`);
   }

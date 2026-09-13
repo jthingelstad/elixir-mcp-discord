@@ -73,7 +73,10 @@ Call elixir_feedback the moment any of these happen:
 Be specific and concrete. "battles_query has no way to filter by game mode, so
 answering 'how do I do in 2v2' meant pulling 200 battles and counting by hand"
 is useful. "Some things are hard" is not. Name the tool in \`context\`, and pick
-the honest \`category\` (bug / data_quality / feature / praise / other).
+the honest \`category\` (bug / data_quality / feature / praise / other). When
+the item is about one call, pass that call's \`request_id\` — every result
+carries it in \`meta.request_id\` — so the maintainer can open the exact
+request rather than guess at it.
 
 File it in the same turn, then answer the member normally. Do not mention the
 filing in your reply unless they asked about it — a short note is appended to
@@ -106,19 +109,68 @@ function looksLikeLimit(text) {
  */
 const EXPECTED_ERROR_CODES = new Set(["no_subject", "quota_exceeded"]);
 
+/** The errors worth a reader's or the maintainer's attention. */
+export function unexpectedErrors(errors) {
+  return (errors || []).filter((e) => !EXPECTED_ERROR_CODES.has(e.code));
+}
+
+/**
+ * How many tool calls in one turn is "noticeably more than it should have
+ * taken". A movers post once made thirteen per-member battles_performance
+ * calls — exactly the friction the prompt asks the agent to file, and it never
+ * did, because nothing on this side counted. Eight is above every routine's
+ * normal run and below that one.
+ */
+export const MANY_CALLS = 8;
+
 function describeError(e) {
-  return `${e.name}${e.code ? ` [${e.code}]` : ""}: ${e.detail}`;
+  const req = e.requestId ? ` req ${String(e.requestId).slice(0, 8)}` : "";
+  return `${e.name}${e.code ? ` [${e.code}]` : ""}${req}: ${e.detail}`;
+}
+
+/** Tool names with their call counts, busiest first: "battles_performance ×13, clans_roster ×1". */
+export function tallyCalls(called) {
+  const counts = new Map();
+  for (const name of called || []) counts.set(name, (counts.get(name) || 0) + 1);
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, n]) => (n > 1 ? `${name} ×${n}` : name))
+    .join(", ");
+}
+
+/**
+ * Did this reply state figures without reading anything this turn?
+ *
+ * "How am I playing?" was once answered from the previous exchange with zero
+ * tool calls, which breaks the one rule every prompt layer carries. Events
+ * handed to a routine are a legitimate source, so a brief written from the
+ * feed alone is not ungrounded. Digits are the cheapest proxy for "a figure"
+ * and over-include a little (dates, "2v2"); the cost of a false positive is
+ * one small-text caveat.
+ */
+export function looksUngrounded({ text, called, events }) {
+  if ((called || []).length > 0) return false;
+  if (events?.length) return false;
+  return /\d/.test(text || "");
 }
 
 /** Did this turn hit friction worth a second look? */
 export function detectFriction({ text, called, errors }) {
   if (calledFeedback(called)) return null;
-  const unexpected = (errors || []).filter((e) => !EXPECTED_ERROR_CODES.has(e.code));
+  const unexpected = unexpectedErrors(errors);
   if (unexpected.length > 0) {
     return {
       reason: "tool_error",
       codes: unexpected.map((e) => e.code).filter(Boolean),
+      requestIds: unexpected.map((e) => e.requestId).filter(Boolean),
       detail: unexpected.map(describeError).join(" | "),
+    };
+  }
+  if ((called || []).length >= MANY_CALLS) {
+    return {
+      reason: "many_calls",
+      count: called.length,
+      detail: tallyCalls(called),
     };
   }
   if (looksLikeLimit(text)) {
@@ -158,8 +210,14 @@ characters), or exactly NONE if you filed nothing.`;
 
   const detected =
     friction.reason === "tool_error"
-      ? `A tool returned an error: ${friction.detail}`
-      : `The agent conceded a limit in its answer.`;
+      ? `A tool returned an error: ${friction.detail}${
+          friction.requestIds?.length
+            ? `\nPass the request_id of the failing call when you file: ${friction.requestIds.join(", ")}`
+            : ""
+        }`
+      : friction.reason === "many_calls"
+        ? `The turn took ${friction.count} tool calls (${friction.detail}). Was there a tool or an argument that would have answered in fewer, and if not, what is missing?`
+        : `The agent conceded a limit in its answer.`;
 
   const result = await ask({
     system,

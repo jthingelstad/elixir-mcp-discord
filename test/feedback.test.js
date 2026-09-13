@@ -66,3 +66,31 @@ test("the feedback ledger is read on the hint, always on the seeding run, and wh
   assert.equal(shouldReadFeedback({ seeded: true, pending: undefined }), true, "pre-1.0.0 feed envelope");
   assert.equal(shouldReadFeedback({ seeded: true, pending: null }), true);
 });
+
+test("a turn that took many calls is friction, tallied by tool", () => {
+  // Thirteen per-member battles_performance calls in one movers post never
+  // filed anything: no error, no conceded limit, and nothing counted.
+  const called = ["clans_roster", ...Array(12).fill("battles_performance")];
+  const friction = detectFriction({ text: "Three standouts.", called, errors: [] });
+  assert.equal(friction.reason, "many_calls");
+  assert.equal(friction.count, 13);
+  assert.match(friction.detail, /^battles_performance ×12, clans_roster$/);
+  // Seven is a busy turn, not a complaint.
+  assert.equal(detectFriction({ text: "ok", called: Array(7).fill("x"), errors: [] }), null);
+});
+
+test("a failed call's request_id rides into the sweep", () => {
+  const friction = detectFriction(
+    turn([{ name: "battles_meta_cards", code: null, detail: "Connection closed", requestId: "dc5ec8de-b919-4934-97af-4dd95433a4ff" }]),
+  );
+  assert.deepEqual(friction.requestIds, ["dc5ec8de-b919-4934-97af-4dd95433a4ff"]);
+  assert.match(friction.detail, /req dc5ec8de/);
+});
+
+test("figures with no tool call are ungrounded, unless the feed supplied them", async () => {
+  const { looksUngrounded } = await import("../src/feedback.js");
+  assert.equal(looksUngrounded({ text: "You are 55-38 this month.", called: [] }), true);
+  assert.equal(looksUngrounded({ text: "You are 55-38 this month.", called: ["players_summary"] }), false);
+  assert.equal(looksUngrounded({ text: "Two members joined.", called: [], events: [{ event_id: 1 }] }), false);
+  assert.equal(looksUngrounded({ text: "Which player are you?", called: [] }), false, "no figures, no problem");
+});
