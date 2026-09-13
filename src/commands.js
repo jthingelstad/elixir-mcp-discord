@@ -125,7 +125,7 @@ export function routinesReply(routines = loadRoutines().routines) {
           : r.trigger === "events"
             ? r.topics.join(", ")
             : "on message";
-      return `${r.disabled ? "○" : "●"} \`${r.key}\` — ${r.trigger} → #${r.channel} · ${when} · ${r.model}`;
+      return `${r.disabled ? "○" : "●"} \`${r.key}\` — ${r.trigger} → #${r.channel} · ${when} · ${r.model}${r.description ? `\n-# ${r.description}` : ""}`;
     })
     .join("\n");
 }

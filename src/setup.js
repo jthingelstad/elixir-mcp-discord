@@ -1,25 +1,29 @@
 /**
  * `npm run setup -- <instance-dir>` — stand up one bot, end to end, with every
- * credential checked against the service it is for before it is written down.
+ * credential tried against its service before it is written down, and every
+ * choice about what the bot does made in the open.
  *
  *   npm run setup -- ~/.elixir-mcp-discord/shipit          guided, re-runnable
  *   npm run setup -- ~/.elixir-mcp-discord/shipit --check  no prompts: validate
- *                                                          the .env that is there
+ *                                                          what is there
  *
- * One bot is three API credentials and a Discord application, and each of the
- * four fails in its own unhelpful way: a wrong Elixir key is "http 401" at
- * 01:00, a personal key instead of an agent key answers as a person, a Claude
- * key for the wrong workspace is a 401 on the first question a member asks,
- * an application without the Message Content intent dies at login with "Used
- * disallowed intents", a bot that was never invited is "channel unresolvable",
- * and a channel the bot's role cannot see is a routine that spends a model
- * call and posts nothing. Doing three of these at once for three clans is
- * where a pasted id lands one channel off. So this asks for each value, tries
- * it, explains what is wrong with the fix beside it, and waits while you make
- * the change — then writes the .env only when it has seen every piece work.
+ * One bot is three API credentials, a Discord application, a handful of
+ * routines with a schedule, two channels, a voice and a budget. Each piece
+ * fails in its own unhelpful way at its own later moment: a wrong Elixir key
+ * is "http 401" at 01:00, a personal key answers as a person, a Claude key
+ * for the wrong workspace is a 401 on a member's first question, an
+ * application without the Message Content intent dies at login with "Used
+ * disallowed intents", a bot never invited is "channel unresolvable", a
+ * channel the role cannot see is a routine that spends a model call and
+ * posts nothing, and a schedule written for another timezone posts at 4am.
+ * Doing all of it for three clans is where a pasted id lands one channel
+ * off. So this asks for each thing, tries it, explains what is wrong with the
+ * fix beside it, waits while you make the change, and writes the instance
+ * only when it has seen every piece work.
  *
- * Re-running it on an existing instance keeps every value on Enter, so it is
- * also how you rotate one key or move one channel.
+ * Re-running keeps every value on Enter, so it is also how you rotate one key,
+ * move one channel, add a routine or change a time. It never overwrites or
+ * deletes a routine file the instance already has: those are the operator's.
  *
  * It deliberately does not import src/config.js's validated sections: those
  * read the CURRENT working directory, and setup is about a directory that may
@@ -27,7 +31,9 @@
  */
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import readline from "node:readline/promises";
 import { Writable } from "node:stream";
@@ -37,11 +43,21 @@ import { initialize, describePrincipal } from "./mcp.js";
 import { loadRoutines } from "./routines.js";
 import { priceBook } from "./pricing.js";
 import { requirementsFor, inspectChannel } from "./permissions.js";
-import { inspectDiscord, permissionsIn, channelLike, inviteUrl } from "./discord-rest.js";
+import { inspectDiscord, permissionsIn, channelLike, inviteUrl, memberOf } from "./discord-rest.js";
 import { channelEnvName } from "./config.js";
 import { renderEnv } from "./env-file.js";
+import {
+  catalog,
+  installRoutines,
+  disabledAfter,
+  rewriteAt,
+  estimateMonthly,
+  describeWhen,
+  withClanSection,
+} from "./setup-catalog.js";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const exampleDir = path.join(repoRoot, "agent");
 
 // --- arguments ---------------------------------------------------------------
 
@@ -66,6 +82,7 @@ const fail = (problem) => {
   if (problem.fix) for (const line of problem.fix.split("\n")) console.log(`      fix: ${line}`);
 };
 const heading = (title) => console.log(`\n== ${title}`);
+const money = (n) => `$${Number(n).toFixed(2)}`;
 
 // --- prompts -----------------------------------------------------------------
 
@@ -95,6 +112,11 @@ async function ask(question, { fallback = "", secret = false } = {}) {
   return answer || fallback;
 }
 
+async function yesNo(question, fallback = false) {
+  const answer = (await ask(question, { fallback: fallback ? "y" : "n" })).toLowerCase();
+  return answer.startsWith("y");
+}
+
 /** Run `attempt` until it reports no problems. Interactively, every failure
  *  is followed by a chance to fix it and try again; `skip` moves on with the
  *  problems left standing. */
@@ -109,37 +131,58 @@ async function untilOk(attempt) {
   }
 }
 
-// --- the instance directory --------------------------------------------------
+/** A checklist: numbers toggle, `all` / `none`, Enter accepts. */
+async function chooseMany(items, chosen) {
+  for (;;) {
+    items.forEach((item, index) => {
+      const mark = chosen.has(item.key) ? "x" : " ";
+      note(`[${mark}] ${String(index + 1).padStart(2)}. ${item.label}`);
+      if (item.detail) note(`         ${item.detail}`);
+    });
+    const answer = await ask("Toggle by number (e.g. 3 5), 'all', 'none', or Enter to accept");
+    if (!answer) return chosen;
+    if (answer === "all") items.forEach((item) => chosen.add(item.key));
+    else if (answer === "none") chosen.clear();
+    else {
+      for (const token of answer.split(/[\s,]+/).filter(Boolean)) {
+        const item = items[Number(token) - 1];
+        if (!item) {
+          fail({ detail: `${token} is not on the list` });
+          continue;
+        }
+        if (chosen.has(item.key)) chosen.delete(item.key);
+        else chosen.add(item.key);
+      }
+    }
+    console.log();
+  }
+}
+
+// --- 1. the instance directory -------------------------------------------------
 
 heading(`instance ${instanceDir}`);
 fs.mkdirSync(path.join(instanceDir, "state"), { recursive: true });
-if (!fs.existsSync(path.join(agentDir, "routines"))) {
-  if (checkOnly) {
-    fail({ detail: `${agentDir} has no routines`, fix: `cp -R ${path.join(repoRoot, "agent")} ${agentDir}` });
-    process.exit(1);
+fs.mkdirSync(path.join(agentDir, "routines"), { recursive: true });
+for (const file of ["identity.md", "models.json"]) {
+  if (!fs.existsSync(path.join(agentDir, file))) {
+    if (checkOnly) fail({ detail: `${agentDir} has no ${file}`, fix: `cp ${path.join(exampleDir, file)} ${agentDir}/` });
+    else fs.copyFileSync(path.join(exampleDir, file), path.join(agentDir, file));
   }
-  fs.cpSync(path.join(repoRoot, "agent"), agentDir, { recursive: true });
-  ok(`copied the example prompts to ${agentDir} — rewrite identity.md for this clan`);
-} else {
-  ok(`prompts in ${agentDir}`);
 }
+ok(`agent directory ${agentDir}`);
 
 const env = fs.existsSync(envFile) ? dotenv.parse(fs.readFileSync(envFile, "utf8")) : {};
 note(fs.existsSync(envFile) ? `existing .env loaded; Enter keeps each current value` : `no .env yet; one will be written at the end`);
 
-const { routines, errors } = loadRoutines({ dir: agentDir });
-for (const failure of errors) fail({ detail: `routine ${failure.key}: ${failure.error}` });
-const requirements = requirementsFor(routines, { feedbackChannel: env.FEEDBACK_CHANNEL || null });
-ok(`${routines.length} routines need channels: ${requirements.map((r) => r.name).join(", ")}`);
-
 const values = { ...env };
 const unresolved = [];
 
-// --- Elixir MCP ----------------------------------------------------------------
+// --- 2. Elixir MCP ----------------------------------------------------------------
 
 heading("Elixir MCP (the agent's door)");
 note("Create the agent at https://elixir.poapkings.com > Account > Agents. The URL");
 note("and key are shown together, once; the key is stored only as a hash.");
+let clanName = null;
 const elixirOk = await untilOk(async () => {
   values.ELIXIR_MCP_URL = await ask("Agent URL", { fallback: values.ELIXIR_MCP_URL });
   values.ELIXIR_MCP_TOKEN = await ask("Agent key", { fallback: values.ELIXIR_MCP_TOKEN, secret: true });
@@ -172,11 +215,12 @@ const elixirOk = await untilOk(async () => {
   if (principal?.kind === "agent" && !principal.subject) {
     return [{ detail: "this agent has no clan", fix: "an agent acts for a clan; set one on the agent in Elixir" }];
   }
+  clanName = principal?.subject?.name ?? null;
   return [];
 });
 if (!elixirOk) unresolved.push("Elixir MCP");
 
-// --- Claude --------------------------------------------------------------------
+// --- 3. Claude --------------------------------------------------------------------
 
 heading("Claude");
 note("One key per bot, ideally from its own Workspace at console.anthropic.com so");
@@ -202,9 +246,7 @@ const claudeOk = await untilOk(async () => {
     return [{ detail: `Claude API: ${error.message}`, fix: "retry; if it persists, check the key's workspace is active" }];
   }
   // Priced, or the budgets are decoration — the same rule as boot.
-  const book = priceBook({ dir: agentDir, reload: true });
-  const rate = book[values.CLAUDE_MODEL];
-  const perRoutine = routines.filter((r) => r.model && r.model !== values.CLAUDE_MODEL && !book[r.model]);
+  const rate = priceBook({ dir: agentDir, reload: true })[values.CLAUDE_MODEL];
   if (!rate) {
     return [{
       detail: `${values.CLAUDE_MODEL} has no price in ${path.join(agentDir, "models.json")}`,
@@ -212,17 +254,11 @@ const claudeOk = await untilOk(async () => {
     }];
   }
   ok(`priced at $${rate.input}/M in, $${rate.output}/M out`);
-  if (perRoutine.length) {
-    return [{
-      detail: `routines name unpriced models: ${perRoutine.map((r) => `${r.key} → ${r.model}`).join(", ")}`,
-      fix: `add them to ${path.join(agentDir, "models.json")} or change the routine's model`,
-    }];
-  }
   return [];
 });
 if (!claudeOk) unresolved.push("Claude");
 
-// --- Discord -------------------------------------------------------------------
+// --- 4. Discord -------------------------------------------------------------------
 
 heading("Discord (this bot's own application)");
 note("Developer Portal > New Application > Bot: copy the token. The Application ID");
@@ -241,7 +277,7 @@ const discordOk = await untilOk(async () => {
     appId: values.DISCORD_APP_ID || null,
     guildId: values.DISCORD_GUILD_ID,
   });
-  if (inspected.user) ok(`token is ${inspected.user.username}#${inspected.user.discriminator} (${inspected.user.id})`);
+  if (inspected.user) ok(`token is ${inspected.user.username} (${inspected.user.id})`);
   if (inspected.application) {
     ok(`application ${inspected.application.name} (${inspected.application.id})`);
     if (!values.DISCORD_APP_ID) values.DISCORD_APP_ID = inspected.application.id;
@@ -251,9 +287,80 @@ const discordOk = await untilOk(async () => {
 });
 if (!discordOk) unresolved.push("Discord application");
 
-// --- Channels ------------------------------------------------------------------
+// --- 5. Routines ------------------------------------------------------------------
+
+heading("Routines (what this bot does)");
+const entries = catalog({ exampleDir, instanceDir: agentDir });
+for (const entry of entries.filter((e) => e.error)) fail({ detail: `${entry.key}: ${entry.error}` });
+const usable = entries.filter((e) => e.routine);
+const previouslyDisabled = new Set((values.ROUTINES_DISABLED || "").split(",").map((k) => k.trim()).filter(Boolean));
+const chosen = new Set(
+  usable
+    .filter((e) => (e.installed ? !previouslyDisabled.has(e.key) : !fs.existsSync(envFile)))
+    .map((e) => e.key),
+);
+if (interactive) {
+  note("Each routine is one file in agent/routines; pick the ones this clan wants.");
+  note("A file already in the instance is never overwritten — rewrite it freely.");
+  console.log();
+  await chooseMany(
+    usable.map((e) => ({
+      key: e.key,
+      label: `${e.key}${e.custom ? " (yours)" : ""} — ${e.routine.trigger} → ${e.routine.channel} · ${describeWhen(e.routine)}`,
+      detail: e.routine.description,
+    })),
+    chosen,
+  );
+}
+const installedKeys = usable.filter((e) => e.installed).map((e) => e.key);
+if (!checkOnly) {
+  const shipped = [...chosen].filter((key) => usable.find((e) => e.key === key && !e.custom));
+  const { copied, kept } = installRoutines({ exampleDir, instanceDir: agentDir, keys: shipped });
+  if (copied.length) ok(`added ${copied.join(", ")}`);
+  if (kept.length) ok(`kept your copies of ${kept.join(", ")}`);
+  const disabled = disabledAfter({ previous: values.ROUTINES_DISABLED, installedKeys, chosenKeys: [...chosen] });
+  if (disabled) {
+    values.ROUTINES_DISABLED = disabled;
+    note(`off (still available to /run): ${disabled}`);
+  } else {
+    delete values.ROUTINES_DISABLED;
+  }
+}
+if (chosen.size === 0) fail({ detail: "no routines chosen", fix: "the bot would connect and do nothing" });
+
+// --- 6. Schedule ------------------------------------------------------------------
+
+heading("Schedule");
+values.TIMEZONE = await ask("Timezone the times below are written in", { fallback: values.TIMEZONE || "UTC" });
+try {
+  new Intl.DateTimeFormat("en-US", { timeZone: values.TIMEZONE });
+} catch {
+  fail({ detail: `${values.TIMEZONE} is not an IANA timezone`, fix: "e.g. America/Chicago; using UTC" });
+  values.TIMEZONE = "UTC";
+}
+const active = loadRoutines({ dir: agentDir }).routines.filter(
+  (r) => chosen.has(r.key),
+);
+for (const routine of active.filter((r) => r.trigger === "schedule")) {
+  const current = describeWhen(routine).split(" at ")[1];
+  const answer = await ask(`${routine.key} · ${describeWhen(routine)} ${values.TIMEZONE} · run at`, { fallback: current });
+  if (answer === current) continue;
+  const file = path.join(agentDir, "routines", `${routine.key}.md`);
+  try {
+    fs.writeFileSync(file, rewriteAt(fs.readFileSync(file, "utf8"), answer));
+    ok(`${routine.key} now runs at ${answer}`);
+  } catch (error) {
+    fail({ detail: `${routine.key}: ${error.message}`, fix: "HH:MM, 24-hour; left as it was" });
+  }
+}
+const routines = loadRoutines({ dir: agentDir }).routines.filter((r) => chosen.has(r.key));
+ok(`${routines.length} routines active`);
+
+// --- 7. Channels ------------------------------------------------------------------
 
 heading("Channels");
+const requirements = requirementsFor(routines, { feedbackChannel: values.FEEDBACK_CHANNEL || null });
+note(`the routines chosen need: ${requirements.map((r) => r.name).join(", ")}`);
 if (!inspected?.guild) {
   note("skipped: the bot is not in the server yet, so nothing can be checked.");
   if (values.DISCORD_APP_ID && values.DISCORD_GUILD_ID) note(`invite: ${inviteUrl(values.DISCORD_APP_ID, values.DISCORD_GUILD_ID)}`);
@@ -262,7 +369,7 @@ if (!inspected?.guild) {
   const botRole = inspected.roles.find((role) => role.tags?.bot_id === inspected.user.id);
   const roleName = botRole ? `the "${botRole.name}" role` : "the bot's role";
   if (interactive) {
-    note("text channels in this server:");
+    note("text channels in this server (create one in Discord first if it is missing):");
     inspected.channels.forEach((channel, index) => note(`  ${String(index + 1).padStart(2)}. #${channel.name}  (${channel.id})`));
   }
   for (const requirement of requirements) {
@@ -299,43 +406,129 @@ if (!inspected?.guild) {
   }
 }
 
-// --- Settings ------------------------------------------------------------------
+// --- 8. Identity ------------------------------------------------------------------
 
-heading("Settings");
+heading("Identity (how this bot speaks)");
+const identityFile = path.join(agentDir, "identity.md");
+const identity = fs.readFileSync(identityFile, "utf8");
+if (identity.includes("## About this clan")) {
+  ok(`${identityFile} already has its clan section; edit the file directly to change it`);
+} else if (checkOnly) {
+  note(`${identityFile} has no clan section yet`);
+} else {
+  note("identity.md is prepended to every prompt: voice, boundaries, what it is for.");
+  note("The shipped version is plain on purpose. Add anything this clan's bot should");
+  note("know or do differently — a sentence or two is plenty, Enter for none.");
+  const notes = await ask("Notes for this clan");
+  const updated = withClanSection(identity, { clanName: clanName ?? "this clan", notes });
+  if (updated) {
+    fs.writeFileSync(identityFile, updated);
+    ok(`added "About this clan" to ${identityFile}`);
+  }
+}
+
+// --- 9. Money, polling, admins ----------------------------------------------------
+
+heading("Budgets");
+const estimate = estimateMonthly(routines);
+for (const line of estimate.lines) note(`${line.key.padEnd(22)} ~${String(line.runs).padStart(3)} posts/month  ~${money(line.usd)}`);
+note(`≈ ${money(estimate.usd)}/month at ~${money(estimate.perPostUsd)} a post — a starting point, not a forecast.`);
+note("Budgets are strict: a lane stops BEFORE a turn that could cross the line.");
+const suggested = Math.max(5, Math.ceil(estimate.usd * 2)).toFixed(2);
+values.MONTHLY_BUDGET_USD = await ask("Monthly budget for schedules and events, USD", { fallback: values.MONTHLY_BUDGET_USD || suggested });
+values.ASK_MONTHLY_BUDGET_USD = await ask("Monthly budget for member questions, USD", { fallback: values.ASK_MONTHLY_BUDGET_USD || "10.00" });
+
+heading("Polling and commands");
+note("Every feed poll is a metered call; 1800 s is the hub's own advice, 300 s posts");
+note("joins within minutes.");
+values.EVENT_POLL_SECONDS = await ask("Feed poll interval, seconds", { fallback: values.EVENT_POLL_SECONDS || "1800" });
 values.COMMAND_PREFIX = (await ask("Slash-command prefix (e.g. pk → /pk-run; blank for /run)", { fallback: values.COMMAND_PREFIX ?? "" }))
   .toLowerCase()
   .replace(/[^a-z0-9_-]+/g, "");
-values.TIMEZONE = await ask("Timezone for schedules", { fallback: values.TIMEZONE || "UTC" });
-try {
-  new Intl.DateTimeFormat("en-US", { timeZone: values.TIMEZONE });
-} catch {
-  fail({ detail: `${values.TIMEZONE} is not an IANA timezone`, fix: "e.g. America/Chicago; falling back to UTC" });
-  values.TIMEZONE = "UTC";
-}
-values.MONTHLY_BUDGET_USD = await ask("Monthly budget for schedules and events, USD", { fallback: values.MONTHLY_BUDGET_USD || "20.00" });
-values.ASK_MONTHLY_BUDGET_USD = await ask("Monthly budget for member questions, USD", { fallback: values.ASK_MONTHLY_BUDGET_USD || "10.00" });
-values.EVENT_POLL_SECONDS = await ask("Feed poll interval, seconds", { fallback: values.EVENT_POLL_SECONDS || "1800" });
-values.ADMIN_USER_IDS = await ask("Discord user ids allowed to use the admin commands (comma-separated)", { fallback: values.ADMIN_USER_IDS || "" });
-if (!values.ADMIN_USER_IDS) fail({ detail: "no admin user ids", fix: "without ADMIN_USER_IDS nobody can use /run, /budget or /routines" });
 
-// --- Write ---------------------------------------------------------------------
+heading("Admins (who may use /run, /budget, /routines)");
+note("Discord user ids: Settings > Advanced > Developer Mode, then right-click a");
+note("name > Copy User ID. Every command spends money, so this is an allow-list.");
+const adminsOk = await untilOk(async () => {
+  values.ADMIN_USER_IDS = await ask("Admin user ids (comma-separated)", { fallback: values.ADMIN_USER_IDS || "" });
+  const ids = values.ADMIN_USER_IDS.split(",").map((id) => id.trim()).filter(Boolean);
+  if (ids.length === 0) return [{ detail: "no admin user ids", fix: "without ADMIN_USER_IDS nobody can use the commands" }];
+  if (!inspected?.guild) {
+    note("cannot check them against the server until the bot is in it");
+    return [];
+  }
+  const problems = [];
+  for (const id of ids) {
+    const member = await memberOf({ token: values.DISCORD_BOT_TOKEN, guildId: values.DISCORD_GUILD_ID, userId: id });
+    if (member) ok(`${id} is ${member.user.username}${member.nick ? ` (${member.nick})` : ""}`);
+    else problems.push({ detail: `${id} is not a member of ${inspected.guild.name}`, fix: "copy the USER id, not a channel or role id" });
+  }
+  return problems;
+});
+if (!adminsOk) unresolved.push("admins");
 
-if (!checkOnly) {
+// --- 10. Write ----------------------------------------------------------------------
+
+heading("write");
+if (checkOnly) {
+  note("--check: nothing written");
+} else {
   fs.writeFileSync(envFile, renderEnv({ values, instanceDir }), { mode: 0o600 });
   fs.chmodSync(envFile, 0o600);
   ok(`wrote ${envFile}`);
 }
 
-// --- Summary -------------------------------------------------------------------
+// --- 11. Summary ------------------------------------------------------------------
 
-heading("summary");
-if (unresolved.length === 0) {
-  ok("everything checked out");
-  if (!checkOnly) {
-    note(`next:  ./scripts/instance.sh ${instanceDir} probe`);
-    note(`       ./scripts/install-launchd.sh ${instanceDir}`);
-  }
-} else {
+heading(`summary${clanName ? ` — ${clanName}` : ""}`);
+const channelName = (logical) => {
+  const id = values[channelEnvName(logical)];
+  const raw = inspected?.channels.find((c) => c.id === id);
+  return raw ? `#${raw.name}` : id ? `#${id}` : "(unbound)";
+};
+for (const routine of routines) {
+  note(`${routine.key.padEnd(22)} ${describeWhen(routine).padEnd(34)} → ${channelName(routine.channel)}`);
+}
+if (values.ROUTINES_DISABLED) note(`off: ${values.ROUTINES_DISABLED}`);
+note(`commands: /${values.COMMAND_PREFIX ? `${values.COMMAND_PREFIX}-` : ""}run, -budget, -routines · admins: ${values.ADMIN_USER_IDS}`);
+note(`budgets: ${money(values.MONTHLY_BUDGET_USD)} routines + ${money(values.ASK_MONTHLY_BUDGET_USD)} ask per month · schedule in ${values.TIMEZONE}`);
+
+if (unresolved.length > 0) {
   fail({ detail: `still unresolved: ${unresolved.join(", ")}`, fix: `run this again when fixed: npm run setup -- ${instanceDir}` });
   process.exit(1);
+}
+ok("everything checked out");
+
+// --- 12. Run it -------------------------------------------------------------------
+
+if (interactive) {
+  heading("run it");
+  const installer = os.platform() === "darwin" ? "install-launchd.sh" : os.platform() === "linux" ? "install-systemd.sh" : null;
+  if (!installer) {
+    note(`start it with: ./scripts/instance.sh ${instanceDir} start`);
+  } else if (await yesNo(`Install and start it now as a service (${installer})?`, true)) {
+    const label = `com.poapkings.elixir-mcp-discord.${path.basename(instanceDir)}`;
+    const logFile = path.join(os.homedir(), "Library", "Logs", "elixir-mcp-discord", `${label}.log`);
+    const before = fs.existsSync(logFile) ? fs.statSync(logFile).size : 0;
+    const run = spawnSync("bash", [path.join(repoRoot, "scripts", installer), instanceDir], { stdio: "inherit" });
+    if (run.status !== 0) {
+      fail({ detail: `${installer} exited ${run.status}` });
+    } else if (os.platform() === "darwin") {
+      note("waiting for the boot log…");
+      await new Promise((resolve) => setTimeout(resolve, 12_000));
+      const text = fs.existsSync(logFile) ? fs.readFileSync(logFile, "utf8").slice(before) : "";
+      const lines = text
+        .split("\n")
+        .filter((line) => /\b(instance|mcp_connected|not_an_agent|channel_ok|channel_unusable|channels_ok|channels_unusable|commands_registered|scheduler_started|ERROR)\b/.test(line));
+      if (lines.length === 0) note(`nothing in ${logFile} yet — tail it`);
+      for (const line of lines) note(line.length > 200 ? `${line.slice(0, 200)}…` : line);
+      note(`log: ${logFile}`);
+    } else {
+      note(`journalctl --user -u elixir-mcp-discord-${path.basename(instanceDir)} -f`);
+    }
+  } else {
+    note(`later: ./scripts/${installer} ${instanceDir}`);
+  }
+} else if (!checkOnly) {
+  note(`next: ./scripts/install-launchd.sh ${instanceDir}`);
 }

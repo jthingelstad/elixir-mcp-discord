@@ -34,6 +34,9 @@ const TRIGGERS = new Set(["message", "events", "schedule"]);
 const FIELDS = new Set([
   "trigger",
   "channel",
+  // One line for a human choosing routines: setup's picker and /routines
+  // show it. Never sent to the model.
+  "description",
   "enabled",
   "at",
   "days",
@@ -115,6 +118,7 @@ export function parseRoutine(key, text) {
     key,
     trigger,
     channel: fields.channel.toLowerCase(),
+    description: fields.description || "",
     prompt: body,
     enabled:
       fields.enabled === undefined

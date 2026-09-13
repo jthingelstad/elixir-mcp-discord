@@ -33,6 +33,7 @@ A routine is one markdown file:
 
 ```markdown
 ---
+description: Midday note on up to three players whose day stood out
 trigger: schedule
 channel: pulse
 at: 12:30
@@ -279,26 +280,36 @@ npm run setup -- ~/.elixir-mcp-discord/kings          # guided; creates the dire
 ./scripts/install-launchd.sh ~/.elixir-mcp-discord/kings
 ```
 
-`npm run setup` asks for each of the three credentials and the Discord
-application, and **tries every one before writing it down**: the Elixir key
-must open an agent door with a clan; the Claude key must return the model you
-chose, and the model must have a price; the Discord token must belong to the
-application id you gave, with the Message Content intent switched on, in the
-server you named — and if the bot is not in the server yet it prints the
-invite link, with both scopes and exactly the permissions the lanes need, and
-waits while you use it. Then it lists the server's text channels, asks which
-one each routine posts to, and checks the bot's actual permissions there
-(including thread permissions for an ask channel), naming what to grant and
-where. Every failure comes with its fix and a chance to retry; `skip` moves
-on. Re-running it on an existing instance keeps every value on Enter, so it
-is also how you rotate one key or move one channel. `--check` runs the same
-validation with no prompts.
+`npm run setup` is the whole process for one bot, in order, with every step
+tried before anything is written:
 
-Each instance's prompts are its own — that is how a clan decides how its
-agent engages — so `agent/` is copied, not shared. `npm run …` always changes
-into the checkout, which is the wrong directory for an instance; `scripts/instance.sh`
-runs the same commands from the right one, and the boot log's `instance`
-line says which `.env`, `agent/` and `state/` a process actually read.
+1. **Elixir** — the key must open an *agent* door with a clan.
+2. **Claude** — the key must return the model you chose, and the model must
+   have a price.
+3. **Discord** — the token must belong to the application id you gave, with
+   the Message Content intent on, in the server you named. Not invited yet?
+   It prints the invite link with both scopes and exactly the permission bits
+   the lanes need, and waits.
+4. **Routines** — a checklist of everything in `agent/routines`, each with
+   its one-line `description`. Chosen files are copied into the instance; a
+   file already there is **never overwritten** (that rewrite is yours), and
+   one chosen off goes to `ROUTINES_DISABLED` rather than being deleted.
+5. **Schedule** — your timezone, then each scheduled routine's time, written
+   back into the instance's copy.
+6. **Channels** — lists the server's text channels, asks which one each
+   routine posts to, and checks the bot's effective permissions there
+   (including thread permissions for an ask channel), naming what to grant.
+7. **Identity** — a sentence or two about this clan, appended to
+   `identity.md` under its own heading; after that the file is yours.
+8. **Budgets** — an estimate from the routines you chose, then the two pots.
+9. **Admins** — each user id checked to be a member of the server.
+10. Writes `.env`, prints what runs where and when, and offers to install and
+    start the service, showing the boot check's lines from the log.
+
+Every failure comes with its fix and a chance to retry; `skip` moves on.
+Re-running keeps every value on Enter, so it is also how you rotate one key,
+move one channel, add a routine or change a time. `--check` runs the same
+validation with no prompts and writes nothing.
 
 Slash commands are registered per Discord application, so three bots in one
 server each bring a `/run` and Discord tells them apart only by avatar. Set

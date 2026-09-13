@@ -1,4 +1,5 @@
 ---
+description: Daily demo of one thing Elixir MCP can do that the clan may not know about
 trigger: schedule
 channel: pulse
 at: 17:00

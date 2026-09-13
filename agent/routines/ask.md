@@ -1,4 +1,5 @@
 ---
+description: Answers members' questions about recorded history, in a thread per question
 trigger: message
 channel: ask
 history_turns: 8

@@ -191,3 +191,16 @@ export function permissionsIn(inspected, rawChannel) {
     botId: inspected.user.id,
   });
 }
+
+/** One member of the guild by user id, or null if they are not in it. Used to
+ *  check that an admin id is a real person in this server, not a channel id
+ *  pasted into the wrong box. */
+export async function memberOf({ token, guildId, userId }) {
+  const rest = new REST().setToken(token);
+  try {
+    return await rest.get(Routes.guildMember(guildId, userId));
+  } catch (error) {
+    if (status(error) === 404 || status(error) === 400) return null;
+    throw error;
+  }
+}

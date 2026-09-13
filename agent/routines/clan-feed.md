@@ -1,4 +1,5 @@
 ---
+description: Posts joins, departures, role changes, war days and the daily pulse as they happen
 trigger: events
 channel: pulse
 topics: clan_pulse, war_day_open, member_joined, member_left, member_role_changed, clan_war_week_finished

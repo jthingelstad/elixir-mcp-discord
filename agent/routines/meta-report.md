@@ -1,4 +1,5 @@
 ---
+description: Sunday look at which decks and cards are winning for the clan this week
 trigger: schedule
 channel: pulse
 at: 15:00

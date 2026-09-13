@@ -1,4 +1,5 @@
 ---
+description: Friday profile of one member and how they have been playing
 trigger: schedule
 channel: pulse
 at: 23:00
