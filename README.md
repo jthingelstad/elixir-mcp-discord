@@ -273,12 +273,26 @@ shared but the code:
 ```
 
 ```bash
-mkdir -p ~/.elixir-mcp-discord/kings && cp -R agent ~/.elixir-mcp-discord/kings/
-cp .env.example ~/.elixir-mcp-discord/kings/.env     # then fill it in
+npm run setup -- ~/.elixir-mcp-discord/kings          # guided; creates the directory
 ./scripts/instance.sh ~/.elixir-mcp-discord/kings probe
 ./scripts/instance.sh ~/.elixir-mcp-discord/kings try war-deck-check
 ./scripts/install-launchd.sh ~/.elixir-mcp-discord/kings
 ```
+
+`npm run setup` asks for each of the three credentials and the Discord
+application, and **tries every one before writing it down**: the Elixir key
+must open an agent door with a clan; the Claude key must return the model you
+chose, and the model must have a price; the Discord token must belong to the
+application id you gave, with the Message Content intent switched on, in the
+server you named — and if the bot is not in the server yet it prints the
+invite link, with both scopes and exactly the permissions the lanes need, and
+waits while you use it. Then it lists the server's text channels, asks which
+one each routine posts to, and checks the bot's actual permissions there
+(including thread permissions for an ask channel), naming what to grant and
+where. Every failure comes with its fix and a chance to retry; `skip` moves
+on. Re-running it on an existing instance keeps every value on Enter, so it
+is also how you rotate one key or move one channel. `--check` runs the same
+validation with no prompts.
 
 Each instance's prompts are its own — that is how a clan decides how its
 agent engages — so `agent/` is copied, not shared. `npm run …` always changes

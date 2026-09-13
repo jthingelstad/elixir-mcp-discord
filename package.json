@@ -13,7 +13,8 @@
     "probe": "node src/probe.js",
     "routines": "node src/cli.js list",
     "try": "node src/cli.js try",
-    "test": "node --test --import ./scripts/setup-tests.js"
+    "test": "node --test --import ./scripts/setup-tests.js",
+    "setup": "node src/setup.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

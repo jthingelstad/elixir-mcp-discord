@@ -31,6 +31,9 @@ const THREADS = {
   SendMessagesInThreads: PermissionFlagsBits.SendMessagesInThreads,
 };
 
+/** Everything any lane can need — what an invite link asks for. */
+export const EVERY_PERMISSION = { ...BASE, ...THREADS };
+
 /**
  * Which logical channels to check and what each needs, from the routines.
  * `{ name, needs }` per channel, threads only where a message routine listens.

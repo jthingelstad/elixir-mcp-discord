@@ -81,6 +81,16 @@ feed cursor and feedback inbox are its own) and its own Claude key. Logs are
 - **There is no `.env` in the checkout any more**, so `npm run try` from here
   fails with "missing ELIXIR_MCP_URL". That is correct. Use
   `./scripts/instance.sh <instance-dir> try <routine>` / `probe` / `routines`.
+- **`npm run setup -- <instance-dir>` stands an instance up** (`src/setup.js`):
+  asks for the Elixir key, Claude key and Discord app, tries each against its
+  service BEFORE writing `.env`, prints the invite link when the bot is not in
+  the server, lists channels to pick from and checks the bot's permissions in
+  each over REST (`src/discord-rest.js` reproduces Discord's overwrite
+  algorithm so `inspectChannel` judges a REST channel by the same rule as the
+  boot check). `--check` is the no-prompt form; it passes on poapkings. It
+  does not import `config.js`'s validated sections on purpose — those read
+  the cwd, and setup's directory may have no `.env` yet. `initialize(auth)`
+  in `src/mcp.js` takes an override for the same reason.
 - **Prompts are per instance and diverge on purpose** — each clan's `agent/`
   is how that clan decides how its bot engages. The checkout's `agent/` is the
   example everyone else copies; editing it changes no live bot. A change

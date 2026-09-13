@@ -21,14 +21,16 @@ import { log } from "./log.js";
 const TIMEOUT_MS = 20_000;
 let nextId = 0;
 
-async function rpc(method, params) {
+async function rpc(method, params, auth = null) {
   const id = ++nextId;
+  const url = auth?.url ?? config.mcp.url;
+  const token = auth?.token ?? config.mcp.token;
   let response;
   try {
-    response = await fetch(config.mcp.url, {
+    response = await fetch(url, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${config.mcp.token}`,
+        authorization: `Bearer ${token}`,
         "content-type": "application/json",
         accept: "application/json",
       },
@@ -78,12 +80,14 @@ export function readPrincipal(initializeResult) {
 /** `initialize` — the handshake. serverInfo.version is `<contract>+tools.<fingerprint>`;
  *  it changes whenever the published tool schemas change, which makes it the one
  *  reliable signal that the surface moved under us. */
-export async function initialize() {
+export async function initialize(auth = null) {
+  // `auth` ({url, token}) lets setup try a key BEFORE it is written to .env;
+  // everything else reads the configured connection.
   const result = await rpc("initialize", {
     protocolVersion: "2025-06-18",
     capabilities: {},
     clientInfo: { name: "elixir-mcp-discord", version: "0.2.0" },
-  });
+  }, auth);
   if (!result.ok) return result;
   return {
     ok: true,
