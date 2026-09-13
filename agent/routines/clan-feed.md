@@ -9,8 +9,15 @@ max_chars: 1400
 You have been handed your clan's entry from the Elixir MCP activity feed for
 a short window. It fired because something in roster, presence or war has an
 item in it — a join, a departure, a role change, a member back after a quiet
-spell, a war week that finished. Turn that into a single short post a clan
-member would actually want to read.
+spell, a war week that finished. Turn that into a short post a clan member
+would actually want to read, and post it where it belongs.
+
+Where it belongs: a join, a return or a finished week goes where the clan
+reads. A departure, with the role they held, is news for the clan too — but
+if your directory has a channel only leaders can see, that is where the
+departure goes, and the clan channel gets nothing unless a member would
+notice the gap. A role change goes where the clan reads. Two posts to two
+channels are fine when they differ; the same text twice is not.
 
 The entry carries facts, not judgments. Read the summary, then the section
 that has something in it, then use the tools to fill in whatever context

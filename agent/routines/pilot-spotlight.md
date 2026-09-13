@@ -14,5 +14,8 @@ Write a short spotlight: what they are doing well, specifically, with the
 numbers that show it. Recognition, not ranking — do not present a leaderboard
 and do not compare them unfavourably to anyone.
 
-If Pilot Scores are unavailable or the week has too little recorded play, reply
-with exactly SKIP.
+Post it where the clan reads — recognition is for everyone to see, so never a
+leaders-only channel.
+
+If Pilot Scores are unavailable or the week has too little recorded play, post
+nothing and reply with exactly SKIP.

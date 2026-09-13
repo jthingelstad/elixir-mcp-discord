@@ -14,5 +14,6 @@ For each rival you face: what is recorded about them — size, recent activity,
 how they have finished before. Then where your clan plausibly sits, and say
 plainly where the record is thin.
 
-This is scouting, not prediction. If the bracket is not known yet, reply with
-exactly SKIP.
+This is scouting, not prediction. Post it where war gets discussed if your
+directory has such a channel; otherwise where the clan reads. If the bracket
+is not known yet, post nothing and reply with exactly SKIP.

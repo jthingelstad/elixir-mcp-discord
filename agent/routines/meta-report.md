@@ -16,3 +16,6 @@ how your clan's play compares — what are you over-playing or under-playing
 relative to it.
 
 Be honest about sample size: a card with few recorded battles is not a trend.
+
+Post it where decks and strategy get discussed if your directory has such a
+channel; otherwise where the clan reads.

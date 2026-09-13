@@ -17,4 +17,8 @@ you have not shown in your recent posts. Prefer something a bot with only its
 own clan's data could not answer at all.
 
 Format: one bold line naming the capability, the real answer you got in two to
-four lines, then the exact question they could paste, in backticks.
+four lines, then the exact question they could paste, in backticks, and the
+name of the ask channel from your directory so they know where to paste it.
+
+Post it where the clan reads — the channel members see day to day — never in
+the ask channel itself.
