@@ -167,8 +167,8 @@ test("slash commands are declared, gated, and describe themselves", async () => 
   assert.equal(run.options[0].autocomplete, true, "routine names autocomplete");
   assert.equal(run.options[0].required, true);
 
-  config.adminUserIds = new Set(["704062105258557511"]);
-  assert.equal(isAdmin("704062105258557511"), true);
+  config.adminUserIds = new Set(["123456789012345678"]);
+  assert.equal(isAdmin("123456789012345678"), true);
   assert.equal(isAdmin("999"), false, "an allow-list, not a role check");
 
   config.monthlyBudgetUsd = 40;

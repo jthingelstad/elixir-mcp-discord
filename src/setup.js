@@ -161,13 +161,19 @@ async function chooseMany(items, chosen) {
 // --- 1. the instance directory -------------------------------------------------
 
 heading(`instance ${instanceDir}`);
-fs.mkdirSync(path.join(instanceDir, "state"), { recursive: true });
-fs.mkdirSync(path.join(agentDir, "routines"), { recursive: true });
-for (const file of ["identity.md", "models.json"]) {
-  if (!fs.existsSync(path.join(agentDir, file))) {
-    if (checkOnly) fail({ detail: `${agentDir} has no ${file}`, fix: `cp ${path.join(exampleDir, file)} ${agentDir}/` });
-    else fs.copyFileSync(path.join(exampleDir, file), path.join(agentDir, file));
+if (checkOnly && !fs.existsSync(agentDir)) {
+  fail({ detail: `${instanceDir} is not an instance (no agent/)`, fix: `npm run setup -- ${instanceDir}` });
+  process.exit(1);
+}
+if (!checkOnly) {
+  fs.mkdirSync(path.join(instanceDir, "state"), { recursive: true });
+  fs.mkdirSync(path.join(agentDir, "routines"), { recursive: true });
+  for (const file of ["identity.md", "models.json"]) {
+    if (!fs.existsSync(path.join(agentDir, file))) fs.copyFileSync(path.join(exampleDir, file), path.join(agentDir, file));
   }
+}
+for (const file of ["identity.md", "models.json"]) {
+  if (!fs.existsSync(path.join(agentDir, file))) fail({ detail: `${agentDir} has no ${file}`, fix: `cp ${path.join(exampleDir, file)} ${agentDir}/` });
 }
 ok(`agent directory ${agentDir}`);
 
