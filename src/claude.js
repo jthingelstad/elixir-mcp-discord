@@ -64,13 +64,24 @@ const mcpServers = [
  * much was actually served from cache; the trace footer shows it, because a
  * cache that silently stopped hitting is a cost regression nobody would see.
  */
-const tools = [
-  {
-    type: "mcp_toolset",
-    mcp_server_name: config.mcp.serverName,
-    cache_control: { type: "ephemeral" },
-  },
-];
+const MCP_TOOLSET = {
+  type: "mcp_toolset",
+  mcp_server_name: config.mcp.serverName,
+  cache_control: { type: "ephemeral" },
+};
+
+/**
+ * LOCAL tools — the few things this runner can do that the server cannot,
+ * today `post_message` (src/run.js). They go BEFORE the toolset so the cache
+ * breakpoint on it covers them; a lane without local tools (the ask lane)
+ * has a different, equally stable prefix.
+ */
+function toolsFor(localTools) {
+  return [
+    ...localTools.map(({ name, description, input_schema }) => ({ name, description, input_schema })),
+    MCP_TOOLSET,
+  ];
+}
 
 function systemBlocks(system) {
   if (Array.isArray(system)) return system;
@@ -251,6 +262,9 @@ export async function ask({
   // and by LANE so a chatty ask channel cannot spend the schedule's budget.
   routineKey = "unattributed",
   lane = "routines",
+  // `[{ name, description, input_schema, handler(input) -> {ok, body} }]`.
+  // Executed here when the model calls them; see src/run.js.
+  localTools = [],
 }) {
   const history = [...messages];
   const started = Date.now();
@@ -283,7 +297,7 @@ export async function ask({
         system: systemBlocks(system),
         messages: history,
         mcp_servers: mcpServers,
-        tools,
+        tools: toolsFor(localTools),
         // "omitted" is the default on Sonnet 5 and returns empty thinking
         // blocks. We show our work in-channel, so ask for the summary.
         thinking: { type: "adaptive", display: "summarized" },
@@ -392,6 +406,31 @@ export async function ask({
         history.push({ role: "assistant", content: response.content });
         const results = [];
         for (const block of pending) {
+          const local = localTools.find((t) => t.name === block.name);
+          if (local) {
+            // Ours to run. The handler reports what it did; a refusal (a
+            // channel not in the directory, a cap reached) is a tool error
+            // the model sees, not an exception.
+            let call;
+            try {
+              call = await local.handler(block.input ?? {});
+            } catch (error) {
+              call = { ok: false, error: error.message };
+            }
+            log.info("local_tool_call", { turnId, tool: block.name, ok: call.ok });
+            if (!call.ok) {
+              const failure = { name: block.name, code: call.code ?? null, detail: String(call.error).slice(0, 400), requestId: null };
+              errors.push(failure);
+              trace.push({ kind: "error", ...failure });
+            }
+            results.push({
+              type: "tool_result",
+              tool_use_id: block.id,
+              is_error: !call.ok,
+              content: JSON.stringify(call.ok ? call.body ?? { ok: true } : { error: { message: call.error, code: call.code ?? null } }),
+            });
+            continue;
+          }
           const tool = await resolveToolName(block.name);
           const call = await callTool(tool, block.input ?? {});
           log.info("client_side_tool_call", { turnId, tool, ok: call.ok });

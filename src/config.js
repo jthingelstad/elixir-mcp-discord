@@ -226,6 +226,9 @@ export const config = {
   // Logical channel name for maintainer replies to filed feedback. Unset falls
   // back to the first event routine's channel.
   feedbackChannel: optional("FEEDBACK_CHANNEL", "") || null,
+  // How many post_message calls one turn may make. One event can fairly be
+  // two posts (a welcome for members, a note for leaders); it is never five.
+  maxPostsPerTurn: Number(optional("MAX_POSTS_PER_TURN", "3")),
 };
 
 lazy(config, "mcp", () => ({

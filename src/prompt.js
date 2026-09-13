@@ -22,6 +22,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
 import { FEEDBACK_PROMPT } from "./feedback.js";
+import { render as renderDirectory } from "./directory.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
 
@@ -58,12 +59,24 @@ Never paste raw JSON. At most one emoji, usually zero.
 
 Do not open with a greeting or close with a sign-off. Start with the news.
 
-YOUR WHOLE REPLY IS THE POST. Nothing you write is private: do not narrate
-what you checked ("decks_today present, looks fine"), do not announce what you
-are about to do ("posting nudge"), do not confirm afterwards ("posted above"),
-and never correct yourself in line ("actually let me list correctly") — if a
-draft is wrong, write the right one. Reasoning belongs in your thinking, not
-in the channel.`;
+Nothing you write is private: do not narrate what you checked ("decks_today
+present, looks fine"), do not announce what you are about to do ("posting
+nudge"), do not confirm afterwards ("posted above"), and never correct
+yourself in line ("actually let me list correctly") — if a draft is wrong,
+write the right one. Reasoning belongs in your thinking, not in the channel.`;
+
+const REPLY_IS_POST = `YOUR WHOLE REPLY IS THE POST.`;
+
+const POSTING = `YOU POST BY CALLING post_message. Your text reply is not a post and nobody
+reads it; only post_message reaches Discord. Call it with a channel_id from the
+directory below and the message as content, once per post.
+
+Pick the channel whose name, topic and audience fit what you are saying — clan
+news where the clan reads, leader-only matters in a channel only leaders can
+see if there is one, never routine output in an ask channel. If a DEFAULT is
+marked, post there unless another channel clearly fits better. Two posts to
+two channels is fine when they genuinely differ (a welcome for members, a note
+for leaders); the same text twice is not.`;
 
 const QUOTA = `Prefer recorded data. A live read goes out to the collector fleet and draws on a
 daily quota shared with every other consumer — spend one only when a fresh read
@@ -79,6 +92,11 @@ const SKIP = `SILENCE IS A VALID OUTPUT. If there is genuinely nothing worth pos
 with SKIP on a line by itself and nothing else. A quiet day is allowed to be
 quiet, and a channel that manufactures content on one teaches people to mute
 it. Do not pad.`;
+
+const SKIP_WITH_TOOL = `SILENCE IS A VALID OUTPUT. If there is genuinely nothing worth posting, make
+no post_message call and reply with SKIP on a line by itself. A quiet day is
+allowed to be quiet, and a channel that manufactures content on one teaches
+people to mute it. Do not pad.`;
 
 const WHO_IS_ASKING = `Each message names its author and their id from this surface, like
 "Raquaza (discord:12345): how am I doing?". When a question is about the person
@@ -131,12 +149,25 @@ That is what your key is for; the server reported it when you connected. Omit
 clan_tag and it means this clan.`;
 }
 
-export function systemFor(routine, { identity = readIdentity(), includePrompt = false, subject = subjectBlock() } = {}) {
-  const blocks = [GROUNDING, DISCORD_FORMAT];
+/**
+ * `entries` is the channel directory (src/directory.js) for a turn that may
+ * post through the tool; empty for the ask lane and for a runner with no
+ * directory, whose reply is the post as before. `defaultChannelId` marks the
+ * routine's own binding in the directory.
+ */
+export function systemFor(
+  routine,
+  { identity = readIdentity(), includePrompt = false, subject = subjectBlock(), entries = [], defaultChannelId = null } = {},
+) {
+  const withTool = entries.length > 0;
+  // The posting rule frames the whole task, so it comes first when it applies.
+  const blocks = withTool
+    ? [POSTING, renderDirectory(entries, { defaultId: defaultChannelId }), GROUNDING, DISCORD_FORMAT]
+    : [GROUNDING, DISCORD_FORMAT, REPLY_IS_POST];
   if (subject) blocks.push(subject);
   if (routine.trigger === "message") blocks.push(WHO_IS_ASKING);
   blocks.push(QUOTA);
-  if (routine.maySkip) blocks.push(SKIP);
+  if (routine.maySkip) blocks.push(withTool ? SKIP_WITH_TOOL : SKIP);
   if (identity) blocks.push(`HOUSE RULES\n\n${identity}`);
   // A message routine's own prompt is a standing brief for the channel, so it
   // belongs in the system block where prompt caching keeps it: the per-message
@@ -146,8 +177,11 @@ export function systemFor(routine, { identity = readIdentity(), includePrompt = 
   return blocks.join("\n\n");
 }
 
+export const DELIVER = `Deliver your post by calling post_message. If there is nothing to post, make no
+call and reply SKIP.`;
+
 /** The routine's own prompt, plus whatever its trigger handed it. */
-export function userMessageFor(routine, { events, recent } = {}) {
+export function userMessageFor(routine, { events, recent, withTool = false } = {}) {
   const parts = [routine.prompt];
   if (events?.length) {
     parts.push(
@@ -157,6 +191,7 @@ export function userMessageFor(routine, { events, recent } = {}) {
   if (recent?.length) {
     parts.push(`${RECALL_HEADER}\n\n${recent.map((text) => `--- ${text}`).join("\n\n")}`);
   }
+  if (withTool) parts.push(DELIVER);
   return parts.join("\n\n");
 }
 

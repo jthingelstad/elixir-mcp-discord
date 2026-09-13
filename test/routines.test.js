@@ -61,7 +61,7 @@ test("the mistakes that would otherwise fail silently are errors", () => {
     // ignored, and the routine would catch up forever with the default window.
     [{ trigger: "schedule", channel: "pulse", at: "01:00", catchup_hours: 3 }, /unknown field/],
     [{ trigger: "schedule", channel: "pulse", at: "01:00", may_skip: "sometimes" }, /must be true or false/],
-    [{ trigger: "message" }, /needs a channel/],
+    [{ trigger: "message" }, /needs the channel it listens in/],
   ];
   for (const [fields, pattern] of bad) {
     assert.throws(() => parseRoutine("bad", doc(fields)), pattern, JSON.stringify(fields));

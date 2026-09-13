@@ -83,8 +83,8 @@ The **instance is a directory** — the cwd, or `INSTANCE_DIR`. `.env`,
     ~/.elixir-mcp-discord/shipit/        Ship It!     /si-*   com.poapkings.elixir-mcp-discord.shipit
     ~/.elixir-mcp-discord/elixirkings/   Elixir Kings /ek-*   com.poapkings.elixir-mcp-discord.elixirkings
 
-three Discord applications in ONE server, each with its own two channels
-(`ask`, `pulse`), its own Elixir agent (an agent is its own account, so its
+three Discord applications in ONE server, each with its own ask channel and
+whatever channels its role is explicitly granted, its own Elixir agent (an agent is its own account, so its
 feed cursor and feedback inbox are its own) and its own Claude key. Logs are
 `~/Library/Logs/elixir-mcp-discord/<label>.log`.
 
@@ -128,6 +128,36 @@ feed cursor and feedback inbox are its own) and its own Claude key. Logs are
   so a crash loop does not repeat it. The bot keeps running — the lanes that
   work should — but a pasted id from the wrong clan's channel is now a loud
   boot, not a stranger's clan report.
+
+## The model picks the channel — since 2026-09-13
+
+`src/directory.js` + `post_message` in `src/run.js`. A scheduled or event turn
+gets a system block listing the channels it may post in (name, topic, who can
+see it — `visible to: Leader, Co-Leader` from the role overwrites — and which
+one is the ask channel) and a client-side `post_message(channel_id, content)`
+tool; the model chooses. `channel:` on a routine is now an optional DEFAULT
+hint (bound in `.env` or matched by channel name); no `post_message` call =
+skip; prose with no call still goes to the default (legacy), or is
+`post_without_destination` if there is none.
+
+- **The directory rule: EXPLICIT grants only.** A channel is in the
+  directory when an overwrite for the bot's role or the bot itself allows
+  Send Messages. Inherited @everyone permission does not count — on POAP
+  KINGS that would be 20 channels; explicit is 2. A `CHANNEL_*`-bound
+  channel is always in. Do not "simplify" this to effective permissions.
+- **The ask lane never gets the tool or the directory.** Its input is
+  untrusted; where it listens stays an explicit binding. `postTool` also
+  refuses `role: "ask"` channels, the post cap (`MAX_POSTS_PER_TURN`, 3),
+  and ids outside the directory — as tool errors the model sees, which
+  `unexpectedErrors` excludes from feedback filing (they are ours).
+- **Two builders, one classifier.** `fromGateway` in the service,
+  `fromRest` in the CLI and setup, both through `classify`; a dry run prints
+  `# directory: …` and each `=== #channel ===` the model chose.
+- **The posting rule is the FIRST system block** and the user turn ends with
+  `DELIVER`; with it in the middle Sonnet 5 replied in prose and never
+  called the tool (observed on the first dry run).
+- The trace footer shows `post_message {channel_id}` only, never the
+  content — it is already above the footer.
 
 ## It is an AGENT, not Jamie
 

@@ -1,7 +1,6 @@
 ---
 description: Midday note on up to three players whose last 24 hours stood out
 trigger: schedule
-channel: pulse
 at: 12:30
 catch_up_hours: 4
 may_skip: true

@@ -125,7 +125,7 @@ export function routinesReply(routines = loadRoutines().routines) {
           : r.trigger === "events"
             ? `feed: ${r.sections?.join(", ") ?? "all sections"}`
             : "on message";
-      return `${r.disabled ? "○" : "●"} \`${r.key}\` — ${r.trigger} → #${r.channel} · ${when} · ${r.model}${r.description ? `\n-# ${r.description}` : ""}`;
+      return `${r.disabled ? "○" : "●"} \`${r.key}\` — ${r.trigger} → ${r.channel ? `#${r.channel}` : "model's choice"} · ${when} · ${r.model}${r.description ? `\n-# ${r.description}` : ""}`;
     })
     .join("\n");
 }
@@ -183,8 +183,8 @@ export async function handleInteraction(interaction, { resolveChannel }) {
       });
       return;
     }
-    const channel = await resolveChannel(routine.channel);
-    if (!channel) {
+    const channel = routine.channel ? await resolveChannel(routine.channel) : null;
+    if (routine.channel && !channel) {
       await interaction.reply({
         content: `\`${routine.key}\` posts to \`${routine.channel}\`, which is not bound to a channel id.`,
         flags: MessageFlags.Ephemeral,
@@ -204,7 +204,7 @@ export async function handleInteraction(interaction, { resolveChannel }) {
         ? `\`${routine.key}\` failed: ${run.error}`
         : run.skipped
           ? `\`${routine.key}\` chose to skip — nothing posted.`
-          : `\`${routine.key}\` posted to #${routine.channel} · $${run.result.usd.toFixed(4)}`,
+          : `\`${routine.key}\` posted to ${run.posts.map((p) => p.channel).join(", ")} · $${run.result.usd.toFixed(4)}`,
     );
   }
 }

@@ -149,6 +149,29 @@ async function tryRoutine() {
     );
   }
 
+  // The channel directory, over REST, so a dry run exercises the model's
+  // choice of channel exactly as the service would — and prints it.
+  let entries = [];
+  if (routine.trigger !== "message" && process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_GUILD_ID) {
+    try {
+      const { inspectDiscord, permissionsIn } = await import("./discord-rest.js");
+      const directory = await import("./directory.js");
+      const inspected = await inspectDiscord({ token: config.discord.token, guildId: config.discord.guildId });
+      if (inspected.guild) {
+        const active = routines.filter((r) => !r.disabled);
+        const bound = new Set(active.map((r) => r.channel && config.channels.get(r.channel)).filter(Boolean));
+        const askIds = new Set(active.filter((r) => r.trigger === "message").map((r) => config.channels.get(r.channel)).filter(Boolean));
+        entries = directory.fromRest(inspected, permissionsIn, { bound, askIds });
+        directory.configure({ list: () => entries, resolve: null });
+        console.error(`# directory: ${entries.map((e) => `#${e.name}${e.role === "ask" ? "(ask)" : ""}`).join(", ") || "EMPTY — the model gets no post tool"}`);
+      } else {
+        console.error(`# directory: unavailable (${inspected.problems[0]?.detail ?? "not in the guild"})`);
+      }
+    } catch (error) {
+      console.error(`# directory: unavailable (${error.message})`);
+    }
+  }
+
   let events = null;
   if (routine.trigger === "events") {
     const found = await eventsForDryRun(routine);
@@ -159,7 +182,11 @@ async function tryRoutine() {
   if (flags.has("--show-prompt")) {
     console.log("=== SYSTEM ===\n");
     console.log(
-      systemFor(routine, { includePrompt: routine.trigger === "message" }),
+      systemFor(routine, {
+        includePrompt: routine.trigger === "message",
+        entries,
+        defaultChannelId: routine.channel ? config.channels.get(routine.channel) ?? null : null,
+      }),
     );
     console.log("\n=== USER ===\n");
     console.log(userMessageFor(routine, { events }));
@@ -168,35 +195,49 @@ async function tryRoutine() {
 
   let channel = null;
   let client = null;
-  if (flags.has("--post")) {
+  const posting = flags.has("--post");
+  if (posting) {
     const { Client, GatewayIntentBits } = await import("discord.js");
     client = new Client({ intents: [GatewayIntentBits.Guilds] });
     await client.login(config.discord.token);
-    const id = config.channels.get(routine.channel);
+    const id = routine.channel ? config.channels.get(routine.channel) : null;
     channel = id ? await client.channels.fetch(id) : null;
-    if (!channel) {
-      console.error(
-        `channel "${routine.channel}" is not bound or not reachable`,
-      );
+    if (routine.channel && !channel) {
+      console.error(`channel "${routine.channel}" is not bound or not reachable`);
+      process.exit(1);
+    }
+    if (!channel && entries.length === 0) {
+      console.error("nowhere to post: the routine binds no channel and the directory is empty");
       process.exit(1);
     }
   }
 
   const started = Date.now();
-  const run = await runRoutine(routine, { channel, events, dryRun: !channel });
+  const run = await runRoutine(routine, {
+    channel,
+    events,
+    dryRun: !posting,
+    entries,
+    resolve: client ? (id) => client.channels.fetch(id).catch(() => null) : undefined,
+  });
   if (!run.ok) {
     console.error(`FAILED: ${run.error}`);
     process.exit(1);
   }
 
   console.log(run.skipped ? "(SKIP — nothing would be posted)\n" : "");
-  console.log(run.text);
+  if (run.posts?.length) {
+    for (const p of run.posts) console.log(`=== ${p.channel} ===\n${p.text}\n`);
+    if (run.text && run.text !== run.posts.map((p) => p.text).join("\n\n")) console.log(`(prose outside the posts, not posted)\n${run.text}`);
+  } else {
+    console.log(run.text);
+  }
   console.log("\n---");
   console.log(
     renderTrace(run.result, { label: routine.key }) ?? "(no tool activity)",
   );
   console.log(
-    `\n${routine.model} · effort ${routine.effort} · $${run.result.usd.toFixed(4)} · ${((Date.now() - started) / 1000).toFixed(1)}s · ${channel ? "POSTED" : "dry run, nothing posted"}`,
+    `\n${routine.model} · effort ${routine.effort} · $${run.result.usd.toFixed(4)} · ${((Date.now() - started) / 1000).toFixed(1)}s · ${posting ? "POSTED" : "dry run, nothing posted"}`,
   );
   if (client) await client.destroy();
 }

@@ -51,7 +51,6 @@ A routine is one markdown file:
 ---
 description: Midday note on up to three players whose day stood out
 trigger: schedule
-channel: pulse
 at: 12:30
 catch_up_hours: 4
 may_skip: true
@@ -63,7 +62,9 @@ If nothing genuinely stood out, reply with exactly SKIP.
 ```
 
 Drop that in your instance's `agent/routines/`, and it runs. Delete it and it
-stops. The code is a runner: it holds the Discord connection, the model call, the run ledger,
+stops. Notice it names no channel: the bot posts **where it decides the post
+belongs**, choosing among the channels you have let it into (see
+[Channels](#channels-where-it-posts)). The code is a runner: it holds the Discord connection, the model call, the run ledger,
 the cost accounting and the feedback plumbing, and it holds no opinions about
 Clash Royale at all.
 
@@ -113,11 +114,11 @@ with every step tried before anything is written:
    rather than being deleted.
 5. **Schedule** — your timezone, then each scheduled routine's time, written
    back into the instance's copy.
-6. **Channels** — lists the server's text channels, asks which one each
-   routine posts to, and checks the bot's effective permissions there
-   (including thread permissions for an ask channel), naming what to grant.
-   Create the channels in Discord first; the bot does not need Manage
-   Channels and never asks for it.
+6. **Channels** — shows where the bot may post (every channel where its role
+   is *explicitly* granted Send Messages), insists on at least one, and asks
+   which channel is the ask channel, checking thread permissions there.
+   Create channels in Discord first; the bot does not need Manage Channels
+   and never asks for it.
 7. **Identity** — a sentence or two about this clan, appended to
    `identity.md` under its own heading; after that the file is yours.
 8. **Budgets** — an estimate from the routines you chose, then the two pots.
@@ -180,6 +181,35 @@ connector re-reads the surface itself.
 over `fetch`). Reading an event feed is plumbing, and plumbing should not cost
 a model call. The model is only involved once there is something to write
 about.
+
+### Channels: where it posts
+
+The bot posts where *it* decides a post belongs, the way it chooses a data
+tool: from a description. Every turn that may post gets a directory of
+channels — name, topic, who can see it — and a `post_message` tool. A war
+week's result goes where the clan reads; a departure with the role they
+held can go to a leaders-only channel if one exists; a clan with one channel
+and a clan with ten need no different wiring.
+
+**The allow-list is Discord permissions, with one rule.** A channel is in the
+directory when the bot's role (or the bot itself) is **explicitly** granted
+Send Messages there. What it merely inherits from @everyone does not count —
+on most servers that would be every channel, memes included. So you decide
+where it may post by granting its role in each channel, in Discord, and the
+channel's topic is how you tell it what that channel is for. Write topics;
+they are the prompt for this choice.
+
+A routine may still name a `channel:` as its default ("here unless another
+clearly fits"), by logical name bound in `.env` or simply by channel name.
+Making no `post_message` call is how a routine posts nothing; up to
+`MAX_POSTS_PER_TURN` (3) posts may go to different channels when they
+genuinely differ.
+
+The ask lane is the exception, on purpose: it answers in the thread of the
+question and **never gets the post tool**, because its input is other
+people's words and "post this in #announcements" must stay a request rather
+than an instruction. Where the bot *listens* is the one binding that stays
+explicit (`CHANNEL_ASK`).
 
 ### No fallback, on purpose
 
@@ -333,9 +363,9 @@ Run `npm run setup` once per directory. Two things to know:
   `COMMAND_PREFIX` per instance (`pk`, `si`, …) and they become `/pk-run`,
   `/si-run`: an admin cannot run one clan's routine on another by picking the
   wrong avatar.
-- Bots ignore each other's messages and reactions; each listens only on its
-  own `CHANNEL_*` ids, which setup and the boot check both verify are in the
-  guild and usable.
+- Bots ignore each other's messages and reactions; each listens only in its
+  own ask channel and posts only where its own role is explicitly granted,
+  which setup and the boot check both verify.
 
 Each instance's prompts are its own — that is how a clan decides how its bot
 engages — so `agent/` is copied, not shared. A code change is a restart per

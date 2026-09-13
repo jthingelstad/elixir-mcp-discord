@@ -118,13 +118,16 @@ export function parseRoutine(key, text) {
       `trigger must be one of ${[...TRIGGERS].join(", ")}, got "${trigger ?? ""}"`,
     );
   }
-  if (!fields.channel) fail(key, "needs a channel");
+  // A message routine listens somewhere, so it needs a channel. A scheduled
+  // or event routine posts through the directory (src/directory.js) and may
+  // name one as its DEFAULT, or none and let the model choose.
+  if (!fields.channel && trigger === "message") fail(key, "a message routine needs the channel it listens in");
   if (!body) fail(key, "has no prompt");
 
   const routine = {
     key,
     trigger,
-    channel: fields.channel.toLowerCase(),
+    channel: fields.channel ? fields.channel.toLowerCase() : null,
     description: fields.description || "",
     prompt: body,
     enabled:

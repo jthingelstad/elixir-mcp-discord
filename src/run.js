@@ -18,8 +18,67 @@ import { detectFriction, sweepFriction, looksUngrounded } from "./feedback.js";
 import { systemFor, userMessageFor, isSkip } from "./prompt.js";
 import { post, recentPosts } from "./post.js";
 import { renderTrace, errorFooter, UNGROUNDED_FOOTER } from "./trace.js";
+import { directory, resolveById } from "./directory.js";
+import { config } from "./config.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
+
+/**
+ * THE POST TOOL. A scheduled or event turn posts by calling `post_message`
+ * with a channel from the directory in its system block (src/directory.js);
+ * the model chooses the channel the way it chooses a data tool, from the
+ * description. The handler is the rule-keeper: the channel must be in the
+ * directory and not an ask channel, the turn may not exceed the cap, and a
+ * dry run records what would have been posted without touching Discord.
+ *
+ * NOT offered to the ask lane. Its input is other people's words, and "post
+ * this in #announcements" must stay a request, not an instruction.
+ */
+export const POST_TOOL = {
+  name: "post_message",
+  description:
+    "Post a message to one of the channels listed under CHANNELS YOU MAY POST IN. Choose the channel whose name and topic fit what you are posting; the routine may name a default. Markdown as Discord renders it. Call it once per post; making no call is how you post nothing.",
+  input_schema: {
+    type: "object",
+    properties: {
+      channel_id: { type: "string", description: "The channel_id from the directory." },
+      content: { type: "string", description: "The message, Discord markdown, up to the routine's length limit." },
+    },
+    required: ["channel_id", "content"],
+    additionalProperties: false,
+  },
+};
+
+function postTool({ routine, entries, dryRun, posts, resolve = resolveById }) {
+  return {
+    ...POST_TOOL,
+    async handler({ channel_id, content }) {
+      const entry = entries.find((e) => e.id === String(channel_id));
+      if (!entry) {
+        return { ok: false, code: "unknown_channel", error: `channel_id ${channel_id} is not in the directory; use one listed under CHANNELS YOU MAY POST IN` };
+      }
+      if (entry.role === "ask") {
+        return { ok: false, code: "ask_channel", error: `#${entry.name} is where members ask questions; routine output does not go there` };
+      }
+      if (posts.length >= config.maxPostsPerTurn) {
+        return { ok: false, code: "post_cap", error: `this turn has already posted ${posts.length} times; that is the cap` };
+      }
+      const text = String(content ?? "").trim();
+      if (!text) return { ok: false, code: "empty", error: "content is empty" };
+      const record = { channelId: entry.id, channelName: entry.name, text, messages: [] };
+      posts.push(record);
+      if (dryRun) return { ok: true, body: { posted: true, channel: `#${entry.name}`, dry_run: true } };
+      const channel = await resolve(entry.id);
+      if (!channel) {
+        posts.pop();
+        return { ok: false, code: "unresolvable", error: `#${entry.name} could not be fetched` };
+      }
+      record.messages = await post(channel, text, routine.maxChars);
+      record.channel = channel;
+      return { ok: true, body: { posted: true, channel: `#${entry.name}`, message_id: record.messages.at(-1)?.id ?? null } };
+    },
+  };
+}
 
 /** Reply under the last message of a post without pinging anyone; a failure
  *  to attach a footer must never undo the post. */
@@ -54,14 +113,16 @@ export function turnRecord({ routine, lane, question, text, result, channelId })
 
 /**
  * @param {object} routine  parsed routine
- * @param {object} options.channel   Discord channel, omitted for a dry run
- * @param {Array}  options.events    feed events, for an event-triggered run
+ * @param {object} options.channel   the routine's DEFAULT Discord channel (its
+ *   `channel:` binding), or null; with a directory the model may post elsewhere
+ * @param {Array}  options.events    feed entries, for an event-triggered run
  * @param {boolean} options.dryRun   compose and return, post nothing
  * @param {Function} options.askFn   injectable model call, for tests
+ * @param {Array}  options.entries   the channel directory (default: live)
  */
 export async function runRoutine(
   routine,
-  { channel = null, events = null, dryRun = false, askFn = ask } = {},
+  { channel = null, events = null, dryRun = false, askFn = ask, entries = directory(), resolve = resolveById } = {},
 ) {
   const lane = laneFor(routine);
   const blocked = spendBlock(lane);
@@ -85,16 +146,23 @@ export async function runRoutine(
   if (recent.length === 0 && channel && routine.recall) {
     recent = await recentPosts(channel, routine.recall);
   }
+  // The directory the model sees. The ask lane never gets it (src/ask.js has
+  // its own path); a routine whose bound channel is not in the directory
+  // still gets that channel as its default, so a legacy binding keeps working.
+  const posts = [];
+  const directoryEntries = routine.trigger === "message" ? [] : entries;
+  const withTool = directoryEntries.length > 0;
   const result = await askFn({
-    system: systemFor(routine),
+    system: systemFor(routine, { entries: directoryEntries, defaultChannelId: channel?.id ?? null }),
     messages: [
-      { role: "user", content: userMessageFor(routine, { events, recent }) },
+      { role: "user", content: userMessageFor(routine, { events, recent, withTool }) },
     ],
     maxTokens: routine.maxTokens,
     model: routine.model,
     effort: routine.effort,
     routineKey: routine.key,
     lane,
+    localTools: withTool ? [postTool({ routine, entries: directoryEntries, dryRun: dryRun || false, posts, resolve })] : [],
   });
 
   if (!result.ok) {
@@ -103,13 +171,18 @@ export async function runRoutine(
   }
 
   const text = (result.text || "").trim();
-  // A routine that may skip and did is a normal, successful, silent outcome.
-  // One that may NOT skip and answered SKIP anyway is a prompt bug, and
-  // posting the word SKIP into a channel is how you find out about it.
-  const skipped = routine.maySkip && isSkip(text);
+  // Three ways a turn ends. It posted through the tool: those posts are the
+  // output and trailing prose is not. It posted nothing and replied SKIP (or
+  // nothing): it declined. It posted nothing and replied prose: that prose
+  // goes to the routine's default channel — the pre-directory behaviour, and
+  // what a routine with no directory still does. A routine that may NOT skip
+  // and answered SKIP anyway is a prompt bug, and posting the word SKIP into
+  // a channel is how you find out about it.
+  const skipped = posts.length === 0 && routine.maySkip && isSkip(text);
+  const textPost = posts.length === 0 && !skipped && text ? text : null;
 
-  if (dryRun || !channel) {
-    return { ok: true, skipped, text, result };
+  if (dryRun) {
+    return { ok: true, skipped, text, posts: posts.map(({ channelName, text: t }) => ({ channel: `#${channelName}`, text: t })), result };
   }
 
   if (skipped) {
@@ -117,12 +190,32 @@ export async function runRoutine(
       routine: routine.key,
       usd: result.usd.toFixed(4),
     });
-    return { ok: true, skipped: true, text, result };
+    return { ok: true, skipped: true, text, posts: [], result };
   }
 
-  const sent = await post(channel, text, routine.maxChars);
+  if (textPost) {
+    if (!channel) {
+      // Prose with nowhere to go: the routine has no default and the model
+      // did not call the tool. Loud, because the turn was paid for.
+      log.error("post_without_destination", {
+        routine: routine.key,
+        turnId: result.turnId,
+        hint: withTool ? "the model replied in prose instead of calling post_message and the routine names no channel:" : "the routine names no channel: and there is no directory",
+        chars: text.length,
+      });
+      return { ok: false, error: "no_destination", text, result };
+    }
+    const messages = await post(channel, textPost, routine.maxChars);
+    posts.push({ channelId: channel.id, channelName: channel.name ?? channel.id, text: textPost, messages, channel });
+  } else if (text && posts.length > 0) {
+    log.info("prose_after_posts", { routine: routine.key, turnId: result.turnId, chars: text.length });
+  }
+
+  const sent = posts.flatMap((p) => p.messages);
   const last = sent.at(-1) ?? null;
-  state.rememberPost(routine.key, text);
+  for (const p of posts) {
+    state.rememberPost(routine.key, posts.length > 1 || p.channelId !== channel?.id ? `[#${p.channelName}] ${p.text}` : p.text);
+  }
   const notes = [];
   if (routine.trace) {
     notes.push(await footnote(last, renderTrace(result, { label: routine.key }), "trace"));
@@ -131,7 +224,8 @@ export async function runRoutine(
     // the numbers above can be trusted.
     notes.push(await footnote(last, errorFooter(result), "error_footer"));
   }
-  if (looksUngrounded({ text, called: result.called, events })) {
+  const posted = posts.map((p) => p.text).join("\n\n");
+  if (looksUngrounded({ text: posted, called: result.called.filter((n) => n !== POST_TOOL.name), events })) {
     log.warn("routine_ungrounded", { routine: routine.key, turnId: result.turnId });
     notes.push(await footnote(last, UNGROUNDED_FOOTER, "ungrounded_footer"));
   }
@@ -139,33 +233,35 @@ export async function runRoutine(
   // on any of them — the post, its footer — finds the same record.
   state.rememberTurn(
     result.turnId,
-    turnRecord({ routine, lane, question: routine.prompt, text, result, channelId: channel.id }),
+    turnRecord({ routine, lane, question: routine.prompt, text: posted, result, channelId: posts.at(-1)?.channelId ?? null }),
     [...sent, ...notes].map((m) => m?.id),
   );
 
   log.info("routine_posted", {
     routine: routine.key,
     turnId: result.turnId,
+    posts: posts.length,
+    channels: posts.map((p) => `#${p.channelName}`).join(","),
     tools: result.called.length,
     toolNames: result.called.join(","),
     usd: result.usd.toFixed(4),
     cache: result.usage ? `${Math.round(cacheShare(result.usage) * 100)}%` : undefined,
     ms: result.ms,
-    chars: text.length,
+    chars: posted.length,
   });
 
   // Friction filing is not an ask-lane feature. A scheduled report that could
   // not get what it needed is the most useful thing this bot produces, and it
   // used to evaporate because nobody was in the channel to notice.
   const friction = detectFriction({
-    text,
+    text: posted,
     called: result.called,
     errors: result.errors,
   });
   if (friction) {
     const summary = await sweepFriction({
       question: `Scheduled routine "${routine.key}":\n${routine.prompt}`,
-      answer: text,
+      answer: posted,
       friction,
       // The sweep is a second call caused by this turn, so it is charged where
       // the turn was.
@@ -184,5 +280,5 @@ export async function runRoutine(
     }
   }
 
-  return { ok: true, skipped: false, text, result };
+  return { ok: true, skipped: false, text: posted, posts: posts.map(({ channelName, text: t }) => ({ channel: `#${channelName}`, text: t })), result };
 }

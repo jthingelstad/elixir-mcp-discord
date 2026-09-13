@@ -44,6 +44,7 @@ import { loadRoutines } from "./routines.js";
 import { priceBook } from "./pricing.js";
 import { requirementsFor, inspectChannel } from "./permissions.js";
 import { inspectDiscord, permissionsIn, channelLike, inviteUrl, memberOf } from "./discord-rest.js";
+import { fromRest } from "./directory.js";
 import { channelEnvName } from "./config.js";
 import { renderEnv } from "./env-file.js";
 import {
@@ -366,7 +367,6 @@ ok(`${routines.length} routines active`);
 
 heading("Channels");
 const requirements = requirementsFor(routines, { feedbackChannel: values.FEEDBACK_CHANNEL || null });
-note(`the routines chosen need: ${requirements.map((r) => r.name).join(", ")}`);
 if (!inspected?.guild) {
   note("skipped: the bot is not in the server yet, so nothing can be checked.");
   if (values.DISCORD_APP_ID && values.DISCORD_GUILD_ID) note(`invite: ${inviteUrl(values.DISCORD_APP_ID, values.DISCORD_GUILD_ID)}`);
@@ -374,14 +374,40 @@ if (!inspected?.guild) {
 } else {
   const botRole = inspected.roles.find((role) => role.tags?.bot_id === inspected.user.id);
   const roleName = botRole ? `the "${botRole.name}" role` : "the bot's role";
-  if (interactive) {
+  // WHERE THE BOT MAY POST is decided in Discord, not here: every channel
+  // where its role (or the bot itself) is explicitly granted Send Messages.
+  // The model reads that directory — names and topics — and chooses. Setup
+  // shows it, insists on at least one, and waits while the operator grants.
+  note("The bot posts wherever its role is EXPLICITLY granted Send Messages — a");
+  note("permission it merely inherits from @everyone does not count. The model reads");
+  note("those channels' names and topics and chooses among them; a topic on each");
+  note("channel is what makes the choice good. Widen or narrow it in Discord.");
+  const directoryOk = await untilOk(async () => {
+    inspected = await inspectDiscord({ token: values.DISCORD_BOT_TOKEN, appId: values.DISCORD_APP_ID || null, guildId: values.DISCORD_GUILD_ID });
+    const entries = fromRest(inspected, permissionsIn);
+    if (entries.length === 0) {
+      return [{
+        detail: "the bot is not explicitly allowed to post anywhere yet",
+        fix: `in each channel it should post in: Edit Channel > Permissions > add ${roleName} > allow View Channel and Send Messages`,
+      }];
+    }
+    for (const entry of entries) {
+      const who = entry.visibility === "everyone" ? "everyone" : entry.visibleTo?.length ? `visible to ${entry.visibleTo.join(", ")}` : "restricted";
+      ok(`may post in #${entry.name} (${who})${entry.topic ? ` — ${entry.topic.slice(0, 60)}` : "  — no topic; a one-line topic helps the model choose"}`);
+    }
+    return [];
+  });
+  if (!directoryOk) unresolved.push("channels");
+
+  if (interactive && requirements.length) {
     note("text channels in this server (create one in Discord first if it is missing):");
     inspected.channels.forEach((channel, index) => note(`  ${String(index + 1).padStart(2)}. #${channel.name}  (${channel.id})`));
   }
   for (const requirement of requirements) {
     const envName = channelEnvName(requirement.name);
+    const what = requirement.name === "ask" ? "where members ask the bot questions" : `for \`${requirement.name}\``;
     const channelOk = await untilOk(async () => {
-      const answer = await ask(`Channel for \`${requirement.name}\` (number or id)`, { fallback: values[envName] });
+      const answer = await ask(`Channel ${what} (number or id)`, { fallback: values[envName] });
       const raw =
         inspected.channels[Number(answer) - 1] ??
         inspected.channels.find((channel) => channel.id === answer);
@@ -493,7 +519,8 @@ const channelName = (logical) => {
   return raw ? `#${raw.name}` : id ? `#${id}` : "(unbound)";
 };
 for (const routine of routines) {
-  note(`${routine.key.padEnd(22)} ${describeWhen(routine).padEnd(34)} → ${channelName(routine.channel)}`);
+  const where = routine.trigger === "message" ? `listens in ${channelName(routine.channel)}` : routine.channel ? `→ ${channelName(routine.channel)}` : "→ model's choice";
+  note(`${routine.key.padEnd(22)} ${describeWhen(routine).padEnd(34)} ${where}`);
 }
 if (values.ROUTINES_DISABLED) note(`off: ${values.ROUTINES_DISABLED}`);
 note(`commands: /${values.COMMAND_PREFIX ? `${values.COMMAND_PREFIX}-` : ""}run, -budget, -routines · admins: ${values.ADMIN_USER_IDS}`);

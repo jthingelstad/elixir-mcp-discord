@@ -1,7 +1,6 @@
 ---
 description: Evening nudge naming who still has war decks to play today
 trigger: schedule
-channel: pulse
 at: 01:00
 catch_up_hours: 3
 may_skip: true

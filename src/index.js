@@ -23,6 +23,7 @@ import { startScheduler } from "./scheduler.js";
 import { loadRoutines, routinesFor } from "./routines.js";
 import { registerCommands, handleInteraction } from "./commands.js";
 import { checkChannelPermissions } from "./permissions.js";
+import * as directory from "./directory.js";
 import { rateFor } from "./pricing.js";
 import * as budget from "./budget.js";
 import { initialize, describePrincipal } from "./mcp.js";
@@ -49,11 +50,21 @@ const channelCache = new Map();
 
 async function resolveChannel(name) {
   if (channelCache.has(name)) return channelCache.get(name);
-  const id = config.channels.get(name);
+  let id = config.channels.get(name);
+  if (!id) {
+    // Unbound in .env: a directory channel of that NAME will do, so a routine
+    // can say `channel: general` and mean #general with no id anywhere.
+    const byName = directory.directory().find((e) => e.name === name);
+    if (byName) {
+      id = byName.id;
+      log.info("channel_resolved_by_name", { channel: name, id });
+    }
+  }
   if (!id) {
     log.error("channel_unbound", {
       channel: name,
       expected: channelEnvName(name),
+      hint: "set it in .env, or name a channel from the directory",
     });
     channelCache.set(name, null);
     return null;
@@ -151,6 +162,34 @@ client.once(Events.ClientReady, async (ready) => {
   const { routines, errors } = loadRoutines();
   for (const failure of errors) log.error("routine_invalid", failure);
 
+  // THE DIRECTORY: where the model may post, from Discord's own permissions
+  // (src/directory.js). Built from the gateway cache on demand; the ask
+  // channels are marked so routine output never lands where members ask.
+  const guild = await client.guilds.fetch(config.discord.guildId).catch(() => null);
+  if (guild) {
+    await guild.channels.fetch().catch(() => {});
+    await guild.members.fetchMe().catch(() => {});
+  }
+  directory.configure({
+    list: () => {
+      if (!guild) return [];
+      const active = loadRoutines().routines.filter((r) => !r.disabled);
+      const bound = new Set(active.map((r) => r.channel && config.channels.get(r.channel)).filter(Boolean));
+      const askIds = new Set(
+        active.filter((r) => r.trigger === "message").map((r) => config.channels.get(r.channel)).filter(Boolean),
+      );
+      return directory.fromGateway(guild, client.user, { bound, askIds });
+    },
+    resolve: (id) => client.channels.fetch(id).catch(() => null),
+  });
+  const entries = directory.directory();
+  const postable = entries.filter((e) => e.role !== "ask");
+  log[postable.length ? "info" : "error"]("directory", {
+    postable: postable.map((e) => `#${e.name}${e.visibility === "restricted" ? "(restricted)" : ""}`).join(",") || "NONE",
+    ask: entries.filter((e) => e.role === "ask").map((e) => `#${e.name}`).join(",") || undefined,
+    hint: postable.length ? undefined : "grant the bot's role Send Messages explicitly in each channel it may post in",
+  });
+
   // Every model in play has to have a price, or the budgets below are decoration.
   // Checked at boot rather than at 01:00 when a routine with an exotic model
   // silently records $0 against a cap it can never reach.
@@ -191,7 +230,7 @@ client.once(Events.ClientReady, async (ready) => {
         : undefined,
       disabled: routine.disabled || undefined,
     });
-    if (!routine.disabled) await resolveChannel(routine.channel);
+    if (!routine.disabled && routine.channel) await resolveChannel(routine.channel);
   }
   if (routines.every((routine) => routine.disabled)) {
     log.error("no_active_routines", { dir: config.agentDir });

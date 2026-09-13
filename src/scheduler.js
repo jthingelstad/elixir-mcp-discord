@@ -33,8 +33,10 @@ export async function tick(routines, resolveChannel, now = new Date()) {
     // Recorded BEFORE the call, not after. A crash mid-post must not leave the
     // routine eligible again on the next tick and post twice.
     state.markRun(routine.key, periodKey);
-    const channel = await resolveChannel(routine.channel);
-    if (!channel) {
+    // A bound channel that cannot be resolved is an error; no binding at all
+    // is a routine that posts through the directory.
+    const channel = routine.channel ? await resolveChannel(routine.channel) : null;
+    if (routine.channel && !channel) {
       log.error("scheduled_channel_missing", {
         routine: routine.key,
         channel: routine.channel,

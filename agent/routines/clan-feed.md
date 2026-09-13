@@ -1,7 +1,6 @@
 ---
 description: Posts joins, departures, role changes, returns and finished war weeks as they happen
 trigger: events
-channel: pulse
 sections: roster, presence, war
 may_skip: true
 recall: 2

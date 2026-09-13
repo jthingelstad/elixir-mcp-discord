@@ -109,9 +109,13 @@ function looksLikeLimit(text) {
  */
 const EXPECTED_ERROR_CODES = new Set(["no_subject", "quota_exceeded"]);
 
+/** This runner's own tools. Their refusals (a channel not in the directory,
+ *  the post cap) are this consumer's behaviour, never hub friction to file. */
+const LOCAL_TOOLS = new Set(["post_message"]);
+
 /** The errors worth a reader's or the maintainer's attention. */
 export function unexpectedErrors(errors) {
-  return (errors || []).filter((e) => !EXPECTED_ERROR_CODES.has(e.code));
+  return (errors || []).filter((e) => !EXPECTED_ERROR_CODES.has(e.code) && !LOCAL_TOOLS.has(e.name));
 }
 
 /**

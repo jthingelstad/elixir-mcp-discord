@@ -25,6 +25,7 @@ import { callTool } from "./mcp.js";
 import { config } from "./config.js";
 import { runRoutine } from "./run.js";
 import { newFeedbackResponses } from "./feedback.js";
+import { directory, resolveById } from "./directory.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
 
@@ -211,16 +212,21 @@ export function startEventLoop(routinesFn, resolveChannel) {
 
   const run = async () => {
     const routines = routinesFn();
-    const feedbackName = config.feedbackChannel || routines[0]?.channel || null;
-    const feedbackChannel = feedbackName ? await resolveChannel(feedbackName) : null;
+    // Maintainer replies are posted by the runner, not the model, so they
+    // need a fixed place: FEEDBACK_CHANNEL, else the first event routine
+    // that binds one, else the first channel in the directory.
+    const feedbackName = config.feedbackChannel || routines.find((r) => r.channel)?.channel || null;
+    const feedbackChannel = feedbackName
+      ? await resolveChannel(feedbackName)
+      : await resolveById(directory().find((e) => e.role !== "ask")?.id);
 
     // The feed polls run first: their envelopes say whether the maintainer
     // has answered anything, so the feedback read below is a decision rather
     // than a habit.
     let pending;
     for (const routine of routines) {
-      const channel = await resolveChannel(routine.channel);
-      if (!channel) continue;
+      const channel = routine.channel ? await resolveChannel(routine.channel) : null;
+      if (routine.channel && !channel) continue;
       const meta = await pollRoutine(routine, channel).catch((error) => {
         log.error("events_routine_crashed", { routine: routine.key, error: error.message });
         return null;

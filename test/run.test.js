@@ -322,3 +322,90 @@ test("a post that states figures without a tool call is caveated", async () => {
   });
   assert.equal(feed.sent[0].replies.length, 0);
 });
+
+/**
+ * The post tool: the model chooses a channel from the directory; the runner
+ * keeps the rules. A fake askFn plays the model and calls the tool it is
+ * handed, exactly as src/claude.js would.
+ */
+test("a turn posts through post_message to the channel it chose, and the rules hold", async () => {
+  const { POST_TOOL } = await import("../src/run.js");
+  const news = fakeChannel();
+  const leaders = fakeChannel();
+  const entries = [
+    { id: "11", name: "news", topic: "Clan news", visibility: "everyone", threads: false, role: null },
+    { id: "12", name: "leaders", topic: "Leaders", visibility: "restricted", threads: false, role: null },
+    { id: "13", name: "ask", topic: "Ask", visibility: "everyone", threads: true, role: "ask" },
+  ];
+  const resolve = async (id) => ({ 11: news, 12: leaders }[id] ?? null);
+  const seen = {};
+  const askFn = async ({ system, localTools }) => {
+    assert.match(system, /CHANNELS YOU MAY POST IN/);
+    assert.match(system, /#leaders .*restricted/);
+    const tool = localTools.find((t) => t.name === POST_TOOL.name);
+    seen.unknown = await tool.handler({ channel_id: "99", content: "x" });
+    seen.ask = await tool.handler({ channel_id: "13", content: "x" });
+    seen.first = await tool.handler({ channel_id: "11", content: "Two joined today." });
+    seen.second = await tool.handler({ channel_id: "12", content: "One left: an elder." });
+    seen.third = await tool.handler({ channel_id: "11", content: "again" });
+    seen.fourth = await tool.handler({ channel_id: "11", content: "cap" });
+    return answer("Posted.", { called: ["clans_roster", "post_message", "post_message", "post_message"], trace: [] });
+  };
+  const run = await runRoutine(routine({ trigger: "schedule", at: "01:00" }), { channel: null, askFn, entries, resolve });
+  assert.equal(seen.unknown.code, "unknown_channel");
+  assert.equal(seen.ask.code, "ask_channel");
+  assert.equal(seen.first.ok, true);
+  assert.equal(seen.second.ok, true);
+  assert.equal(seen.third.ok, true);
+  assert.equal(seen.fourth.code, "post_cap", "three posts is the cap");
+  assert.equal(run.ok, true);
+  assert.deepEqual(run.posts.map((p) => p.channel), ["#news", "#leaders", "#news"]);
+  assert.equal(news.sent.length, 2);
+  assert.equal(leaders.sent.length, 1);
+  assert.match(leaders.sent[0].text, /One left/);
+  assert.equal(run.text, "Two joined today.\n\nOne left: an elder.\n\nagain", "the posts are the output; trailing prose is not");
+});
+
+test("with a directory, no post call and prose still goes to the routine's default; SKIP still skips", async () => {
+  const channel = fakeChannel();
+  channel.id = "11";
+  const entries = [{ id: "11", name: "news", topic: "", visibility: "everyone", threads: false, role: null }];
+  const prose = await runRoutine(routine({ trigger: "schedule", at: "01:00" }), {
+    channel,
+    entries,
+    resolve: async () => channel,
+    askFn: async ({ system }) => {
+      assert.match(system, /DEFAULT for this routine/);
+      return answer("Plain reply.", { called: ["war_current"], trace: [] });
+    },
+  });
+  assert.equal(prose.ok, true);
+  assert.equal(channel.sent.length, 1);
+  const skip = await runRoutine(routine({ trigger: "schedule", at: "01:00", may_skip: true }), {
+    channel,
+    entries,
+    resolve: async () => channel,
+    askFn: async () => answer("SKIP", { called: [], trace: [] }),
+  });
+  assert.equal(skip.skipped, true);
+  assert.equal(channel.sent.length, 1);
+  const nowhere = await runRoutine(routine({ trigger: "schedule", at: "01:00" }), {
+    channel: null,
+    entries,
+    resolve: async () => channel,
+    askFn: async () => answer("Prose with no home.", { called: [], trace: [] }),
+  });
+  assert.equal(nowhere.ok, false);
+  assert.equal(nowhere.error, "no_destination");
+});
+
+test("the ask lane never sees the directory or the post tool", async () => {
+  const { systemFor } = await import("../src/prompt.js");
+  const entries = [{ id: "11", name: "news", topic: "", visibility: "everyone", threads: false, role: null }];
+  const system = systemFor(routine({ trigger: "message", channel: "ask" }), { entries: [] });
+  assert.doesNotMatch(system, /CHANNELS YOU MAY POST IN/);
+  assert.match(system, /YOUR WHOLE REPLY IS THE POST/);
+  const scheduled = systemFor(routine({ trigger: "schedule", at: "01:00" }), { entries });
+  assert.match(scheduled, /YOU POST BY CALLING post_message/);
+  assert.doesNotMatch(scheduled, /YOUR WHOLE REPLY IS THE POST/);
+});

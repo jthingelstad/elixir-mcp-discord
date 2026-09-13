@@ -41,7 +41,7 @@ export const EVERY_PERMISSION = { ...BASE, ...THREADS };
 export function requirementsFor(routines, { feedbackChannel = config.feedbackChannel } = {}) {
   const needs = new Map();
   for (const routine of routines) {
-    if (routine.disabled) continue;
+    if (routine.disabled || !routine.channel) continue;
     const entry = needs.get(routine.channel) ?? { ...BASE };
     if (routine.trigger === "message") Object.assign(entry, THREADS);
     needs.set(routine.channel, entry);

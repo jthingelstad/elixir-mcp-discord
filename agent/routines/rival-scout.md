@@ -1,7 +1,6 @@
 ---
 description: Monday scouting report on the clans in this week's war
 trigger: schedule
-channel: pulse
 at: 12:00
 days: mon
 catch_up_hours: 8
