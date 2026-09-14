@@ -67,7 +67,15 @@ sed -e "s|__LABEL__|$LABEL|g" \
     -e "s|__LOG__|$LOG|g" \
     "$REPO/launchd/$BASE_LABEL.plist.template" > "$PLIST"
 
+# bootout returns before the job is gone, and a running instance now finishes
+# its in-flight turn first (up to 45s). Bootstrapping into a label that is
+# still unloading fails with "Input/output error" and leaves NOTHING loaded,
+# so wait for it to actually disappear.
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+for _ in $(seq 1 70); do
+  launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || break
+  sleep 1
+done
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
 
 echo "installed $LABEL"
