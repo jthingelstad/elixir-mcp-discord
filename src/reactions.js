@@ -19,6 +19,7 @@ import { ask, spendBlock } from "./claude.js";
 import { callTool } from "./mcp.js";
 import { FEEDBACK_PROMPT, tallyCalls } from "./feedback.js";
 import { log } from "./log.js";
+import * as ledger from "./ledger.js";
 import * as state from "./state.js";
 
 export const REACTIONS = { "👍": "up", "👎": "down" };
@@ -137,14 +138,17 @@ export async function handleReaction(reaction, user, { sweepFn = sweepReaction, 
       .catch((error) => log.warn("reaction_reply_failed", { error: error.message }));
 
   if (kind === "up") {
+    ledger.append(ledger.reactionEntry({ turnId: turn.turnId, reaction: kind, userId: user.id }));
     const filed = await praiseFn({ turn });
     if (filed) await respond("-# 📮 Filed as praise with Elixir MCP, with this answer's request id.");
     return { kind, filed };
   }
 
   const note = await readerNote(message, user);
+  ledger.append(ledger.reactionEntry({ turnId: turn.turnId, reaction: kind, userId: user.id, note: note || null }));
   const summary = await sweepFn({ turn, note });
   if (summary) {
+    ledger.append(ledger.filedEntry({ turnId: turn.turnId, summary }));
     await respond(`-# 📮 Filed with Elixir MCP: ${summary}`);
     return { kind, filed: true, summary };
   }

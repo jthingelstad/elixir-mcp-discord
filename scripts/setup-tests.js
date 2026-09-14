@@ -29,3 +29,5 @@ process.env.CHANNEL_ASK ||= "2";
 process.env.CHANNEL_PULSE ||= "3";
 process.env.ANTHROPIC_API_KEY ||= "sk-ant-test";
 process.env.STATE_PATH ||= path.join(os.tmpdir(), `elixir-mcp-discord-test-${process.pid}.json`);
+// The turn ledger too: a test turn must not land in a live instance's record.
+process.env.LEDGER_DIR ||= path.join(os.tmpdir(), `elixir-mcp-discord-test-${process.pid}-turns`);

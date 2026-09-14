@@ -213,12 +213,16 @@ function readToolActivity(content, timings) {
         // on the English of the message. Null when the failure had no body.
         const code = typeof body?.error?.code === "string" ? body.error.code : null;
         errors.push({ name, code, detail, requestId });
-        trace.push({ kind: "error", name, code, detail, requestId });
+        trace.push({ kind: "error", name, code, detail, requestId, result: raw });
         continue;
       }
       if (step) {
         step.shape = describeShape(body);
         step.requestId = requestId;
+        // The body itself, for the turn ledger (src/ledger.js): the footer
+        // shows the shape, but "was that number right?" needs what the tool
+        // actually said. Not rendered anywhere in Discord.
+        step.result = raw;
       }
       const envelope = readEnvelope(body);
       if (envelope) envelopes.push({ tool: name, ...envelope });
@@ -418,6 +422,8 @@ export async function ask({
               call = { ok: false, error: error.message };
             }
             log.info("local_tool_call", { turnId, tool: block.name, ok: call.ok });
+            const step = trace.find((s) => s.kind === "tool" && s.id === block.id);
+            if (step) step.result = JSON.stringify(call.ok ? call.body ?? { ok: true } : { error: call.error });
             if (!call.ok) {
               const failure = { name: block.name, code: call.code ?? null, detail: String(call.error).slice(0, 400), requestId: null };
               errors.push(failure);
@@ -434,6 +440,14 @@ export async function ask({
           const tool = await resolveToolName(block.name);
           const call = await callTool(tool, block.input ?? {});
           log.info("client_side_tool_call", { turnId, tool, ok: call.ok });
+          const step = trace.find((s) => s.kind === "tool" && s.id === block.id);
+          if (step) {
+            step.result = JSON.stringify(call.ok ? call.body : { error: { message: call.error } });
+            if (call.ok) {
+              step.shape = describeShape(call.body);
+              step.requestId = typeof call.body?.meta?.request_id === "string" ? call.body.meta.request_id : null;
+            }
+          }
           if (!call.ok) {
             const code = typeof call.body?.error?.code === "string" ? call.body.error.code : null;
             const requestId = typeof call.body?.meta?.request_id === "string" ? call.body.meta.request_id : null;

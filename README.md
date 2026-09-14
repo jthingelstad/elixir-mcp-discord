@@ -153,6 +153,25 @@ called, the shapes they returned and what it cost — without waiting for 12:30
 and without touching the channel. Files are re-read on every run, so editing a
 prompt needs no restart and no deploy.
 
+## Reviewing what it said
+
+Every live turn is appended to `state/turns/YYYY-MM-DD.jsonl` in the instance
+directory: the question (or the brief and the timeline it was handed), every
+tool call with its arguments and what came back, the answer, where it went,
+and any 👍/👎 or filed feedback afterwards. The system prompt it ran on is
+saved once per wording under `state/prompts/`. Read it as transcripts:
+
+```bash
+npm run turns                                # the last 7 days
+npm run turns -- --since 2026-09-13 --lane ask
+npm run turns -- --turn d98fe553             # one turn, tool bodies uncut
+npm run turns -- --export ./review           # one .md per turn, plus the prompts
+```
+
+The bot never reads this back — it is a record for judging answers, not
+memory — and it holds members' names and questions, so it stays under
+`state/`, which is gitignored.
+
 In Discord, an admin (`ADMIN_USER_IDS`) has slash commands: **`/run`** with
 autocomplete over your routine names, **`/routines`**, and **`/budget`**
 (prefixed, e.g. `/pk-run`, if the instance sets `COMMAND_PREFIX`). They are

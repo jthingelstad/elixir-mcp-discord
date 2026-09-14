@@ -27,6 +27,7 @@ import { turnRecord } from "./run.js";
 import { track, isStopping } from "./inflight.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
+import * as ledger from "./ledger.js";
 
 /**
  * ONE THREAD PER QUESTION.
@@ -233,8 +234,29 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
     const toolsSoFar = [];
     let streamed = "";
 
+    const system = systemFor(routine, { includePrompt: true });
+    const record = (result, output) =>
+      ledger.append(
+        ledger.turnEntry({
+          routine,
+          lane,
+          result,
+          system,
+          contractVersion: state.get("contractVersion"),
+          input: {
+            kind: "message",
+            asker: { id: message.author.id, name: asker },
+            channelId: message.channel?.id ?? null,
+            threadId: inThread ? message.channel.id : thread?.id ?? null,
+            messageId: message.id,
+            question,
+            history,
+          },
+          output,
+        }),
+      );
     const result = await askFn({
-      system: systemFor(routine, { includePrompt: true }),
+      system,
       model: routine.model,
       effort: routine.effort,
       routineKey: routine.key,
@@ -265,6 +287,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
           : `Something broke on my side talking to Elixir MCP: \`${result.error}\`. There's no local fallback here by design, so that's the whole answer.`,
       );
       log.error("ask_failed", { routine: routine.key, error: result.error });
+      record(result, { error: result.error });
       return;
     }
 
@@ -286,8 +309,10 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
       produced.push(sent);
     }
 
+    const footers = [];
     const footnote = async (content, what) => {
       if (!sent || !content) return;
+      footers.push(content);
       const note = await sent
         .reply({ content, allowedMentions: { repliedUser: false } })
         .catch((error) => {
@@ -306,6 +331,13 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
       turnRecord({ routine, lane, question, text: answer, result, channelId: target?.id }),
       produced.map((m) => m?.id),
     );
+    record(result, {
+      text: answer,
+      messageIds: produced.map((m) => m?.id).filter(Boolean),
+      footers,
+      ungrounded,
+      friction: friction?.reason ?? null,
+    });
 
     log.info("ask_answered", {
       routine: routine.key,
@@ -326,6 +358,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
 
     if (friction) {
       const summary = await sweepFriction({ question, answer, friction, lane });
+      if (summary) ledger.append(ledger.filedEntry({ turnId: result.turnId, summary }));
       if (summary && sent) {
         await sent.reply({
           content: `-# 📮 Filed with Elixir MCP: ${summary}`,

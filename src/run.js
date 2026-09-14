@@ -23,6 +23,7 @@ import { config } from "./config.js";
 import { track, isStopping } from "./inflight.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
+import * as ledger from "./ledger.js";
 
 /**
  * THE POST TOOL. A scheduled or event turn posts by calling `post_message`
@@ -158,8 +159,25 @@ async function runRoutineNow(
   const posts = [];
   const directoryEntries = routine.trigger === "message" ? [] : entries;
   const withTool = directoryEntries.length > 0;
+  const system = systemFor(routine, { entries: directoryEntries, defaultChannelId: channel?.id ?? null });
+  // The ledger's view of what this turn was handed. A dry run is a rehearsal
+  // and is not recorded: the ledger is what Discord actually saw.
+  const record = (output) => {
+    if (dryRun) return;
+    ledger.append(
+      ledger.turnEntry({
+        routine,
+        lane,
+        result,
+        system,
+        contractVersion: state.get("contractVersion"),
+        input: { kind: routine.trigger, brief: routine.prompt, events: events ?? undefined, recent, defaultChannelId: channel?.id ?? null },
+        output,
+      }),
+    );
+  };
   const result = await askFn({
-    system: systemFor(routine, { entries: directoryEntries, defaultChannelId: channel?.id ?? null }),
+    system,
     messages: [
       { role: "user", content: userMessageFor(routine, { events, recent, withTool }) },
     ],
@@ -173,6 +191,7 @@ async function runRoutineNow(
 
   if (!result.ok) {
     log.error("routine_failed", { routine: routine.key, error: result.error });
+    record({ error: result.error });
     return { ok: false, error: result.error };
   }
 
@@ -196,6 +215,7 @@ async function runRoutineNow(
       routine: routine.key,
       usd: result.usd.toFixed(4),
     });
+    record({ text, posts: [], skipped: true });
     return { ok: true, skipped: true, text, posts: [], result };
   }
 
@@ -209,6 +229,7 @@ async function runRoutineNow(
         hint: withTool ? "the model replied in prose instead of calling post_message and the routine names no channel:" : "the routine names no channel: and there is no directory",
         chars: text.length,
       });
+      record({ text, posts: [], error: "no_destination" });
       return { ok: false, error: "no_destination", text, result };
     }
     const messages = await post(channel, textPost, routine.maxChars);
@@ -223,17 +244,23 @@ async function runRoutineNow(
     state.rememberPost(routine.key, posts.length > 1 || p.channelId !== channel?.id ? `[#${p.channelName}] ${p.text}` : p.text);
   }
   const notes = [];
+  const footers = [];
+  const attach = async (content, what) => {
+    if (content) footers.push(content);
+    notes.push(await footnote(last, content, what));
+  };
   if (routine.trace) {
-    notes.push(await footnote(last, renderTrace(result, { label: routine.key }), "trace"));
+    await attach(renderTrace(result, { label: routine.key }), "trace");
   } else {
     // No trace, but a reader still gets the two caveats that change whether
     // the numbers above can be trusted.
-    notes.push(await footnote(last, errorFooter(result), "error_footer"));
+    await attach(errorFooter(result), "error_footer");
   }
   const posted = posts.map((p) => p.text).join("\n\n");
-  if (looksUngrounded({ text: posted, called: result.called.filter((n) => n !== POST_TOOL.name), events })) {
+  const ungrounded = looksUngrounded({ text: posted, called: result.called.filter((n) => n !== POST_TOOL.name), events });
+  if (ungrounded) {
     log.warn("routine_ungrounded", { routine: routine.key, turnId: result.turnId });
-    notes.push(await footnote(last, UNGROUNDED_FOOTER, "ungrounded_footer"));
+    await attach(UNGROUNDED_FOOTER, "ungrounded_footer");
   }
   // Every message this turn produced points back at the turn, so a reaction
   // on any of them — the post, its footer — finds the same record.
@@ -264,6 +291,14 @@ async function runRoutineNow(
     called: result.called,
     errors: result.errors,
   });
+  record({
+    text: posted,
+    posts: posts.map((p) => ({ channelId: p.channelId, channelName: p.channelName, messageIds: p.messages.map((m) => m?.id).filter(Boolean), text: p.text })),
+    skipped: false,
+    footers,
+    ungrounded,
+    friction: friction?.reason ?? null,
+  });
   if (friction) {
     const summary = await sweepFriction({
       question: `Scheduled routine "${routine.key}":\n${routine.prompt}`,
@@ -276,6 +311,7 @@ async function runRoutineNow(
       log.warn("feedback_sweep_crashed", { error: error.message });
       return null;
     });
+    if (summary) ledger.append(ledger.filedEntry({ turnId: result.turnId, summary }));
     if (summary && last) {
       await last
         .reply({
