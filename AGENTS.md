@@ -41,16 +41,6 @@ files that use a new field. `activeRoutines` now logs `routine_invalid` on
 change and `no_routines_load` when nothing loads; the ask lane logs
 `message_unclaimed` when a bound channel speaks and no message routine exists.
 
-## The team
-
-`AGENT-TEAM/` holds three objective owners — Run the Preview, Judge the
-Answers, Close the Loop — that maintain this bot on a schedule
-(`AGENT-TEAM/SCHEDULE.md`). Judge the Answers reads the turn ledger and
-grades what the bot said against the rules in `src/prompt.js`; that is the
-loop the ledger was built for. Start at `AGENT-TEAM/WORKFLOW.md`. Every
-mutating actor on this checkout, an objective run or an interactive
-session, serializes through `AGENT-TEAM/scripts/objective-lease.mjs`.
-
 ## The rules that are the whole point
 
 **No clan in this repo. None.** No tag in `.env`, no tag in a prompt, no tag in
