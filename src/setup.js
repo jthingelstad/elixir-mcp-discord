@@ -36,7 +36,6 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import readline from "node:readline/promises";
-import { Writable } from "node:stream";
 import dotenv from "dotenv";
 import Anthropic from "@anthropic-ai/sdk";
 import { initialize, describePrincipal } from "./mcp.js";
@@ -87,28 +86,72 @@ const money = (n) => `$${Number(n).toFixed(2)}`;
 
 // --- prompts -----------------------------------------------------------------
 
+/**
+ * A secret, typed or pasted, echoed as one • per character and closed with
+ * the count — so a paste that landed is visibly different from one that did
+ * not, and a token cut short by a clipboard is visibly short. Raw mode, by
+ * hand: readline's muted-output trick shows nothing at all, which reads as
+ * "nothing happened" when a 90-character key just arrived.
+ */
+function readSecret(prompt) {
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    process.stdout.write(prompt);
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding("utf8");
+    let value = "";
+    const done = () => {
+      stdin.removeListener("data", onData);
+      stdin.setRawMode(false);
+      stdin.pause();
+    };
+    const onData = (chunk) => {
+      if (chunk.startsWith("\u001b")) return; // arrow keys and the like
+      for (const ch of chunk) {
+        if (ch === "\r" || ch === "\n") {
+          done();
+          process.stdout.write(value ? ` (${value.length} chars)\n` : "\n");
+          resolve(value);
+          return;
+        }
+        if (ch === "\u0003") {
+          done();
+          process.stdout.write("\n");
+          process.exit(130);
+        }
+        if (ch === "\u007f" || ch === "\b") {
+          if (value) {
+            value = value.slice(0, -1);
+            process.stdout.write("\b \b");
+          }
+          continue;
+        }
+        if (ch < " ") continue;
+        value += ch;
+        process.stdout.write("•");
+      }
+    };
+    stdin.on("data", onData);
+  });
+}
+
 async function ask(question, { fallback = "", secret = false } = {}) {
   if (!interactive) return fallback;
   const hint = secret
     ? fallback ? " [Enter keeps the current one]" : ""
     : fallback ? ` [${fallback}]` : "";
-  const muted = new Writable({ write: (_chunk, _enc, cb) => cb() });
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: secret ? muted : process.stdout,
-    terminal: true,
-  });
-  // readline redraws its own prompt on the terminal, wiping anything written
-  // before it; so the visible question goes through readline, and only the
-  // muted one is written directly.
   const prompt = `${question}${hint}: `;
-  if (secret) process.stdout.write(prompt);
+  if (secret) {
+    const typed = (await readSecret(prompt)).trim();
+    return typed || fallback;
+  }
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
   let answer;
   try {
-    answer = (await rl.question(secret ? "" : prompt)).trim();
+    answer = (await rl.question(prompt)).trim();
   } finally {
     rl.close();
-    if (secret) process.stdout.write("\n");
   }
   return answer || fallback;
 }
