@@ -269,6 +269,9 @@ export async function ask({
   // `[{ name, description, input_schema, handler(input) -> {ok, body} }]`.
   // Executed here when the model calls them; see src/run.js.
   localTools = [],
+  // A member's answer is done in five rounds or it is looping. A review
+  // (src/review.js) proposes edits one tool call at a time and needs more.
+  maxRounds = MAX_ROUNDS,
 }) {
   const history = [...messages];
   const started = Date.now();
@@ -288,7 +291,7 @@ export async function ask({
   let rounds = 0;
   let stopReason = null;
 
-  for (let round = 0; round < MAX_ROUNDS; round += 1) {
+  for (let round = 0; round < maxRounds; round += 1) {
     rounds = round + 1;
     let response;
     const timings = new Map();
@@ -500,7 +503,7 @@ export async function ask({
     rounds,
     stopReason,
     // A max_tokens cutoff otherwise reads as a complete answer.
-    truncated: stopReason === "max_tokens" || rounds >= MAX_ROUNDS,
+    truncated: stopReason === "max_tokens" || rounds >= maxRounds,
     model,
     effort,
     serverVersion: state.get("serverVersion"),

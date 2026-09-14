@@ -56,10 +56,14 @@ reaction can find them). Every fact in a reply came from an MCP tool call in tha
 turn. A local shortcut makes the demo *flatter* than reality, and we would
 conclude MCP is ready when something else was quietly propping it up.
 
-The turn ledger (`src/ledger.js`, below) is the one exception in appearance
-and none in substance: it is write-only from the runtime. Nothing in `src/`
-reads it back, and nothing ever may — an answer the model could see again is
-the local memory this rule forbids.
+Two things look like exceptions and are not. The turn ledger
+(`src/ledger.js`) is an audit record: no member-facing turn reads it, and
+none ever may — an answer the model could see again is the local memory this
+rule forbids. Its one reader is the review lane, whose audience is the
+operator and whose output is a proposal. And `agent/lessons.md` is memory,
+deliberately: not facts (Elixir has those), not people (never), but how to
+do this job here — written only by the review, only with the operator's
+click (or `REVIEW_AUTO_LESSONS`), in a text file anyone can read and edit.
 
 **No local fallback.** elixir-bot's MCP client falls back to local tables on
 failure; this one has nothing to fall back to and says so out loud. An outage
@@ -139,6 +143,60 @@ feed cursor and feedback inbox are its own) and its own Claude key. Logs are
   so a crash loop does not repeat it. The bot keeps running — the lanes that
   work should — but a pasted id from the wrong clan's channel is now a loud
   boot, not a stranger's clan report.
+
+## The review lane — since 2026-09-14
+
+`src/review.js`. Evaluation as a FEATURE of the bot, on the operator's key
+and budget, not a job beside it — because other people run this for their
+own clans, and an eval that only Jamie's machine performs does not ship.
+`REVIEW=on` in `.env`; off by default. Read the header comment first; the
+design is there. The short version:
+
+- **Findings become diffs.** The review reads the ledger for the window,
+  grades every turn against the bot's own rules (`MECHANICS` in
+  `src/prompt.js` plus the operator's files) and against what humans did
+  afterwards, and produces at most `REVIEW_MAX_PROPOSALS` (3) edits to
+  files under `agent/` — `lessons.md` (append one dated line), `identity.md`
+  or a routine's brief (replace/remove, never the front matter). Each cites
+  turns and is shown as a diff. A finding that is not an edit is a
+  `report_mechanics` (code — the DM carries a pasteable issue) or an
+  `elixir_feedback` filing (the hub).
+- **Humans outrank the rubric.** The signals that flag a turn: 👎/👍 with
+  notes, an `intervention` (another member speaking in the answer thread,
+  or the asker pushing back — `looksLikeCorrection` in `src/ask.js`), a
+  sweep `finding` (see below), `ungrounded`, errors, truncation. Flagged
+  turns are shown first and in full.
+- **The sweeps classify before filing** (`CLASSIFY_RULES` in
+  `src/feedback.js`): `ELIXIR:` files upstream as before; `PROMPT:` and
+  `MECHANICS:` become `finding` records for the review instead of being
+  dropped as NONE. A 👎 on this bot's own mistake no longer becomes noise
+  for Elixir's maintainer.
+- **Delivery is a DM to `ADMIN_USER_IDS`**: header, the report, one message
+  per proposal with **Apply / Skip / Show turns** buttons (`rv:` custom
+  ids, handled in `handleInteraction`). Apply re-plans the edit against the
+  file as it is NOW (a hand edit since refuses cleanly), keeps the prior
+  version under `agent/.history/`, and shows **Undo**. Undo restores the
+  backup only while the file is untouched since.
+- **Measure, then prune.** The review opens with the previous review's
+  applied edits and whether the turns since show the improvement; an edit
+  that did not help gets a revert proposal. A `lessons.md` entry no turn
+  needed in a month gets a remove proposal.
+- **`agent/lessons.md` is the bot's memory**, loaded after `identity.md`
+  (`readLessons`, `LESSONS_MAX_CHARS` 6000, 20 entries). How to do this job
+  here — which tool answers what, what this clan calls things — never a
+  game fact, never a person. `REVIEW_AUTO_LESSONS=true` lets the review
+  write it without a click (never `identity.md`, never a brief), still
+  reported by DM with Undo.
+- **Its own lane.** `review` beside `routines` and `ask` in `src/budget.js`,
+  `REVIEW_MODEL` (default `claude-opus-5`), `REVIEW_EFFORT`, `REVIEW_AT` in
+  the operator's timezone as a pseudo-routine on the same run ledger
+  (`__review`; started AFTER the scheduler, whose first seeding replaces
+  the ledger). `/review` runs it on demand; `npm run review` is the dry
+  run: real call, nothing persisted, nobody DMed.
+- **What it may never do:** post to a member channel, react, ask the bot a
+  question, edit anything outside `agent/`, edit a routine's front matter,
+  read the ledger into a member-facing turn. The `EDITABLE` pattern and
+  `planEdit` are the fence; the tests pin them.
 
 ## The turn ledger — since 2026-09-14
 

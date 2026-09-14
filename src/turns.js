@@ -21,7 +21,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { readTurns, PROMPTS_DIR } from "./ledger.js";
+import { readTurns, readReviews, PROMPTS_DIR } from "./ledger.js";
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(`--${name}`);
@@ -144,12 +144,14 @@ export function renderTurn(turn, { full = false } = {}) {
   if (flags.length) out.push(`\n_${flags.join(" · ")}_`);
   for (const f of output.footers || []) out.push(`\n${clip(f, full ? Infinity : 500)}`);
 
-  if (turn.reactions?.length || turn.filed?.length) {
+  if (turn.reactions?.length || turn.filed?.length || turn.findings?.length || turn.interventions?.length) {
     out.push("");
     out.push("### Afterwards");
     out.push("");
-    for (const r of turn.reactions) out.push(`- ${r.reaction === "up" ? "👍" : "👎"} discord:${r.userId} at ${r.at.slice(0, 16)}Z${r.note ? ` — "${r.note}"` : ""}`);
-    for (const f of turn.filed) out.push(`- 📮 filed: ${f.summary}`);
+    for (const r of turn.reactions || []) out.push(`- ${r.reaction === "up" ? "👍" : "👎"} discord:${r.userId}${r.at ? ` at ${r.at.slice(0, 16)}Z` : ""}${r.note ? ` — "${r.note}"` : ""}`);
+    for (const i of turn.interventions || []) out.push(`- 🙋 ${i.by === "other_member" ? "another member stepped in" : "the asker pushed back"} (discord:${i.userId}): "${clip(i.text, full ? Infinity : 200)}"`);
+    for (const f of turn.findings || []) out.push(`- 🔎 ${f.class} (${f.source}): ${f.note}`);
+    for (const f of turn.filed || []) out.push(`- 📮 filed: ${f.summary}`);
   }
 
   out.push("");
@@ -172,9 +174,33 @@ function select() {
   return turns;
 }
 
+function renderReview(r) {
+  const out = [`## Review ${r.reviewId} · ${r.at.slice(0, 16)}Z · ${r.trigger} · ${r.turnsRead} turns (${r.flagged ?? "?"} flagged) · $${Number(r.usd ?? 0).toFixed(2)}`, "", r.report || "_(no report)_", ""];
+  for (const p of r.proposals || []) {
+    const d = (r.decisions || []).filter((x) => x.proposalId === p.id).at(-1);
+    out.push(`- **${p.id}** \`${p.file}\` · ${p.rule} · ${d ? d.decision.toUpperCase() : "pending"} — ${p.summary}`);
+    out.push("  ```diff");
+    out.push(p.preview.split("\n").map((l) => `  ${l}`).join("\n"));
+    out.push("  ```");
+  }
+  for (const m of r.reports || []) out.push(`- 🛠 mechanics · ${m.rule} — ${m.summary}`);
+  for (const f of r.filed || []) out.push(`- 📮 filed with Elixir — ${f}`);
+  return out.join("\n");
+}
+
 function main() {
   if (flag("help")) {
-    console.log("usage: turns [--instance <dir>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--lane ask|routines] [--routine <key>] [--turn <id>] [--full] [--json] [--export <dir>]");
+    console.log("usage: turns [--instance <dir>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--lane ask|routines] [--routine <key>] [--turn <id>] [--full] [--json] [--export <dir>] | --reviews");
+    return;
+  }
+  if (flag("reviews")) {
+    const reviews = readReviews({ dir, since: value("since") ?? daysAgo(60), until: value("until") });
+    if (reviews.length === 0) {
+      console.error("no reviews in the window");
+      process.exitCode = 1;
+      return;
+    }
+    console.log(reviews.map(renderReview).join("\n\n---\n\n"));
     return;
   }
   const turns = select();

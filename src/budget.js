@@ -12,6 +12,11 @@
  *              channel silently cancels the war-deck nudge at 01:00, and the
  *              operator finds out from the silence.
  *
+ *   review   — the bot reading its own ledger (src/review.js). One turn a
+ *              week that reads everything the other two lanes did; on their
+ *              pot it would be the largest turn of the month and would set
+ *              their reserve for the rest of it.
+ *
  * STRICT means the check happens BEFORE the call, against a reserve rather
  * than against the spend so far. A turn's cost is not knowable in advance, so
  * refusing only once spent >= budget guarantees an overshoot of one turn every
@@ -28,7 +33,7 @@ import { config } from "./config.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
 
-export const LANES = ["routines", "ask"];
+export const LANES = ["routines", "ask", "review"];
 
 export const monthKey = (now = new Date()) => now.toISOString().slice(0, 7);
 
@@ -37,7 +42,9 @@ export function laneFor(routine) {
 }
 
 function budgetFor(lane) {
-  return lane === "ask" ? config.askMonthlyBudgetUsd : config.monthlyBudgetUsd;
+  if (lane === "ask") return config.askMonthlyBudgetUsd;
+  if (lane === "review") return config.review.monthlyBudgetUsd;
+  return config.monthlyBudgetUsd;
 }
 
 function ledger(now = new Date()) {
@@ -105,7 +112,9 @@ export function record(lane, usd, now = new Date()) {
 
 /** What to show an operator: per lane, this month. */
 export function status(now = new Date()) {
-  return LANES.map((lane) => {
+  // The review lane is listed only when it is on: an "unlimited" line for a
+  // lane that never spends is a warning about nothing.
+  return LANES.filter((lane) => lane !== "review" || config.review.enabled).map((lane) => {
     const budget = budgetFor(lane);
     const used = spent(lane, now);
     return {

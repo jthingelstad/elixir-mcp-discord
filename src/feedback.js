@@ -27,6 +27,7 @@
 import { ask } from "./claude.js";
 import { callTool } from "./mcp.js";
 import { log } from "./log.js";
+import * as ledger from "./ledger.js";
 import * as state from "./state.js";
 
 /** Answer text that concedes a limit. Deliberately over-inclusive: a false
@@ -85,6 +86,51 @@ your message automatically.
 
 function calledFeedback(called) {
   return called.some((name) => name.includes("elixir_feedback"));
+}
+
+/**
+ * WHOSE FAULT WAS IT. Every sweep used to end one of two ways: a filing to
+ * Elixir's maintainer, or NONE. But "not Elixir's fault" is not "nobody's":
+ * a first-contact rule that made the bot ask for a tag it could have looked
+ * up, a brief that told a routine to report what the feed already said, a
+ * limit conceded because the prompt never mentioned the tool that answers
+ * it. Those are this bot's, and NONE threw them away. A sweep now says which
+ * of three parties owns the fix, and the two that are ours become `finding`
+ * records the review lane (src/review.js) reads.
+ *
+ *   ELIXIR: <summary>     filed upstream; the summary is the footer
+ *   PROMPT: <note>        this instance's agent/ — wording, a brief, a rule
+ *   MECHANICS: <note>     src/ — a rule in code, a runner behaviour
+ *   NONE                  nothing worth anyone's time
+ */
+export const CLASSIFY_RULES = `Decide who owns the fix, and reply with ONE line in one of these forms:
+- \`ELIXIR: <under 140 chars>\` — the server is missing a capability, gave a
+  misleading result, or failed a call. File it with elixir_feedback FIRST
+  (at most one item, concrete, with the request id when it is about one
+  call), then reply with this line summarising what you filed.
+- \`PROMPT: <under 200 chars>\` — the agent's own instructions caused it: a
+  rule in its house rules or brief that produced a bad outcome, a tool it
+  was never told about, wording it should not have used. Do NOT file; say
+  what the instruction should say instead.
+- \`MECHANICS: <under 200 chars>\` — the runner's own rules or behaviour
+  caused it (the grounding rule, the Discord format rules, how identity is
+  resolved, the post tool, budgets). Do NOT file; say what is wrong.
+- \`NONE\` — nothing concrete and actionable for anyone.`;
+
+/** Parse a sweep's one-line verdict. */
+export function parseVerdict(text) {
+  const line = (text || "").trim().split("\n").find((l) => l.trim()) || "";
+  const match = /^\s*(ELIXIR|PROMPT|MECHANICS|NONE)\s*:?\s*(.*)$/i.exec(line);
+  if (!match) return { cls: null, note: line.slice(0, 200) };
+  const cls = match[1].toLowerCase();
+  return { cls: cls === "none" ? null : cls, note: match[2].trim().slice(0, 200) };
+}
+
+/** Record a PROMPT/MECHANICS verdict for the review lane. */
+export function recordFinding({ turnId, verdict, source }) {
+  if (!turnId || !verdict?.cls || verdict.cls === "elixir") return;
+  ledger.append(ledger.findingEntry({ turnId, cls: verdict.cls, source, note: verdict.note }));
+  log.info("finding_recorded", { turnId, class: verdict.cls, source, note: verdict.note });
 }
 
 function looksLikeLimit(text) {
@@ -195,11 +241,11 @@ export async function sweepFriction({
   answer,
   friction,
   lane = "routines",
+  turnId = null,
 }) {
   const system = `You are reviewing one exchange between a Clash Royale clan member and an
 agent whose only data source is the Elixir MCP server. Your job is to decide
-whether the agent hit real friction worth reporting to the maintainer, and if
-so, to file it with elixir_feedback.
+whether the agent hit real friction, and whose fault it was.
 
 ${FEEDBACK_PROMPT}
 
@@ -210,8 +256,7 @@ Rules for this review:
 - Do not file a duplicate of an obvious, already-known gap unless this exchange
   adds a new specific.
 
-Reply with ONE line: a plain-language summary of what you filed (under 140
-characters), or exactly NONE if you filed nothing.`;
+${CLASSIFY_RULES}`;
 
   const detected =
     friction.reason === "tool_error"
@@ -241,14 +286,19 @@ characters), or exactly NONE if you filed nothing.`;
     log.warn("feedback_sweep_failed", { error: result.error });
     return null;
   }
-  const summary = (result.text || "").trim();
-  if (!calledFeedback(result.called) || /^none\b/i.test(summary)) {
+  const verdict = parseVerdict(result.text);
+  if (verdict.cls === "prompt" || verdict.cls === "mechanics") {
+    recordFinding({ turnId, verdict, source: "sweep" });
+    return null;
+  }
+  if (!calledFeedback(result.called) || verdict.cls !== "elixir") {
     log.info("feedback_sweep_declined", {
       reason: friction.reason,
       usd: result.usd.toFixed(4),
     });
     return null;
   }
+  const summary = verdict.note || "filed";
   log.info("feedback_filed", {
     reason: friction.reason,
     summary,

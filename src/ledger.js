@@ -12,15 +12,29 @@
  * was rendered into a footer and thrown away. To ask "was that number right?"
  * you needed the tool's result body, and nothing kept it.
  *
- * Three record kinds, all keyed by turnId, all append-only:
+ * Record kinds, all append-only. Keyed by turnId:
  *
- *   turn      the full turn — inputs (question and thread history, or the
- *             brief and the timeline it was handed), the system prompt's hash,
- *             the trace with each tool call's arguments AND result body,
- *             the answer and where it went, cost and usage
- *   reaction  a reader's 👍 / 👎 on any message the turn produced, with the
- *             reply they left if any
- *   filed     what the friction sweep filed with the maintainer for the turn
+ *   turn          the full turn — inputs (question and thread history, or the
+ *                 brief and the timeline it was handed), the system prompt's
+ *                 hash, the trace with each tool call's arguments AND result
+ *                 body, the answer and where it went, cost and usage
+ *   reaction      a reader's 👍 / 👎 on any message the turn produced, with
+ *                 the reply they left if any
+ *   filed         what a sweep filed with Elixir's maintainer for the turn
+ *   finding       what a sweep decided was THIS bot's fault rather than
+ *                 Elixir's — class "prompt" (the instance's agent/) or
+ *                 "mechanics" (src/) — queued for the review lane
+ *   intervention  a human stepping into an answer thread: another member
+ *                 correcting or nudging, or the asker saying it was wrong.
+ *                 The strongest signal that a rule was followed and the
+ *                 outcome was still bad.
+ *
+ * Keyed by reviewId (src/review.js):
+ *
+ *   review        one run of the review lane — the window it read, what it
+ *                 proposed, the report it wrote
+ *   decision      what the operator did with a proposal: applied, skipped,
+ *                 removed, or auto (lessons written without a click)
  *
  * Later signals are their own lines rather than edits to the turn line, so a
  * file is only ever appended to and a reader joins on turnId.
@@ -31,10 +45,13 @@
  * outside any git checkout, so this is the only record of which wording
  * produced which answer.
  *
- * TWO RULES. Nothing in the runtime reads this back: it is an audit record,
- * not memory, and a model that could see its old answers would be the local
- * data this repo forbids. And it holds members' names and questions, so it
- * stays in the instance directory under state/, gitignored like state.json.
+ * TWO RULES. No MEMBER-FACING turn ever reads this back: it is an audit
+ * record, not memory, and a model that could see its old answers would be
+ * the local data this repo forbids. The one reader in the runtime is the
+ * review lane (src/review.js), whose audience is the operator and whose
+ * output is a proposal, never an answer. And it holds members' names and
+ * questions, so it stays in the instance directory under state/, gitignored
+ * like state.json.
  *
  * The directory is resolved the same way config.js resolves the instance —
  * deliberately without importing config.js, whose .env validation would stop
@@ -181,6 +198,24 @@ export function filedEntry({ turnId, summary }) {
   return { kind: "filed", v: RECORD_VERSION, turnId, at: new Date().toISOString(), instance: instanceName(), summary };
 }
 
+/** `cls` is "prompt" or "mechanics"; `source` is "reaction" or "sweep". */
+export function findingEntry({ turnId, cls, source, note }) {
+  return { kind: "finding", v: RECORD_VERSION, turnId, at: new Date().toISOString(), instance: instanceName(), class: cls, source, note: String(note ?? "").slice(0, 600) };
+}
+
+/** `by` is "other_member" or "asker"; `text` is what they said, clipped. */
+export function interventionEntry({ turnId, by, userId, text }) {
+  return { kind: "intervention", v: RECORD_VERSION, turnId, at: new Date().toISOString(), instance: instanceName(), by, userId, text: String(text ?? "").slice(0, 500) };
+}
+
+export function reviewEntry({ reviewId, trigger, window, turnsRead, proposals, report, usd, model }) {
+  return { kind: "review", v: RECORD_VERSION, reviewId, at: new Date().toISOString(), instance: instanceName(), trigger, window, turnsRead, proposals, report: String(report ?? "").slice(0, 8000), usd, model };
+}
+
+export function decisionEntry({ reviewId, proposalId, decision, by = null, detail = null }) {
+  return { kind: "decision", v: RECORD_VERSION, reviewId, proposalId, at: new Date().toISOString(), instance: instanceName(), decision, by, detail };
+}
+
 export const fileFor = (at, dir = LEDGER_DIR) => path.join(dir, `${String(at).slice(0, 10)}.jsonl`);
 
 /**
@@ -226,16 +261,28 @@ export function readRecords({ dir = LEDGER_DIR, since = null, until = null } = {
   return records;
 }
 
-/** Turns with their later signals folded in: `{ ...turn, reactions: [], filed: [] }`. */
+/** Turns with their later signals folded in:
+ *  `{ ...turn, reactions: [], filed: [], findings: [], interventions: [] }`. */
 export function readTurns(options = {}) {
   const records = readRecords(options);
   const turns = new Map();
-  for (const r of records) if (r.kind === "turn" && r.turnId) turns.set(r.turnId, { ...r, reactions: [], filed: [] });
+  for (const r of records) if (r.kind === "turn" && r.turnId) turns.set(r.turnId, { ...r, reactions: [], filed: [], findings: [], interventions: [] });
   for (const r of records) {
     const turn = turns.get(r.turnId);
     if (!turn) continue;
     if (r.kind === "reaction") turn.reactions.push(r);
     else if (r.kind === "filed") turn.filed.push(r);
+    else if (r.kind === "finding") turn.findings.push(r);
+    else if (r.kind === "intervention") turn.interventions.push(r);
   }
   return [...turns.values()];
+}
+
+/** Reviews with their decisions folded in, oldest first. */
+export function readReviews(options = {}) {
+  const records = readRecords(options);
+  const reviews = new Map();
+  for (const r of records) if (r.kind === "review") reviews.set(r.reviewId, { ...r, decisions: [] });
+  for (const r of records) if (r.kind === "decision" && reviews.has(r.reviewId)) reviews.get(r.reviewId).decisions.push(r);
+  return [...reviews.values()];
 }

@@ -245,9 +245,33 @@ async function tryRoutine() {
   if (client) await client.destroy();
 }
 
+/** `npm run review` — read the window and print what the review WOULD
+ *  propose, persisting nothing and DMing nobody. Costs a real review turn. */
+async function reviewDry() {
+  warnAboutShadowedConfig();
+  const { runReview } = await import("./review.js");
+  const outcome = await runReview({ trigger: "cli", dryRun: true });
+  if (!outcome.ok) {
+    console.error(`FAILED: ${outcome.error}`);
+    process.exit(1);
+  }
+  if (outcome.empty) {
+    console.log("(nothing in the ledger since the last review)");
+    return;
+  }
+  console.log(`=== REPORT (${outcome.turns} turns, ${outcome.flagged} flagged) ===\n\n${outcome.report}\n`);
+  for (const [i, p] of outcome.proposals.entries()) {
+    console.log(`=== PROPOSAL ${i + 1}: ${p.file} · ${p.rule} ===\n${p.summary}\nturns ${p.turnIds.join(", ")}\n${p.preview}\n`);
+  }
+  for (const r of outcome.reports) console.log(`=== MECHANICS: ${r.rule} ===\n${r.summary}\nturns ${r.turnIds.join(", ")}\n`);
+  for (const f of outcome.filed) console.log(`=== FILED WITH ELIXIR ===\n${f}\n`);
+  console.log(`---\n${config.review.model} · effort ${config.review.effort} · $${outcome.usd.toFixed(4)} · dry run, nothing written${outcome.truncated ? " · TRUNCATED" : ""}`);
+}
+
 if (command === "list") listRoutines();
 else if (command === "try") await tryRoutine();
+else if (command === "review") await reviewDry();
 else {
-  console.error("usage: cli.js list | try <routine> [--post] [--show-prompt]");
+  console.error("usage: cli.js list | try <routine> [--post] [--show-prompt] | review");
   process.exit(1);
 }

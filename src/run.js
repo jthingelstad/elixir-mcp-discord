@@ -307,6 +307,7 @@ async function runRoutineNow(
       // The sweep is a second call caused by this turn, so it is charged where
       // the turn was.
       lane,
+      turnId: result.turnId,
     }).catch((error) => {
       log.warn("feedback_sweep_crashed", { error: error.message });
       return null;

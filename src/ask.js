@@ -181,6 +181,53 @@ async function recentTurns(thread, upToId, turns) {
 }
 
 /**
+ * A HUMAN STEPPING IN. The sikander case of 2026-09-13: the bot followed its
+ * rule and asked a member for a tag, a leader nudged it in the thread, and
+ * only then did it look the name up. No error, no 👎, no friction — the
+ * rule worked and the outcome was bad, and the only sign was a second person
+ * speaking in the thread. That is the signal the review lane most wants, so
+ * it is recorded on the turn it answers: a follow-up from someone other than
+ * the asker, or the asker saying the answer was wrong.
+ */
+export const CORRECTION_MARKERS = /\b(no|nope|wrong|incorrect|not right|that'?s not|not what i|i meant|i said|actually|try again|you missed)\b/i;
+
+export function looksLikeCorrection(text) {
+  return CORRECTION_MARKERS.test((text || "").slice(0, 200));
+}
+
+/** The turn answered just before `beforeId` in this thread, and who started it. */
+async function threadContext(thread, beforeId) {
+  const starter = await thread.fetchStarterMessage?.().catch(() => null);
+  const fetched = await thread.messages.fetch({ limit: 30, before: beforeId }).catch(() => null);
+  let turnId = null;
+  if (fetched) {
+    // Newest first, so the first bot message with a turn is the last answer.
+    for (const m of fetched.values()) {
+      if (!m.author?.bot) continue;
+      const turn = state.turnForMessage(m.id);
+      if (turn) {
+        turnId = turn.turnId;
+        break;
+      }
+    }
+  }
+  return { starterAuthorId: starter?.author?.id ?? null, turnId };
+}
+
+function recordIntervention(message, ctx, question) {
+  if (!ctx.turnId) return;
+  const other = ctx.starterAuthorId && ctx.starterAuthorId !== message.author.id;
+  if (other) {
+    ledger.append(ledger.interventionEntry({ turnId: ctx.turnId, by: "other_member", userId: message.author.id, text: question }));
+  } else if (looksLikeCorrection(question)) {
+    ledger.append(ledger.interventionEntry({ turnId: ctx.turnId, by: "asker", userId: message.author.id, text: question }));
+  } else {
+    return;
+  }
+  log.info("intervention_recorded", { turnId: ctx.turnId, by: other ? "other_member" : "asker" });
+}
+
+/**
  * `askFn` is injectable so the smoke test can drive this whole path without a
  * network call or a Discord connection. That seam exists because a refactor
  * once deleted LiveMessage and every static check still passed — a missing
@@ -221,6 +268,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
     const history = inThread
       ? await recentTurns(message.channel, message.id, routine.historyTurns)
       : [];
+    if (inThread) recordIntervention(message, await threadContext(message.channel, message.id), question);
     const asker = message.member?.displayName || message.author.username;
 
     // A new question opens a thread and is answered inside it; a follow-up is
@@ -357,7 +405,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
     });
 
     if (friction) {
-      const summary = await sweepFriction({ question, answer, friction, lane });
+      const summary = await sweepFriction({ question, answer, friction, lane, turnId: result.turnId });
       if (summary) ledger.append(ledger.filedEntry({ turnId: result.turnId, summary }));
       if (summary && sent) {
         await sent.reply({

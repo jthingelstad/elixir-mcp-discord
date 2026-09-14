@@ -20,6 +20,7 @@ import { handleAsk, isThreadOf } from "./ask.js";
 import { handleReaction } from "./reactions.js";
 import { startEventLoop } from "./events.js";
 import { startScheduler } from "./scheduler.js";
+import { startReview } from "./review.js";
 import { loadRoutines, routinesFor } from "./routines.js";
 import { registerCommands, handleInteraction } from "./commands.js";
 import { checkChannelPermissions } from "./permissions.js";
@@ -199,6 +200,7 @@ client.once(Events.ClientReady, async (ready) => {
   const models = new Set([
     config.claude.model,
     ...routines.filter((r) => !r.disabled).map((r) => r.model),
+    ...(config.review.enabled ? [config.review.model] : []),
   ]);
   for (const model of models) {
     try {
@@ -246,6 +248,10 @@ client.once(Events.ClientReady, async (ready) => {
   await postHello({ handshake, routines });
   timers.push(startEventLoop(() => routinesFor("events"), resolveChannel));
   timers.push(startScheduler(() => routinesFor("schedule"), resolveChannel));
+  // After the scheduler: both seed the same run ledger, and the scheduler's
+  // first seeding replaces it wholesale.
+  const review = startReview(client);
+  if (review) timers.push(review);
 });
 
 /**

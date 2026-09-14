@@ -17,7 +17,8 @@
 
 import { ask, spendBlock } from "./claude.js";
 import { callTool } from "./mcp.js";
-import { FEEDBACK_PROMPT, tallyCalls } from "./feedback.js";
+import { FEEDBACK_PROMPT, CLASSIFY_RULES, parseVerdict, recordFinding, tallyCalls } from "./feedback.js";
+import { config } from "./config.js";
 import { log } from "./log.js";
 import * as ledger from "./ledger.js";
 import * as state from "./state.js";
@@ -56,7 +57,11 @@ function describeTurn(turn, note) {
   return lines.join("\n\n");
 }
 
-/** The 👎 path: one reflection, at most one filing. Returns the summary or null. */
+/**
+ * The 👎 path: one reflection, at most one filing. Returns the filed summary
+ * (a string) when Elixir owns the fix, `{ cls, note }` when this bot does —
+ * recorded as a finding for the review lane — or null for nothing.
+ */
 export async function sweepReaction({ turn, note }) {
   const blocked = spendBlock(turn.lane || "routines");
   if (blocked) {
@@ -64,19 +69,18 @@ export async function sweepReaction({ turn, note }) {
     return null;
   }
   const system = `A clan member marked one of this agent's answers as wrong or unhelpful. The
-agent's only data source is the Elixir MCP server. Decide whether the answer
-went wrong because of something the SERVER did — a missing capability, a
-misleading result, a failed call — and if so, file it with elixir_feedback,
-quoting the request id of the call concerned.
+agent's only data source is the Elixir MCP server. Decide whose fault it was:
+the SERVER (a missing capability, a misleading result, a failed call), the
+agent's own PROMPT (its house rules or brief), or the runner's MECHANICS.
 
 ${FEEDBACK_PROMPT}
 
 Rules for this review:
 - File AT MOST one item, and only if it is concrete and actionable.
-- If the fault was the agent's own wording or a misread, do not file; that is
-  not the server's problem.
-- Reply with ONE line: a plain-language summary of what you filed (under 140
-  characters), or exactly NONE if you filed nothing.`;
+- A reader's note is the strongest evidence you have; weigh it above the
+  agent's own account of what it did.
+
+${CLASSIFY_RULES}`;
 
   const result = await ask({
     system,
@@ -89,11 +93,16 @@ Rules for this review:
     log.warn("reaction_sweep_failed", { turnId: turn.turnId, error: result.error });
     return null;
   }
-  const summary = (result.text || "").trim();
-  if (!calledFeedback(result.called) || /^none\b/i.test(summary)) {
+  const verdict = parseVerdict(result.text);
+  if (verdict.cls === "prompt" || verdict.cls === "mechanics") {
+    recordFinding({ turnId: turn.turnId, verdict, source: "reaction" });
+    return { cls: verdict.cls, note: verdict.note };
+  }
+  if (!calledFeedback(result.called) || verdict.cls !== "elixir") {
     log.info("reaction_sweep_declined", { turnId: turn.turnId, usd: result.usd.toFixed(4) });
     return null;
   }
+  const summary = verdict.note || "filed";
   log.info("reaction_feedback_filed", { turnId: turn.turnId, summary, usd: result.usd.toFixed(4) });
   return summary.slice(0, 200);
 }
@@ -147,6 +156,14 @@ export async function handleReaction(reaction, user, { sweepFn = sweepReaction, 
   const note = await readerNote(message, user);
   ledger.append(ledger.reactionEntry({ turnId: turn.turnId, reaction: kind, userId: user.id, note: note || null }));
   const summary = await sweepFn({ turn, note });
+  if (summary && typeof summary === "object") {
+    // Ours, not Elixir's. The finding is already in the ledger; the reader
+    // learns it landed somewhere, and the operator sees it at the next review.
+    await respond(
+      `-# 📮 Noted — that one is on this bot's side, not Elixir's${config.review.enabled ? "; it is queued for the next review" : ""}.`,
+    );
+    return { kind, filed: false, finding: summary };
+  }
   if (summary) {
     ledger.append(ledger.filedEntry({ turnId: turn.turnId, summary }));
     await respond(`-# 📮 Filed with Elixir MCP: ${summary}`);

@@ -9,6 +9,11 @@
  *   2. IDENTITY (agent/identity.md). Voice, house rules, what the channels are
  *      for, what this agent will not do. The operator's file, and the one they
  *      should actually spend time on.
+ *   2b. LESSONS (agent/lessons.md). What reviews of this bot's own answers
+ *      concluded (src/review.js): dated entries citing the turns that taught
+ *      them. The bot's memory, in a text file the operator can read and edit
+ *      — never facts about the game, never a person, only how to do this job
+ *      here. Bounded, because it rides the cached prefix of every turn.
  *   3. THE ROUTINE (agent/routines/*.md). The task itself.
  *
  * NOTHING HERE NAMES A CLAN. It cannot: the agent key already knows which clan
@@ -141,6 +146,30 @@ export function readIdentity({ dir = config.agentDir } = {}) {
   }
 }
 
+/** How much of lessons.md reaches the prompt. Every character here is paid
+ *  for on every turn; the review prunes, and this is the hard stop. */
+export const LESSONS_MAX_CHARS = 6000;
+
+export function readLessons({ dir = config.agentDir } = {}) {
+  const file = path.join(dir, "lessons.md");
+  try {
+    const text = fs.readFileSync(file, "utf8").trim();
+    if (!text) return null;
+    if (text.length > LESSONS_MAX_CHARS) {
+      log.warn("lessons_clipped", { file, chars: text.length, max: LESSONS_MAX_CHARS });
+      return text.slice(0, LESSONS_MAX_CHARS);
+    }
+    return text;
+  } catch {
+    return null;
+  }
+}
+
+const LESSONS_HEADER = `LESSONS LEARNED HERE
+
+What earlier reviews of your own answers in this server concluded. Follow
+them like house rules. Each is dated and names the turns that taught it.`;
+
 /**
  * The clan this key acts for, named from the SERVER's own principal block
  * rather than from configuration.
@@ -169,7 +198,7 @@ clan_tag and it means this clan.`;
  */
 export function systemFor(
   routine,
-  { identity = readIdentity(), includePrompt = false, subject = subjectBlock(), entries = [], defaultChannelId = null } = {},
+  { identity = readIdentity(), lessons = readLessons(), includePrompt = false, subject = subjectBlock(), entries = [], defaultChannelId = null } = {},
 ) {
   const withTool = entries.length > 0;
   // The posting rule frames the whole task, so it comes first when it applies.
@@ -181,6 +210,7 @@ export function systemFor(
   blocks.push(QUOTA);
   if (routine.maySkip) blocks.push(withTool ? SKIP_WITH_TOOL : SKIP);
   if (identity) blocks.push(`HOUSE RULES\n\n${identity}`);
+  if (lessons) blocks.push(`${LESSONS_HEADER}\n\n${lessons}`);
   // A message routine's own prompt is a standing brief for the channel, so it
   // belongs in the system block where prompt caching keeps it: the per-message
   // user turn is the only thing that should change between calls.
@@ -188,6 +218,10 @@ export function systemFor(
   blocks.push(FEEDBACK_PROMPT);
   return blocks.join("\n\n");
 }
+
+/** The code-level rules, by name, for the review lane to show the model as
+ *  the part of the rubric it cannot edit. */
+export const MECHANICS = { GROUNDING, DISCORD_FORMAT, POSTING, WHO_IS_ASKING, QUOTA, SKIP, FEEDBACK_PROMPT };
 
 export const DELIVER = `Deliver your post by calling post_message. If there is nothing to post, make no
 call and reply SKIP.`;

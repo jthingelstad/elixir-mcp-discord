@@ -35,6 +35,7 @@ import {
 import { config } from "./config.js";
 import { loadRoutines } from "./routines.js";
 import { runRoutine } from "./run.js";
+import { runReview, deliver as deliverReview, findReview, handleButton } from "./review.js";
 import * as budget from "./budget.js";
 import { log } from "./log.js";
 
@@ -49,8 +50,18 @@ export function baseCommand(name, prefix = config.commandPrefix) {
   return name.startsWith(`${prefix}-`) ? name.slice(prefix.length + 1) : null;
 }
 
-export function commandDefinitions() {
+export function commandDefinitions({ review = config.review.enabled } = {}) {
   return [
+    // The review is a command only when the lane is on: an operator who has
+    // not turned it on should not find a button that spends a dollar.
+    ...(review
+      ? [
+          new SlashCommandBuilder()
+            .setName(commandName("review"))
+            .setDescription("Review this bot's recent answers now; proposals arrive by DM")
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+        ]
+      : []),
     new SlashCommandBuilder()
       .setName(commandName("budget"))
       .setDescription("What this bot has spent this month, per lane")
@@ -84,7 +95,7 @@ export async function registerCommands(client) {
     );
     log.info("commands_registered", {
       guild: config.discord.guildId,
-      commands: ["budget", "routines", "run"].map((c) => `/${commandName(c)}`).join(","),
+      commands: ["budget", "routines", "run", ...(config.review.enabled ? ["review"] : [])].map((c) => `/${commandName(c)}`).join(","),
     });
   } catch (error) {
     log.error("commands_registration_failed", {
@@ -131,6 +142,12 @@ export function routinesReply(routines = loadRoutines().routines) {
 }
 
 export async function handleInteraction(interaction, { resolveChannel }) {
+  // A button on a review DM (src/review.js): apply, skip, undo, show.
+  if (interaction.isButton?.()) {
+    const outcome = await handleButton(interaction, { isAdmin });
+    if (outcome) log.info("review_button", { user: interaction.user.id, ...outcome });
+    return;
+  }
   if (interaction.isAutocomplete()) {
     const typed = (interaction.options.getFocused() ?? "").toLowerCase();
     const keys = loadRoutines()
@@ -170,6 +187,30 @@ export async function handleInteraction(interaction, { resolveChannel }) {
       content: routinesReply(),
       flags: MessageFlags.Ephemeral,
     });
+    return;
+  }
+
+  if (command === "review") {
+    if (!config.review.enabled) {
+      await interaction.reply({ content: "The review lane is off. Set `REVIEW=on` in this instance's .env and restart.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+    // A review reads a week and thinks for a while; Discord wants three seconds.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const outcome = await runReview({ trigger: "command" });
+    log.info("review_run_on_demand", { by: interaction.user.id, ok: outcome.ok, reviewId: outcome.reviewId });
+    if (!outcome.ok) {
+      await interaction.editReply(`Review failed: ${outcome.error}`);
+      return;
+    }
+    if (outcome.empty) {
+      await interaction.editReply("Nothing new in the ledger since the last review.");
+      return;
+    }
+    const reached = await deliverReview({ client: interaction.client, review: findReview(outcome.reviewId) ?? outcome.record, outcome });
+    await interaction.editReply(
+      `Read ${outcome.turns} turns (${outcome.flagged} flagged): ${outcome.proposals.length} proposal${outcome.proposals.length === 1 ? "" : "s"}, ${outcome.reports.length} mechanics report${outcome.reports.length === 1 ? "" : "s"} · $${outcome.usd.toFixed(2)}. ${reached ? "Sent to you by DM." : "Could not DM you — check that DMs from this server are allowed."}`,
+    );
     return;
   }
 

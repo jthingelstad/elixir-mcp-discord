@@ -232,7 +232,48 @@ export const config = {
   // The boot hello: one line in the first channel of the directory saying
   // the bot is up and what build it is. STARTUP_MESSAGE=off to silence it.
   startupMessage: optional("STARTUP_MESSAGE", "on").toLowerCase() !== "off",
+
+  // THE REVIEW LANE (src/review.js): the bot reading its own turn ledger and
+  // proposing edits to agent/ — evaluation as a feature, off by default. Its
+  // own model, because judging answers is a different job from giving them;
+  // its own budget, because a week's reading is one big turn and must never
+  // cost the ask lane a question; its own clock, in the operator's timezone.
+  review: {
+    enabled: optional("REVIEW", "off").toLowerCase() === "on",
+    model: tracked("REVIEW_MODEL", "claude-opus-5"),
+    effort: tracked("REVIEW_EFFORT", "high"),
+    monthlyBudgetUsd: process.env.REVIEW_MONTHLY_BUDGET_USD
+      ? Number(process.env.REVIEW_MONTHLY_BUDGET_USD)
+      : null,
+    // "sun 20:00" — weekday (or "daily") and wall time. Weekly is the shape
+    // this was designed for: enough turns to see a pattern, few enough
+    // proposals to read.
+    at: parseReviewAt(optional("REVIEW_AT", "sun 20:00")),
+    // Let the review write agent/lessons.md without a click. Never
+    // identity.md, never a routine — those are policy and stay gated.
+    autoLessons: optional("REVIEW_AUTO_LESSONS", "false").toLowerCase() === "true",
+    // Proposals per review. Three is a decision; ten is a backlog.
+    maxProposals: Number(optional("REVIEW_MAX_PROPOSALS", "3")),
+  },
 };
+
+/** "sun 20:00" | "daily 07:30" | "mon,thu 21:00" -> { days: [0] | null, hour, minute }. */
+export function parseReviewAt(raw) {
+  const names = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  const match = /^\s*([a-z,]+)\s+(\d{1,2}):(\d{2})\s*$/i.exec(String(raw));
+  if (!match) throw new Error(`REVIEW_AT "${raw}" is not "<weekday|daily> HH:MM" (e.g. "sun 20:00")`);
+  const [, when, h, m] = match;
+  const hour = Number(h);
+  const minute = Number(m);
+  if (hour > 23 || minute > 59) throw new Error(`REVIEW_AT "${raw}": bad time`);
+  if (when.toLowerCase() === "daily") return { days: null, hour, minute };
+  const days = when
+    .toLowerCase()
+    .split(",")
+    .map((d) => names.indexOf(d.slice(0, 3)));
+  if (days.some((d) => d < 0)) throw new Error(`REVIEW_AT "${raw}": unknown weekday`);
+  return { days, hour, minute };
+}
 
 lazy(config, "mcp", () => ({
   // No default. The old one pointed at the personal /mcp door, which is not

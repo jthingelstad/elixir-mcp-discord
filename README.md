@@ -168,9 +168,31 @@ npm run turns -- --turn d98fe553             # one turn, tool bodies uncut
 npm run turns -- --export ./review           # one .md per turn, plus the prompts
 ```
 
-The bot never reads this back — it is a record for judging answers, not
-memory — and it holds members' names and questions, so it stays under
+No member-facing turn reads this back — it is a record for judging answers,
+not memory — and it holds members' names and questions, so it stays under
 `state/`, which is gitignored.
+
+## Letting it review itself
+
+Set `REVIEW=on` (and `ADMIN_USER_IDS`) and once a week the bot reads its
+own ledger, grades what it said against its own rules and against what
+people did afterwards — a 👎, a leader stepping into a thread, the asker
+saying "no" — and DMs you at most three **proposed edits** to the files
+under `agent/`, each a diff with Apply / Skip buttons. Apply writes the file
+(a copy is kept under `agent/.history/`) and the change is live, because
+prompts hot-load. The next review opens by checking whether the last one's
+edits actually helped.
+
+Accepted edits are the bot's memory. `agent/lessons.md` collects how to do
+this job here — which tool answers what, what your clan calls things; the
+house rules and a routine's brief change only when a rule itself was wrong.
+It never learns facts about the game (Elixir has those) and never anything
+about a person.
+
+It runs on its own model and its own budget (`REVIEW_MODEL`,
+`REVIEW_MONTHLY_BUDGET_USD`), so it can never cost a member an answer.
+`/review` runs it now; `npm run review` shows what it would propose without
+writing or sending anything.
 
 In Discord, an admin (`ADMIN_USER_IDS`) has slash commands: **`/run`** with
 autocomplete over your routine names, **`/routines`**, and **`/budget`**
