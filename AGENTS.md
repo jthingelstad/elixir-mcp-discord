@@ -308,17 +308,19 @@ cannot be enforced is worse than none, because it looks like it works.
   came back as `elixir-mcp_feedback`; stripping the server name gives
   `feedback`, which is not a tool. `resolveToolName` matches against the live
   `tools/list`.
-- **The feed is one entry per subject since contract 2.0.0 (2026-09-13).**
-  No topic rows, no integer event ids, no `topics` argument: `elixir_events`
-  returns `entries[]` (for an agent, ONE clan entry, members inside it) over
-  `window {from,to}`, sections null when nothing happened, `next_cursor` an
-  ISO instant. A clan entry arrives on EVERY read, so `noteworthy()` in
-  `src/events.js` decides whether to spend a model call: a notable, or a
-  list holding a record inside the sections the routine named (`sections:`
-  front matter). Numbers and lists of numbers never count. A routine file
-  still saying `topics:` fails to parse with the migration in the message.
-  `war_day_open` and `clan_pulse` no longer exist; a war-day post is a
-  schedule routine's job (`game_clock` says when).
+- **The feed is a TIMELINE since contract 3.0.0 (2026-09-13, two shape
+  changes in one evening).** The tool is `elixir_timeline` (`mark_read:
+  false` + our own ISO cursor); the response carries `timeline[]` — what
+  happened, oldest first, typed items `{at, subject_tag, subject_name, kind,
+  section, text, facts}` — and `entries[]`, one per subject as context
+  (for an agent, ONE clan entry). A routine wakes only for the item kinds
+  or sections it names (`kinds:` / `sections:` front matter; `relevant()` in
+  `src/events.js`): an active clan emits a `battle_session` in nearly every
+  window, so a routine naming nothing fires on every poll. The model is
+  handed `{window, timeline: items, entries}`. A file still saying
+  `topics:` fails to parse with the migration in the message. There is no
+  war-day-open item; a war-day post is a schedule routine's job
+  (`game_clock` says when).
 - **The seen bookmark is per ACCOUNT (an agent is its own account).** Every
   event routine polls with `mark_seen: false` and keeps its own ISO cursor
   in `state/state.json`; a pre-2.0.0 integer cursor re-seeds from now. Never

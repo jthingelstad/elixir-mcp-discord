@@ -43,6 +43,7 @@ const FIELDS = new Set([
   "days",
   "catch_up_hours",
   "sections",
+  "kinds",
   "may_skip",
   "recall",
   "history_turns",
@@ -105,7 +106,7 @@ export function parseRoutine(key, text) {
   // The feed is now one entry per subject with named sections. A file from
   // before must fail with the migration in the message, not as "unknown".
   if (fields.topics !== undefined) {
-    fail(key, "topics is gone (elixir_events 2.0.0 has no topics); name the feed sections this routine reads with sections: roster, presence, war");
+    fail(key, "topics is gone (the feed is a timeline since contract 3.0.0); name the item kinds that wake this routine with kinds: member_joined, member_left, ...");
   }
   for (const field of Object.keys(fields)) {
     if (!FIELDS.has(field)) fail(key, `unknown field "${field}"`);
@@ -191,13 +192,15 @@ export function parseRoutine(key, text) {
     );
   }
 
-  // A routine says which feed sections it reads (all, if it says nothing).
-  // Naming a section is also what makes a window noteworthy — see
-  // noteworthy() in events.js.
+  // A routine says which timeline items wake it: `kinds:` (member_joined,
+  // week_resolved, ...) and/or `sections:` (roster, war, ...). Naming none
+  // means every item — including every battle session, which in an active
+  // clan is every window. See relevant() in events.js.
   if (trigger === "events") {
     routine.sections = fields.sections ? asList(fields.sections) : null;
-  } else if (fields.sections) {
-    fail(key, "sections only mean something for trigger: events");
+    routine.kinds = fields.kinds ? asList(fields.kinds) : null;
+  } else if (fields.sections || fields.kinds) {
+    fail(key, "sections and kinds only mean something for trigger: events");
   }
 
   if (trigger === "message") {

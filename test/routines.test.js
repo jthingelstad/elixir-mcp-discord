@@ -27,20 +27,21 @@ test("a schedule routine parses its clock, days and window", () => {
   assert.equal(routine.trace, false, "only message routines trace by default");
 });
 
-test("an events routine names the feed sections it reads; topics is gone and says so", () => {
-  const events = parseRoutine("feed", doc({ trigger: "events", channel: "pulse", sections: "[roster, presence]" }));
-  assert.deepEqual(events.sections, ["roster", "presence"]);
+test("an events routine names the timeline kinds or sections that wake it; topics is gone and says so", () => {
+  const events = parseRoutine("feed", doc({ trigger: "events", channel: "pulse", kinds: "[member_joined, returned]", sections: "roster" }));
+  assert.deepEqual(events.kinds, ["member_joined", "returned"]);
+  assert.deepEqual(events.sections, ["roster"]);
   const all = parseRoutine("feed", doc({ trigger: "events", channel: "pulse" }));
-  assert.equal(all.sections, null, "no sections means the whole entry");
+  assert.equal(all.kinds, null, "no kinds means every item");
   // The pre-2.0.0 field. A routine file from before the feed changed shape
   // must fail loudly with the migration in the message, not load and never fire.
   assert.throws(
     () => parseRoutine("feed", doc({ trigger: "events", channel: "pulse", topics: "clan_pulse" })),
-    /topics is gone.*sections/,
+    /topics is gone.*kinds/,
   );
   assert.throws(
-    () => parseRoutine("x", doc({ trigger: "schedule", channel: "pulse", at: "01:00", sections: "roster" })),
-    /sections only mean something/,
+    () => parseRoutine("x", doc({ trigger: "schedule", channel: "pulse", at: "01:00", kinds: "returned" })),
+    /kinds only mean something/,
   );
 });
 

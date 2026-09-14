@@ -63,12 +63,13 @@ test("the operator's identity file is what makes the agent theirs", () => {
 });
 
 test("events and recent posts reach the user turn, not the system prompt", () => {
-  const message = userMessageFor(routine({ trigger: "events", channel: "pulse", sections: "roster" }), {
-    events: [{ kind: "clan_activity", summary: "Example: roster 47→48.", roster: { joined: { items: [{ name: "New" }], more: 0 } } }],
+  const message = userMessageFor(routine({ trigger: "events", channel: "pulse", kinds: "member_joined" }), {
+    events: { window: { from: "a", to: "b" }, timeline: [{ kind: "member_joined", text: "New joined", facts: {} }], entries: [{ kind: "clan_activity", summary: "Example." }] },
     recent: ["**War decks** — 3 untouched."],
   });
+  assert.match(message, /"kind": "member_joined"/);
   assert.match(message, /"kind": "clan_activity"/);
-  assert.match(message, /ACTIVITY FEED/);
+  assert.match(message, /ELIXIR MCP TIMELINE/);
   assert.match(message, /WHAT THIS ROUTINE POSTED RECENTLY/);
   assert.match(message, /3 untouched/);
 });

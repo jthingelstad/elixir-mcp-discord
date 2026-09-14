@@ -183,9 +183,9 @@ call and reply SKIP.`;
 /** The routine's own prompt, plus whatever its trigger handed it. */
 export function userMessageFor(routine, { events, recent, withTool = false } = {}) {
   const parts = [routine.prompt];
-  if (events?.length) {
+  if (events && (Array.isArray(events) ? events.length : true)) {
     parts.push(
-      `FROM THE ELIXIR MCP ACTIVITY FEED — one entry per subject for the window shown, sections null when nothing happened. These are facts with their own as_of, not a report; drill with the tools where it earns its place, and never announce the time from them.\n\n${JSON.stringify(events, null, 2)}`,
+      `FROM THE ELIXIR MCP TIMELINE — \`timeline\` is what happened in the window, oldest first, one item each with a sentence and its facts; \`entries\` is the window's context per subject, sections null when nothing happened. Facts with their own timestamps, not a report: drill with the tools where it earns its place, and never announce the time from them.\n\n${JSON.stringify(events, null, 2)}`,
     );
   }
   if (recent?.length) {

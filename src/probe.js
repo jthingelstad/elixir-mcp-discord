@@ -54,15 +54,16 @@ if (!clock.ok) {
 }
 console.log(`ok    key authenticated`);
 
-const events = await callTool("elixir_events", { mark_seen: false, verbosity: "compact" });
-if (!events.ok) {
-  console.error(`FAIL  elixir_events: ${events.error}`);
+const feed = await callTool("elixir_timeline", { mark_read: false, verbosity: "compact" });
+if (!feed.ok) {
+  console.error(`FAIL  elixir_timeline: ${feed.error}`);
   process.exit(1);
 }
 const cursors = state.get("cursors") || {};
 const positions = Object.entries(cursors).map(([key, at]) => `${key}=${at}`).join(", ");
-const entries = events.body?.entries ?? [];
-console.log(`ok    activity feed readable; ${entries.length} subject(s) in the last day: ${entries.map((e) => e.name).join(", ") || "none"}`);
-console.log(`      local cursors = ${positions || "unset (seed on first poll)"}`);
-console.log(`      contract ${events.body?.meta?.contract_version ?? "?"} · feedback responses pending = ${events.body?.meta?.feedback_responses_pending ?? "?"}`);
+const timeline = feed.body?.timeline ?? [];
+const kinds = [...new Set(timeline.map((i) => i.kind))];
+console.log(`ok    timeline readable; ${timeline.length} item(s) in the last day${kinds.length ? `: ${kinds.join(", ")}` : ""}`);
+console.log(`      subjects: ${(feed.body?.entries ?? []).map((e) => e.name).join(", ") || "none"} · local cursors = ${positions || "unset (seed on first poll)"}`);
+console.log(`      contract ${feed.body?.meta?.contract_version ?? "?"} · feedback responses pending = ${feed.body?.meta?.feedback_responses_pending ?? "?"}`);
 console.log(`      spend today = $${state.todaySpend().toFixed(4)}`);

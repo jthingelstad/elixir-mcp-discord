@@ -19,7 +19,7 @@ export function describeWhen(routine) {
     const days = routine.days ? routine.days.map((d) => WEEKDAY_NAMES[d]).join(",") : "daily";
     return `${days} at ${hhmm}`;
   }
-  if (routine.trigger === "events") return `feed: ${routine.sections?.join(", ") ?? "all sections"}`;
+  if (routine.trigger === "events") return `timeline: ${routine.kinds?.join(", ") ?? routine.sections?.join(", ") ?? "everything"}`;
   return "on message";
 }
 

@@ -154,7 +154,8 @@ export function tallyCalls(called) {
  */
 export function looksUngrounded({ text, called, events }) {
   if ((called || []).length > 0) return false;
-  if (events?.length) return false;
+  // Handed timeline items (an array, or the {timeline, entries} object) are a source.
+  if (Array.isArray(events) ? events.length : events?.timeline?.length) return false;
   return /\d/.test(text || "");
 }
 

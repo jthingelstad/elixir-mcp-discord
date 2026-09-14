@@ -42,7 +42,7 @@ routine = trigger x prompt x destination
 | Trigger | Fires when | Example |
 |---|---|---|
 | `message` | somebody speaks in the routine's channel | an ask-anything channel |
-| `events` | Elixir MCP's activity feed has something in the sections it reads | joins, departures, returns, a finished war week |
+| `events` | Elixir MCP's timeline carries an item of a kind it names | joins, departures, returns, a resolved war week |
 | `schedule` | a clock, in your timezone | a war-deck nudge at 01:00, a meta report on Sundays |
 
 A routine is one markdown file:
