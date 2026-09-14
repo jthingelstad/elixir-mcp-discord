@@ -229,6 +229,9 @@ export const config = {
   // How many post_message calls one turn may make. One event can fairly be
   // two posts (a welcome for members, a note for leaders); it is never five.
   maxPostsPerTurn: Number(optional("MAX_POSTS_PER_TURN", "3")),
+  // The boot hello: one line in the first channel of the directory saying
+  // the bot is up and what build it is. STARTUP_MESSAGE=off to silence it.
+  startupMessage: optional("STARTUP_MESSAGE", "on").toLowerCase() !== "off",
 };
 
 lazy(config, "mcp", () => ({

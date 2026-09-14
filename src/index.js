@@ -24,6 +24,8 @@ import { loadRoutines, routinesFor } from "./routines.js";
 import { registerCommands, handleInteraction } from "./commands.js";
 import { checkChannelPermissions } from "./permissions.js";
 import * as directory from "./directory.js";
+import { buildId } from "./build.js";
+import { commandName } from "./commands.js";
 import { rateFor } from "./pricing.js";
 import * as budget from "./budget.js";
 import { initialize, describePrincipal } from "./mcp.js";
@@ -123,7 +125,7 @@ function reportPrincipal(handshake) {
 }
 
 client.once(Events.ClientReady, async (ready) => {
-  log.info("discord_ready", { user: ready.user.tag, guild: config.discord.guildId });
+  log.info("discord_ready", { user: ready.user.tag, guild: config.discord.guildId, build: buildId() });
   // Which instance this is, first. One checkout can run several bots, and a
   // log line that does not say whose .env it read is a log line that will be
   // read as another clan's.
@@ -240,9 +242,50 @@ client.once(Events.ClientReady, async (ready) => {
   await checkChannelPermissions({ client, routines, resolveChannel });
 
   await registerCommands(client);
+  await postHello({ handshake, routines });
   startEventLoop(() => routinesFor("events"), resolveChannel);
   startScheduler(() => routinesFor("schedule"), resolveChannel);
 });
+
+/**
+ * One line on boot, in the first channel the bot may post in, so a restart
+ * is visible to the people it serves and the build is on record beside
+ * whatever it posts next. Runner-posted: no model, no cost. At most once an
+ * hour, so a crash loop is a log problem and not a channel problem.
+ */
+const HELLO_INTERVAL_MS = 60 * 60 * 1000;
+
+async function postHello({ handshake, routines }) {
+  if (!config.startupMessage) return;
+  const last = state.get("helloAt");
+  if (last && Date.now() - Date.parse(last) < HELLO_INTERVAL_MS) {
+    log.info("hello_skipped", { lastAt: last });
+    return;
+  }
+  const target = directory.directory().find((e) => e.role !== "ask");
+  if (!target) return;
+  const channel = await directory.resolveById(target.id);
+  if (!channel) return;
+  const active = routines.filter((r) => !r.disabled);
+  const counts = {
+    schedule: active.filter((r) => r.trigger === "schedule").length,
+    events: active.filter((r) => r.trigger === "events").length,
+    message: active.filter((r) => r.trigger === "message").length,
+  };
+  const parts = [
+    `Online · build ${buildId()}`,
+    handshake?.ok ? `Elixir MCP ${handshake.version?.split("+")[0] ?? "?"}` : "Elixir MCP unreachable",
+    `${counts.schedule} scheduled, ${counts.events ? "watching the timeline" : "no feed"}${counts.message ? ", answering questions" : ""}`,
+    `\`/${commandName("routines")}\` for the list`,
+  ];
+  try {
+    await channel.send({ content: `-# 👋 ${parts.join(" · ")}`, allowedMentions: { parse: [] } });
+    state.set({ helloAt: new Date().toISOString() });
+    log.info("hello_posted", { channel: `#${target.name}` });
+  } catch (error) {
+    log.warn("hello_failed", { error: error.message });
+  }
+}
 
 client.on(Events.InteractionCreate, async (interaction) => {
   await handleInteraction(interaction, { resolveChannel }).catch((error) => {

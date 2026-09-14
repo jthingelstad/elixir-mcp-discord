@@ -66,6 +66,9 @@ const DEFAULTS = {
   // a crash loop with a bad channel id complains once, not every thirty
   // seconds. null once every channel checks out.
   channelProblems: null,
+  // When the boot hello was last posted, so a crash loop says hello once an
+  // hour rather than every thirty seconds.
+  helloAt: null,
   // { [routineKey]: [text, ...] } — the last few posts EACH ROUTINE made,
   // newest first. This is the bot's own output, not game data, and it is the
   // routine's memory of itself: reading the channel instead gave a daily
