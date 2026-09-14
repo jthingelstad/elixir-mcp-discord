@@ -37,6 +37,13 @@ test("only a message routine is told how to work out who is asking", () => {
   const ask = systemFor(routine({ trigger: "message", channel: "ask" }), { identity: null });
   assert.match(ask, /on_behalf_of/);
   assert.match(ask, /elixir_identify/);
+  // A member whose Discord name is their in-game name should never be asked
+  // for a tag: the roster is the lookup, and only a whole-name single match
+  // links. (A clan member asked "how am I playing" and was told to type a tag
+  // the bot could have read off clans_roster.)
+  assert.match(ask, /clans_roster/);
+  assert.match(ask, /whole name and one match/);
+  assert.match(ask, /partial or similar name is never a link/i);
   assert.doesNotMatch(
     systemFor(routine({ trigger: "schedule", channel: "pulse", at: "01:00" }), { identity: null }),
     /on_behalf_of/,

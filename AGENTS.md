@@ -67,7 +67,13 @@ not a mirror. Never hand-write a schema here.
 
 **It does not know who Discord users are.** Resolving a member to a player tag
 via anything but `on_behalf_of` + `elixir_identify` (or `players_search`) is the
-leak that would make this demo lie.
+leak that would make this demo lie. Since 2026-09-13 the first-contact rule
+in `WHO_IS_ASKING` is: compare the author's Discord name against
+`clans_roster`, link on a whole-name single match, otherwise ask. A member
+whose Discord name was exactly their in-game name was told to type a tag the
+bot could have read off the roster; the server refuses `elixir_identify` for
+anyone outside the clan and a re-call replaces the mapping, so the exact
+match is cheap to make and cheap to undo.
 
 **Public repo, no secrets.** `.env` and `.env.*` are gitignored, `state/` is
 gitignored. Check `git ls-files` before assuming something is untracked. Since
