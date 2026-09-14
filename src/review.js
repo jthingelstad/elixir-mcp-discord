@@ -408,8 +408,13 @@ export async function runReview({ trigger = "schedule", dryRun = false, askFn = 
     return { ok: true, reviewId, empty: true, window, turns: 0, proposals: [], reports: [], report: null, usd: 0 };
   }
 
+  // A rehearsal persists nothing here, and must write nothing upstream
+  // either: the first dry run filed a real item with Elixir's maintainer.
+  const system = dryRun
+    ? `${SYSTEM}\n\nTHIS IS A REHEARSAL: do not call elixir_feedback. Where you would have filed, say so in the report instead.`
+    : SYSTEM;
   const result = await askFn({
-    system: SYSTEM,
+    system,
     messages: [{ role: "user", content: userMessage({ window, previous, files, rendered, lessonsCap: LESSONS_MAX_CHARS }) }],
     model: config.review.model,
     effort: config.review.effort,
@@ -731,7 +736,7 @@ export function startReview(client) {
   log.info("review_started", {
     model: config.review.model,
     effort: config.review.effort,
-    at: `${routine.days ? routine.days.join(",") : "daily"} ${routine.at.hour}:${String(routine.at.minute).padStart(2, "0")}`,
+    at: `${routine.days ? routine.days.map((d) => ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][d]).join(",") : "daily"} ${routine.at.hour}:${String(routine.at.minute).padStart(2, "0")}`,
     budget: config.review.monthlyBudgetUsd ?? "UNLIMITED",
     autoLessons: config.review.autoLessons || undefined,
     admins: config.adminUserIds.size,

@@ -196,11 +196,14 @@ test("a review reads the window, records proposals with diffs, and moves the cur
   assert.equal(again.empty, true);
 });
 
-test("a dry run costs the call and writes nothing", async (t) => {
+test("a dry run costs the call and writes nothing — here or upstream", async (t) => {
   fresh();
   const dir = agentDir(t, { "lessons.md": "# Lessons\n" });
   ledger.append(turn({ turnId: "aaaa0001" }));
-  const outcome = await runReview({ trigger: "cli", dryRun: true, agentDir: dir, askFn: fakeAsk([["propose_change", { file: "lessons.md", rule: "r", turn_ids: ["aaaa0001"], summary: "s", edit: { op: "append", text: "- 2026-09-14 (turns aaaa0001): x" } }]]) });
+  let system;
+  const inner = fakeAsk([["propose_change", { file: "lessons.md", rule: "r", turn_ids: ["aaaa0001"], summary: "s", edit: { op: "append", text: "- 2026-09-14 (turns aaaa0001): x" } }]]);
+  const outcome = await runReview({ trigger: "cli", dryRun: true, agentDir: dir, askFn: async (args) => ((system = args.system), inner(args)) });
+  assert.match(system, /REHEARSAL: do not call elixir_feedback/);
   assert.equal(outcome.proposals.length, 1);
   assert.equal(findReview(outcome.reviewId), null);
   assert.equal(state.get("reviewedThrough"), null);
