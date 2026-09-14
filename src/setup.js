@@ -479,22 +479,36 @@ if (!inspected?.guild) {
   });
   if (!directoryOk) unresolved.push("channels");
 
-  if (interactive && requirements.length) {
-    note("text channels in this server (create one in Discord first if it is missing):");
-    inspected.channels.forEach((channel, index) => note(`  ${String(index + 1).padStart(2)}. #${channel.name}  (${channel.id})`));
-  }
+  // The channels a routine binds — today just the ask channel — are chosen
+  // from the DIRECTORY, not the whole server: the bot is already granted
+  // there, and one of them is usually named for it. That one is the default.
+  let granted = inspected ? fromRest(inspected, permissionsIn) : [];
   for (const requirement of requirements) {
     const envName = channelEnvName(requirement.name);
+    const needsThreads = "CreatePublicThreads" in requirement.needs;
+    const candidates = granted.filter((e) => !needsThreads || e.threads);
+    const guess =
+      candidates.find((e) => e.name.includes(requirement.name)) ??
+      (candidates.length === 1 ? candidates[0] : null);
+    const current = inspected.channels.find((c) => c.id === values[envName]);
+    const fallbackName = current ? `#${current.name}` : guess ? `#${guess.name}` : "";
+    if (interactive) {
+      note(`channels the bot is granted in${needsThreads ? " with thread permissions" : ""}:`);
+      candidates.forEach((e, index) => note(`  ${String(index + 1).padStart(2)}. #${e.name}  (${e.id})${e.topic ? ` — ${e.topic.slice(0, 50)}` : ""}`));
+      if (candidates.length === 0) note("  (none yet — grant the bot's role in the channel, then answer with its id or #name)");
+    }
     const what = requirement.name === "ask" ? "where members ask the bot questions" : `for \`${requirement.name}\``;
     const channelOk = await untilOk(async () => {
-      const answer = await ask(`Channel ${what} (number or id)`, { fallback: values[envName] });
+      const answer = await ask(`Channel ${what} (number, #name or id)`, { fallback: fallbackName });
+      const wanted = answer.replace(/^#/, "");
       const raw =
-        inspected.channels[Number(answer) - 1] ??
-        inspected.channels.find((channel) => channel.id === answer);
+        candidates[Number(answer) - 1] && inspected.channels.find((c) => c.id === candidates[Number(answer) - 1].id) ||
+        inspected.channels.find((c) => c.id === wanted) ||
+        inspected.channels.find((c) => c.name === wanted);
       if (!raw) {
         return [{
           detail: answer ? `${answer} is not a text channel in ${inspected.guild.name}` : `${envName} is required`,
-          fix: "pick a number from the list above, or paste the channel id (right-click the channel > Copy Channel ID)",
+          fix: "a number from the list, the channel's #name, or its id (right-click the channel > Copy Channel ID)",
         }];
       }
       values[envName] = raw.id;
@@ -556,7 +570,8 @@ heading("Polling and commands");
 note("Every feed poll is a metered call; 1800 s is the hub's own advice, 300 s posts");
 note("joins within minutes.");
 values.EVENT_POLL_SECONDS = await askValid("Feed poll interval, seconds", { fallback: values.EVENT_POLL_SECONDS || "1800", validate: numberIn("the interval", 60) });
-values.COMMAND_PREFIX = (await ask("Slash-command prefix (e.g. pk → /pk-run; blank for /run)", { fallback: values.COMMAND_PREFIX ?? "" }))
+values.COMMAND_PREFIX = (await ask("Slash-command prefix (→ /<prefix>-run; 'none' for plain /run)", { fallback: values.COMMAND_PREFIX || path.basename(instanceDir) }))
+  .replace(/^none$/i, "")
   .toLowerCase()
   .replace(/[^a-z0-9_-]+/g, "");
 save("polling and commands");

@@ -20,6 +20,7 @@ import { post, recentPosts } from "./post.js";
 import { renderTrace, errorFooter, UNGROUNDED_FOOTER } from "./trace.js";
 import { directory, resolveById } from "./directory.js";
 import { config } from "./config.js";
+import { track, isStopping } from "./inflight.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
 
@@ -120,7 +121,12 @@ export function turnRecord({ routine, lane, question, text, result, channelId })
  * @param {Function} options.askFn   injectable model call, for tests
  * @param {Array}  options.entries   the channel directory (default: live)
  */
-export async function runRoutine(
+export async function runRoutine(routine, options = {}) {
+  if (isStopping()) return { ok: false, error: "shutting_down" };
+  return track(() => runRoutineNow(routine, options));
+}
+
+async function runRoutineNow(
   routine,
   { channel = null, events = null, dryRun = false, askFn = ask, entries = directory(), resolve = resolveById } = {},
 ) {

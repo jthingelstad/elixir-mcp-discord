@@ -19,6 +19,8 @@ Restart=always
 # A job that dies on startup (bad token, missing .env) would otherwise respawn
 # instantly forever. Thirty seconds keeps a real crash loop legible in the journal.
 RestartSec=30
+# On SIGTERM the process finishes the turn it is in (up to 45s) before exiting.
+TimeoutStopSec=60
 # The process logs structured lines to stdout; journald keeps them.
 StandardOutput=journal
 StandardError=journal

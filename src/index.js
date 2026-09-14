@@ -25,6 +25,7 @@ import { registerCommands, handleInteraction } from "./commands.js";
 import { checkChannelPermissions } from "./permissions.js";
 import * as directory from "./directory.js";
 import { buildId } from "./build.js";
+import { drain, count } from "./inflight.js";
 import { commandName } from "./commands.js";
 import { rateFor } from "./pricing.js";
 import * as budget from "./budget.js";
@@ -243,9 +244,35 @@ client.once(Events.ClientReady, async (ready) => {
 
   await registerCommands(client);
   await postHello({ handshake, routines });
-  startEventLoop(() => routinesFor("events"), resolveChannel);
-  startScheduler(() => routinesFor("schedule"), resolveChannel);
+  timers.push(startEventLoop(() => routinesFor("events"), resolveChannel));
+  timers.push(startScheduler(() => routinesFor("schedule"), resolveChannel));
 });
+
+/**
+ * GRACEFUL SHUTDOWN. SIGTERM (what `launchctl kickstart -k` and systemd
+ * send) stops the clocks, refuses new turns, waits for the ones in flight —
+ * a member's answer, a scheduled post already marked in the ledger — and only
+ * then disconnects. The plist's ExitTimeOut is longer than this wait, so
+ * launchd does not SIGKILL first.
+ */
+const timers = [];
+const DRAIN_MS = 45_000;
+let shuttingDown = false;
+
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  for (const timer of timers) clearInterval(timer);
+  const running = count();
+  log.info("shutdown", { signal, inFlight: running, waitUpToMs: running ? DRAIN_MS : 0 });
+  const left = await drain(DRAIN_MS);
+  if (left) log.warn("shutdown_abandoned_turns", { inFlight: left });
+  await client.destroy().catch(() => {});
+  log.info("shutdown_complete");
+  process.exit(0);
+}
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));
 
 /**
  * One line on boot, in the first channel the bot may post in, so a restart

@@ -40,6 +40,12 @@
     <key>ThrottleInterval</key>
     <integer>30</integer>
 
+    <!-- On SIGTERM the process finishes the turn it is in the middle of
+         (a member's answer, a post already marked in the ledger) before it
+         exits — up to 45s. launchd's default is to SIGKILL after 20s. -->
+    <key>ExitTimeOut</key>
+    <integer>60</integer>
+
     <key>StandardOutPath</key>
     <string>__LOG__</string>
     <key>StandardErrorPath</key>

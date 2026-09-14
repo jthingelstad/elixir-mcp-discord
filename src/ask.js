@@ -24,6 +24,7 @@ import { systemFor } from "./prompt.js";
 import { chunk } from "./post.js";
 import { renderTrace, errorFooter, UNGROUNDED_FOOTER } from "./trace.js";
 import { turnRecord } from "./run.js";
+import { track, isStopping } from "./inflight.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
 
@@ -184,7 +185,14 @@ async function recentTurns(thread, upToId, turns) {
  * once deleted LiveMessage and every static check still passed — a missing
  * symbol is a runtime ReferenceError, and nothing exercised this function.
  */
-export async function handleAsk(message, routine, { askFn = ask } = {}) {
+export async function handleAsk(message, routine, options = {}) {
+  // A question arriving during shutdown is left for the next process: Discord
+  // keeps the message, and a half-answer is worse than a late one.
+  if (isStopping()) return null;
+  return track(() => handleAskNow(message, routine, options));
+}
+
+async function handleAskNow(message, routine, { askFn = ask } = {}) {
   const question = message.cleanContent.trim();
   if (!question) return;
 
