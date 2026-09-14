@@ -113,6 +113,29 @@ async function ask(question, { fallback = "", secret = false } = {}) {
   return answer || fallback;
 }
 
+/** Ask until `validate` returns null (ok) or a problem string; a bad answer
+ *  is a retry with the reason, never a silent default. */
+async function askValid(question, { fallback = "", validate }) {
+  for (;;) {
+    const answer = await ask(question, { fallback });
+    const problem = validate(answer);
+    if (!problem) return answer;
+    fail({ detail: problem });
+    if (!interactive) return fallback;
+  }
+}
+
+const isTimezone = (tz) => {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+};
+const numberIn = (label, min) => (value) =>
+  Number.isFinite(Number(value)) && Number(value) >= min ? null : `${label} must be a number${min ? ` ≥ ${min}` : ""}, got "${value}"`;
+
 async function yesNo(question, fallback = false) {
   const answer = (await ask(question, { fallback: fallback ? "y" : "n" })).toLowerCase();
   return answer.startsWith("y");
@@ -184,6 +207,16 @@ note(fs.existsSync(envFile) ? `existing .env loaded; Enter keeps each current va
 const values = { ...env };
 const unresolved = [];
 
+/** Written after EVERY section, not just at the end: a cancelled run — or a
+ *  wrong answer that made someone quit — keeps everything entered so far,
+ *  and the next run offers it back on Enter. */
+function save(section) {
+  if (checkOnly) return;
+  fs.writeFileSync(envFile, renderEnv({ values, instanceDir }), { mode: 0o600 });
+  fs.chmodSync(envFile, 0o600);
+  if (section) note(`saved ${section} to .env`);
+}
+
 // --- 2. Elixir MCP ----------------------------------------------------------------
 
 heading("Elixir MCP (the agent's door)");
@@ -226,6 +259,7 @@ const elixirOk = await untilOk(async () => {
   return [];
 });
 if (!elixirOk) unresolved.push("Elixir MCP");
+save("Elixir");
 
 // --- 3. Claude --------------------------------------------------------------------
 
@@ -264,6 +298,7 @@ const claudeOk = await untilOk(async () => {
   return [];
 });
 if (!claudeOk) unresolved.push("Claude");
+save("Claude");
 
 // --- 4. Discord -------------------------------------------------------------------
 
@@ -293,6 +328,7 @@ const discordOk = await untilOk(async () => {
   return inspected.problems.map((p) => ({ detail: p.detail, fix: p.fix }));
 });
 if (!discordOk) unresolved.push("Discord application");
+save("Discord");
 
 // --- 5. Routines ------------------------------------------------------------------
 
@@ -334,17 +370,18 @@ if (!checkOnly) {
   }
 }
 if (chosen.size === 0) fail({ detail: "no routines chosen", fix: "the bot would connect and do nothing" });
+save("routines");
 
 // --- 6. Schedule ------------------------------------------------------------------
 
 heading("Schedule");
-values.TIMEZONE = await ask("Timezone the times below are written in", { fallback: values.TIMEZONE || "UTC" });
-try {
-  new Intl.DateTimeFormat("en-US", { timeZone: values.TIMEZONE });
-} catch {
-  fail({ detail: `${values.TIMEZONE} is not an IANA timezone`, fix: "e.g. America/Chicago; using UTC" });
-  values.TIMEZONE = "UTC";
-}
+note("An IANA zone such as America/Chicago, Europe/London, Asia/Kolkata — not an");
+note("abbreviation like CST. DST is handled from the zone.");
+values.TIMEZONE = await askValid("Timezone the times below are written in", {
+  fallback: values.TIMEZONE || "UTC",
+  validate: (tz) => (isTimezone(tz) ? null : `"${tz}" is not an IANA timezone; try the form Region/City, e.g. America/Chicago`),
+});
+save("timezone");
 const active = loadRoutines({ dir: agentDir }).routines.filter(
   (r) => chosen.has(r.key),
 );
@@ -437,6 +474,7 @@ if (!inspected?.guild) {
     if (!channelOk) unresolved.push(`channel ${requirement.name}`);
   }
 }
+save("channels");
 
 // --- 8. Identity ------------------------------------------------------------------
 
@@ -467,16 +505,18 @@ for (const line of estimate.lines) note(`${line.key.padEnd(22)} ~${String(line.r
 note(`≈ ${money(estimate.usd)}/month at ~${money(estimate.perPostUsd)} a post — a starting point, not a forecast.`);
 note("Budgets are strict: a lane stops BEFORE a turn that could cross the line.");
 const suggested = Math.max(5, Math.ceil(estimate.usd * 2)).toFixed(2);
-values.MONTHLY_BUDGET_USD = await ask("Monthly budget for schedules and events, USD", { fallback: values.MONTHLY_BUDGET_USD || suggested });
-values.ASK_MONTHLY_BUDGET_USD = await ask("Monthly budget for member questions, USD", { fallback: values.ASK_MONTHLY_BUDGET_USD || "10.00" });
+values.MONTHLY_BUDGET_USD = await askValid("Monthly budget for schedules and events, USD", { fallback: values.MONTHLY_BUDGET_USD || suggested, validate: numberIn("a budget", 0) });
+values.ASK_MONTHLY_BUDGET_USD = await askValid("Monthly budget for member questions, USD", { fallback: values.ASK_MONTHLY_BUDGET_USD || "10.00", validate: numberIn("a budget", 0) });
+save("budgets");
 
 heading("Polling and commands");
 note("Every feed poll is a metered call; 1800 s is the hub's own advice, 300 s posts");
 note("joins within minutes.");
-values.EVENT_POLL_SECONDS = await ask("Feed poll interval, seconds", { fallback: values.EVENT_POLL_SECONDS || "1800" });
+values.EVENT_POLL_SECONDS = await askValid("Feed poll interval, seconds", { fallback: values.EVENT_POLL_SECONDS || "1800", validate: numberIn("the interval", 60) });
 values.COMMAND_PREFIX = (await ask("Slash-command prefix (e.g. pk → /pk-run; blank for /run)", { fallback: values.COMMAND_PREFIX ?? "" }))
   .toLowerCase()
   .replace(/[^a-z0-9_-]+/g, "");
+save("polling and commands");
 
 heading("Admins (who may use /run, /budget, /routines)");
 note("Discord user ids: Settings > Advanced > Developer Mode, then right-click a");
@@ -498,6 +538,7 @@ const adminsOk = await untilOk(async () => {
   return problems;
 });
 if (!adminsOk) unresolved.push("admins");
+save("admins");
 
 // --- 10. Write ----------------------------------------------------------------------
 
@@ -505,8 +546,7 @@ heading("write");
 if (checkOnly) {
   note("--check: nothing written");
 } else {
-  fs.writeFileSync(envFile, renderEnv({ values, instanceDir }), { mode: 0o600 });
-  fs.chmodSync(envFile, 0o600);
+  save();
   ok(`wrote ${envFile}`);
 }
 
