@@ -1,0 +1,52 @@
+version = 2
+repo = "."
+timezone = "America/Chicago"
+
+# Drafted September 14, 2026 for Jamie's approval. Calendar starts use local
+# Chicago time. Interval activities use an initial prompt date check because
+# the installed app miscalculates interval timezones; preserve that check
+# when reinstalling. launch_cwd records the app launch directory relative to
+# this checkout — the CHECKOUT, not an instance: the objectives read the
+# three instances under ~/.elixir-mcp-discord/ by path and never run the
+# bot from here. Event-driven follow-ups remain explicit starts.
+
+[[automation]]
+id = "run-the-preview"
+name = "Run the Preview"
+objective = "run"
+objective_file = "AGENT-TEAM/run-the-preview.md"
+status = "ACTIVE"
+rrule = "RRULE:FREQ=DAILY;BYHOUR=6;BYMINUTE=50"
+model = "gpt-5.6-terra"
+reasoning_effort = "high"
+execution_environment = "local"
+launch_cwd = "."
+prompt = "Follow the project instructions already loaded by Codex. Read `/Users/otto/Projects/clash-royale/elixir-mcp-discord/AGENTS.md`, `/Users/otto/Projects/clash-royale/elixir-mcp-discord/AGENT-TEAM/WORKFLOW.md`, `/Users/otto/Projects/clash-royale/elixir-mcp-discord/AGENT-TEAM/READING.md`, `/Users/otto/Projects/clash-royale/elixir-mcp-discord/AGENT-TEAM/README.md`, and `/Users/otto/Projects/clash-royale/elixir-mcp-discord/AGENT-TEAM/run-the-preview.md` completely; use the reading map to review what changed in `AGENTS.md` and `git log` since the previous successful run, then pursue the `run` objective exactly as written. Run preflight first and measure current live evidence before changing anything; a healthy no-op is success. For each of the three instances under `~/.elixir-mcp-discord/` read its launchd state, its log's boot lines and errors since the previous run, its state file read-only, and whether the day's turns in the log are in its ledger; compare each running build's sha with `origin/main`. Own a clear operational gap (an instance down or on old code, a boot error, a stuck cursor, a missing ledger day, an Elixir contract this bot no longer matches, a boundary drift) through source fix, regression coverage, `npm test`, push, a restart of each instance one at a time reading each boot, and read-only acceptance from the next natural turn. Acquire the `run` checkout lease only immediately before mutation, check it before the first edit and before push, never clear or break another holder's lease, never publish pre-existing work, release only from a clean checkout, and preserve the rules in AGENTS.md (no clan in the repo, no local data, no fallback, no tool list, public repo with no secrets), the human boundary in WORKFLOW.md (instance `agent/` and `.env` are Jamie's), and the rule that acceptance uses natural evidence only: never run a routine early, never ask the bot a question, never post, never replay a backlog, never set `mark_seen`. Preflight separates observation from checkout mutation eligibility: continue safe read-only review during contention with trusted tooling; a blocked checkout forbids mutations, including restarts for a code change not yet on `main`. Keep automation memory to Current state, Active watches, and one replace-in-place Latest run. Do not claim shipped behavior from source publication alone — a `src/` change is live only after each instance's boot line names its sha."
+
+[[automation]]
+id = "judge-the-answers"
+schedule_note = "Sunday evening synthesis once per Chicago ISO week; catch up if blocked"
+name = "Judge the Answers"
+objective = "judge"
+objective_file = "AGENT-TEAM/judge-the-answers.md"
+status = "ACTIVE"
+rrule = "RRULE:FREQ=DAILY;BYHOUR=13;BYMINUTE=10"
+model = "gpt-5.6-sol"
+reasoning_effort = "xhigh"
+execution_environment = "local"
+launch_cwd = "."
+prompt = "Follow the project instructions already loaded by Codex. Read `/Users/otto/Projects/clash-royale/elixir-mcp-discord/AGENTS.md`, `/Users/otto/Projects/clash-royale/elixir-mcp-discord/AGENT-TEAM/WORKFLOW.md`, `/Users/otto/Projects/clash-royale/elixir-mcp-discord/AGENT-TEAM/READING.md`, `/Users/otto/Projects/clash-royale/elixir-mcp-discord/AGENT-TEAM/README.md`, and `/Users/otto/Projects/clash-royale/elixir-mcp-discord/AGENT-TEAM/judge-the-answers.md` completely; read every mechanics block in `src/prompt.js` because it is the rubric; then pursue the `judge` objective exactly as written. Run preflight first; a healthy no-op is success. Read every turn since the last graded `at` in automation memory for each of the three instances with `npm run turns -- --instance ~/.elixir-mcp-discord/<name> --since <date>` and `--turn <id>` where bodies matter; reactions first. Grade each turn from the trace against the bot's own rules — grounded in this turn's tool bodies, right against those bodies, answered the question asked, first-contact identity by the whole-name rule, on-brief and in the right channel, voice and format, economy — and rank findings by leverage across turns, not by count. Write the run's grades to `AGENT-TEAM/notes/<date>-judge-the-answers.md` only when something is below the bar, citing turns by turnId, instance and date and quoting the rule broken; never a member's name, id, tag, question or a tool body — the repository is public. Own a mechanics defect through a fix in `src/prompt.js` or the lane's code with the test that pins it, `npm test`, push, a restart of each instance one at a time, and acceptance against the next natural turns in the ledger; fix an example-prompt defect in the checkout's `agent/` and frame the instance edit as one decision for Jamie; frame an instance-only prompt defect as one decision with the evidence and never edit `~/.elixir-mcp-discord/*/agent/`. Hand a defect that traces to Elixir's own behaviour to Close the Loop with the turnId and request id. Use the generated schedule and completion receipt for the Sunday synthesis in `AGENT-TEAM/summaries/<year>-W<week>.md`; catch up a missed one at the next eligible invocation without repeating a completed summary. Acquire the `judge` checkout lease only immediately before mutation, check it before the first edit and before push, never clear or break another holder's lease, never publish pre-existing work, release only from a clean checkout, and preserve the rules in AGENTS.md, the human boundary in WORKFLOW.md, and the rule that grading uses the ledger only: never ask the bot a question, never post, never react, never run a routine, and never add any code path that reads the ledger back into the bot. Keep automation memory to Current state, Active watches, one replace-in-place Latest run, and the last graded `at` per instance. Do not claim shipped behavior from source publication alone."
+
+[[automation]]
+id = "close-the-loop"
+schedule_note = "Sunday evening synthesis section once per Chicago ISO week, after Judge the Answers; catch up if blocked"
+name = "Close the Loop"
+objective = "loop"
+objective_file = "AGENT-TEAM/close-the-loop.md"
+status = "ACTIVE"
+rrule = "RRULE:FREQ=DAILY;BYHOUR=8;BYMINUTE=10"
+model = "gpt-5.6-sol"
+reasoning_effort = "high"
+execution_environment = "local"
+launch_cwd = "."
+prompt = "Follow the project instructions already loaded by Codex. Read `/Users/otto/Projects/clash-royale/elixir-mcp-discord/AGENTS.md`, `/Users/otto/Projects/clash-royale/elixir-mcp-discord/AGENT-TEAM/WORKFLOW.md`, `/Users/otto/Projects/clash-royale/elixir-mcp-discord/AGENT-TEAM/READING.md`, `/Users/otto/Projects/clash-royale/elixir-mcp-discord/AGENT-TEAM/README.md`, and `/Users/otto/Projects/clash-royale/elixir-mcp-discord/AGENT-TEAM/close-the-loop.md` completely; read `src/feedback.js` because it decides what is filed; then pursue the `loop` objective exactly as written. Run preflight first; a healthy no-op is success. For each of the three instances read the ledger's `filed` records and the log's `feedback_filed`, `praise_filed`, `reaction_feedback_filed` and `feedback_response_posted` lines since the previous run; read each filing's turn with `npm run turns -- --instance ~/.elixir-mcp-discord/<name> --turn <id>` and classify it as an Elixir limitation or a consumer defect wearing Elixir's clothes. Own a consumer defect (a filing class that is consistently ours, a maintainer response that asked this bot to change, a doc that no longer describes the shipped bot) through source fix, a test in the lane's test file, `npm test`, push, a restart of each instance one at a time, and read-only acceptance; record a declined response in the run's note so it is not re-argued; frame a change to what is filed or how as one decision for Jamie when it changes what Elixir's maintainer sees. Never file feedback as the bot, never manufacture a turn to produce a filing, never post. Use the generated schedule and completion receipt for the Sunday synthesis section appended to `AGENT-TEAM/summaries/<year>-W<week>.md` under its own heading; catch up a missed one at the next eligible invocation without repeating a completed section. Notes and summaries never carry a member's name, id, tag, question or a tool body — the repository is public. Acquire the `loop` checkout lease only immediately before mutation, check it before the first edit and before push, never clear or break another holder's lease, never publish pre-existing work, release only from a clean checkout, and preserve the rules in AGENTS.md and the human boundary in WORKFLOW.md. Keep automation memory to Current state, Active watches, and one replace-in-place Latest run. Do not claim shipped behavior from source publication alone."
