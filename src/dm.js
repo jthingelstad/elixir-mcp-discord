@@ -8,8 +8,6 @@
  *
  *   tell it something      "we call war days boat days" — the bot proposes a
  *                          memory.md line with an Apply button; live on tap
- *   give it a link         the clan FAQ, a rules post — read with web_fetch
- *                          (this lane only), the parts worth keeping proposed
  *   ask why                "why d98fe553", or paste a message link — the turn's
  *                          transcript, what it thought, what the tools said
  *   try before posting     "try notable-movers" — the routine's dry run,
@@ -76,14 +74,6 @@ into your reply — the diff is sent separately.
 
 ASK YOU TO FORGET: propose removing that line from memory.md. Ask "memory"
 to see the current lines if you need the exact text.
-
-GIVE YOU A LINK. A page the operator pastes here is theirs — a clan FAQ,
-a rules post, a recruiting page. Read it with web_fetch, then propose the
-parts worth remembering as memory.md lines "(from owner)", or a house-rule
-edit where the page states one — at most three per message; say what else
-is on the page and offer more. The grounding rule still holds in every
-other lane: a page is never a source for a member-facing answer, and a
-number on it is not a recorded fact.
 
 ASK WHY YOU SAID SOMETHING. Call lookup_turn with the turn id they gave (the
 footer under every answer shows it). Say what the trace shows, plainly —
@@ -338,9 +328,6 @@ async function converse(message, { askFn = ask } = {}) {
     routineKey: "dm",
     lane: "review",
     localTools: [proposeTool({ files, proposals, by: "owner" }), lookupTool()],
-    // The operator's links, and only theirs: web_fetch reads URLs already in
-    // the conversation, and nothing a member writes ever reaches this lane.
-    serverTools: [{ type: "web_fetch_20260209", name: "web_fetch", max_uses: 3, max_content_tokens: 40000 }],
     maxRounds: 8,
   });
 

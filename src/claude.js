@@ -76,12 +76,9 @@ const MCP_TOOLSET = {
  * breakpoint on it covers them; a lane without local tools (the ask lane)
  * has a different, equally stable prefix.
  */
-function toolsFor(localTools, serverTools = []) {
+function toolsFor(localTools) {
   return [
     ...localTools.map(({ name, description, input_schema }) => ({ name, description, input_schema })),
-    // Anthropic-hosted tools (web_fetch for the operator's DM), declared as
-    // given; they run on the API's side and come home as *_tool_result.
-    ...serverTools,
     MCP_TOOLSET,
   ];
 }
@@ -185,24 +182,6 @@ function readToolActivity(content, timings) {
       if (block.id) byId.set(block.id, step);
       called.push(name);
       trace.push(step);
-    } else if (block.type === "web_fetch_tool_result") {
-      // A server tool's result is an object, not text: the page as a
-      // document, or an error code. Kept on the step so the ledger shows what
-      // the operator's link actually said.
-      const step = byId.get(block.tool_use_id);
-      const body = block.content;
-      const failedFetch = typeof body?.type === "string" && body.type.endsWith("error");
-      if (failedFetch) {
-        const detail = `web_fetch: ${body.error_code ?? "failed"}`;
-        errors.push({ name: "web_fetch", code: body.error_code ?? null, detail, requestId: null });
-        trace.push({ kind: "error", name: "web_fetch", code: body.error_code ?? null, detail, requestId: null });
-        continue;
-      }
-      if (step) {
-        const text = body?.content?.source?.data ?? "";
-        step.shape = `${body?.url ?? "page"} · ${text.length} chars`;
-        step.result = text;
-      }
     } else if (block.type.endsWith("tool_result")) {
       const step = byId.get(block.tool_use_id);
       const name = step?.name || "unknown";
@@ -293,10 +272,6 @@ export async function ask({
   // A member's answer is done in five rounds or it is looping. A review
   // (src/review.js) proposes edits one tool call at a time and needs more.
   maxRounds = MAX_ROUNDS,
-  // Anthropic-hosted tools, e.g. `{ type: "web_fetch_20260209", name:
-  // "web_fetch" }`. Only the operator's DM lane passes any (src/dm.js): a
-  // member-facing turn has exactly one source, and it is Elixir.
-  serverTools = [],
 }) {
   const history = [...messages];
   const started = Date.now();
@@ -329,7 +304,7 @@ export async function ask({
         system: systemBlocks(system),
         messages: history,
         mcp_servers: mcpServers,
-        tools: toolsFor(localTools, serverTools),
+        tools: toolsFor(localTools),
         // "omitted" is the default on Sonnet 5 and returns empty thinking
         // blocks. We show our work in-channel, so ask for the summary.
         thinking: { type: "adaptive", display: "summarized" },

@@ -228,11 +228,8 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
   routine chose, ledgered as a routine turn with `viaDm`), `memory`,
   `budget`, `help`. Anything else is a model turn: the ask-lane prompt plus
   `DM_BRIEF`, with `propose_change` (an edit to `memory.md`/`identity.md`/a
-  brief, forced `(from owner)` provenance and `edit.by = "owner"`),
-  `lookup_turn`, and Anthropic's server-side `web_fetch` (`serverTools` in
-  `ask()`; this lane ONLY — it reads URLs already in the conversation, so a
-  pasted clan FAQ becomes proposed memory lines and a member can never make
-  the bot read anything). A proposal rides the review machinery — a `review` record
+  brief, forced `(from owner)` provenance and `edit.by = "owner"`) and
+  `lookup_turn`. A proposal rides the review machinery — a `review` record
   with `trigger: "dm"` — so Apply/Skip/Undo and `.history/` are the same
   code. Charged to the `review` lane; ledgered as lane `dm`.
 - **What the DM never does:** post to a member channel. There is no
