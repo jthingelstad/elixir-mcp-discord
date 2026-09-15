@@ -474,6 +474,19 @@ skip; prose with no call still goes to the default (legacy), or is
   Send Messages. Inherited @everyone permission does not count — on POAP
   KINGS that would be 20 channels; explicit is 2. A `CHANNEL_*`-bound
   channel is always in. Do not "simplify" this to effective permissions.
+- **Read-only entries (2026-09-15).** An explicit View overwrite WITHOUT
+  Send is also deliberate — the operator let the bot into a channel to
+  look — and is in the directory as `role: "read"`: `post_message` refuses
+  it (`read_only`), `recent_channel_messages` and the DM's `read_channel`
+  read it. The first was #elixir, the older bot's channel, opened so this
+  bot could study what it is meant to replace; the bot told the operator
+  the channel had to be "added as a `CHANNEL_ELIXIR` config entry", which
+  has not been true since 2026-09-13. The DM brief now states the rule
+  (Discord permissions, nothing configured, re-read within a minute) and
+  `list_channels`' description says the same, so the model cannot invent a
+  registration step. `read_channel` is the operator's study tool — whole
+  messages, embeds, 100 a page, `before` to page back — and lives in the
+  DM lane only; routines keep the two-hour room tool.
 - **The ask lane never gets the tool or the directory.** Its input is
   untrusted; where it listens stays an explicit binding. `postTool` also
   refuses `role: "ask"` channels, the post cap (`MAX_POSTS_PER_TURN`, 3),

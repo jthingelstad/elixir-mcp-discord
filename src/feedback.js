@@ -189,6 +189,7 @@ const EXPECTED_ERROR_CODES = new Set(["no_subject", "quota_exceeded"]);
 const LOCAL_TOOLS = new Set([
   "post_message",
   "recent_channel_messages",
+  "read_channel",
   "tell_operator",
   "deck_link",
   "propose_change",

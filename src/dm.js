@@ -41,7 +41,7 @@ import { notify } from "./notify.js";
 import { ask, spendBlock } from "./claude.js";
 import { systemFor, nowLine, readMemory, parseMemoryEntry, MEMORY_MAX_CHARS } from "./prompt.js";
 import { loadRoutines } from "./routines.js";
-import { runRoutine } from "./run.js";
+import { runRoutine, studyTool } from "./run.js";
 import { directory, resolveById } from "./directory.js";
 import { post, chunk } from "./post.js";
 import { renderTrace } from "./trace.js";
@@ -138,6 +138,17 @@ say "try <key>" to rehearse it.
 
 ASK HOW YOU ARE DOING: call status — budgets, turns, the review, cursors.
 Say the numbers plainly.
+
+WHERE YOU MAY POST OR READ is Discord's own permissions, nothing else:
+list_channels shows every channel where your role holds an explicit
+overwrite - Send to post, View alone to read - and it changes the moment
+the operator changes a channel's permissions in Discord. There is no
+config entry for a channel and no registration step; if a channel they
+just opened is missing, say so and ask them to check the overwrite is on
+your role, not @everyone. STUDY A CHANNEL with read_channel when they
+ask what is posted somewhere - another bot's output, a channel's habits -
+and page back with before until you have seen enough to answer; say what
+you read and over what span.
 
 ASK WHAT HAPPENED: search_turns finds your earlier turns by text, lane,
 routine and date ("did anyone ask about war decks this week?"); lookup_turn
@@ -631,7 +642,7 @@ function channelsTool() {
   return {
     name: "list_channels",
     description:
-      "Where this bot may post (its directory: channels where its role is explicitly granted), with topics and who can see them, and which channel is bound as the ask channel.",
+      "This bot's channel directory, built from Discord permissions: a channel is listed when the bot's role (or the bot itself) holds an EXPLICIT overwrite there - Send Messages to post, View Channel alone to read (role 'read'). What it merely inherits from @everyone does not count, and nothing is configured anywhere else: the operator widens or narrows it in Discord's channel permissions, and it is re-read within a minute. Topics, who can see each, and which channel is the ask channel.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
     async handler() {
       const entries = directory();
@@ -872,6 +883,7 @@ async function converse(message, options = {}) {
       routinesTool(),
       examplesTool(),
       channelsTool(),
+      studyTool({ entries: directory() }),
       lookupTool(),
       searchTool(),
       statusTool(),

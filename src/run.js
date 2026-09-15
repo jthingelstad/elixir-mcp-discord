@@ -71,6 +71,13 @@ function postTool({ routine, entries, dryRun, posts, resolve = resolveById }) {
           error: `#${entry.name} is where members ask questions; routine output does not go there`,
         };
       }
+      if (entry.role === "read") {
+        return {
+          ok: false,
+          code: "read_only",
+          error: `#${entry.name} was opened to this bot to read, not to post in`,
+        };
+      }
       if (posts.length >= config.maxPostsPerTurn) {
         return {
           ok: false,
@@ -110,7 +117,7 @@ function postTool({ routine, entries, dryRun, posts, resolve = resolveById }) {
 export const ROOM_TOOL = {
   name: "recent_channel_messages",
   description:
-    "What people said in one of the channels you may post in, recently — newest last, humans and bots, the last two hours. Read the room before posting there: do not repeat what it already knows, add what the record adds, or post nothing.",
+    "What people said in one of the channels you may post in or read, recently — newest last, humans and bots, the last two hours. Read the room before posting there: do not repeat what it already knows, add what the record adds, or post nothing.",
   input_schema: {
     type: "object",
     properties: {
@@ -123,6 +130,86 @@ export const ROOM_TOOL = {
 };
 
 const ROOM_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * STUDY A CHANNEL. The room tool answers "what was just said here" before a
+ * post; the operator's console needs "what has been said here" - the
+ * clan's older bot posts in #elixir, and the operator wants this bot to
+ * read a month of that and say whether it could do the same. Any directory
+ * channel, read-only ones included; up to a hundred messages a page, whole
+ * text, paged backwards by message id. DM lane only: the operator is the
+ * one reader, and a member's question never earns a walk through another
+ * channel.
+ */
+export const STUDY_TOOL = {
+  name: "read_channel",
+  description:
+    "Read a channel you may post in or read, as far back as you like: newest last, humans and bots, whole messages, up to 100 a page. Pass before to page further back. Use it to study what is posted somewhere (another bot's output, a channel's habits) before proposing what you would do there.",
+  input_schema: {
+    type: "object",
+    properties: {
+      channel_id: { type: "string", description: "A channel_id from the directory (list_channels)." },
+      limit: { type: "integer", minimum: 1, maximum: 100, description: "How many messages, default 50." },
+      before: {
+        type: "string",
+        description: "A message_id from an earlier page: the page ending just before it.",
+      },
+    },
+    required: ["channel_id"],
+    additionalProperties: false,
+  },
+};
+
+export function studyTool({ entries, resolve = resolveById }) {
+  return {
+    ...STUDY_TOOL,
+    async handler({ channel_id, limit, before }) {
+      const entry = entries.find((e) => e.id === String(channel_id));
+      if (!entry)
+        return { ok: false, code: "unknown_channel", error: `channel_id ${channel_id} is not in the directory` };
+      const channel = await resolve(entry.id);
+      if (!channel?.messages?.fetch)
+        return { ok: false, code: "unresolvable", error: `#${entry.name} could not be read` };
+      let fetched;
+      try {
+        fetched = await channel.messages.fetch({
+          limit: Math.min(100, limit || 50),
+          ...(before ? { before: String(before) } : {}),
+        });
+      } catch (error) {
+        return { ok: false, code: "unreadable", error: error.message };
+      }
+      const messages = [...fetched.values()]
+        .filter((m) => (m.cleanContent || "").trim() || m.embeds?.length)
+        .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+        .map((m) => ({
+          message_id: m.id,
+          at: new Date(m.createdTimestamp).toISOString(),
+          who: m.author?.bot ? `${m.author.username} (bot)` : m.member?.displayName || m.author?.username || "someone",
+          text: String(m.cleanContent || "").slice(0, 4000),
+          ...(m.embeds?.length
+            ? {
+                embeds: m.embeds.slice(0, 5).map((e) => ({
+                  title: e.title ?? null,
+                  description: e.description ? String(e.description).slice(0, 2000) : null,
+                })),
+              }
+            : {}),
+        }));
+      return {
+        ok: true,
+        body: {
+          channel: `#${entry.name}`,
+          messages,
+          oldest_message_id: messages[0]?.message_id ?? null,
+          note: messages.length
+            ? "Oldest first. Pass oldest_message_id as before for the page behind it."
+            : "Nothing further back.",
+        },
+      };
+    },
+  };
+}
 
 export function roomTool({ entries, resolve = resolveById, now = () => Date.now() }) {
   return {

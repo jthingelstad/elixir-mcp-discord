@@ -20,6 +20,15 @@
  * it the same way. A channel a routine binds by id (CHANNEL_*) is in the
  * directory too, so nothing that worked before stops.
  *
+ * READ-ONLY SINCE 2026-09-15. An explicit grant of View Channel WITHOUT
+ * Send is also deliberate - the operator let the bot into a channel to
+ * look, not to speak - and it is in the directory as `role: "read"`: the
+ * model may read it (read_channel in the DM, recent_channel_messages
+ * before a post) and post_message refuses it. The first case was #elixir,
+ * where the clan's older bot posts: the operator granted View so this bot
+ * could study what it is meant to replace, and the directory, built on
+ * Send alone, could not see the channel at all.
+ *
  * The directory is built from the gateway's cache in the service and over
  * REST in the CLI, through one `classify` so both agree.
  */
@@ -35,14 +44,31 @@ export function classify({
   topic,
   position = 0,
   explicitSend,
+  explicitView = false,
   canSend,
+  canView = canSend,
   canThread,
   everyoneCanView,
   visibleTo = [],
   bound = false,
   role = null,
 }) {
-  if (!canSend) return null;
+  if (!canSend) {
+    // Let in to look, not to speak: an explicit View grant the overwrites
+    // do not then deny. Inherited View from @everyone is not that.
+    if (!canView || !explicitView || bound) return null;
+    return {
+      id,
+      name,
+      topic: (topic || "").trim() || null,
+      position,
+      threads: false,
+      visibility: everyoneCanView ? "everyone" : "restricted",
+      visibleTo: everyoneCanView ? [] : visibleTo,
+      explicit: true,
+      role: "read",
+    };
+  }
   if (!explicitSend && !bound) return null;
   return {
     id,
@@ -77,11 +103,16 @@ const VIEW = PermissionFlagsBits.ViewChannel;
 const THREADS = PermissionFlagsBits.CreatePublicThreads | PermissionFlagsBits.SendMessagesInThreads;
 
 /** Does any overwrite for the bot (its managed role or itself) allow Send? */
-export function explicitGrant(overwrites, { botId, botRoleId }) {
+export function explicitGrant(overwrites, { botId, botRoleId }, flag = SEND) {
   return (overwrites ?? []).some((o) => {
     const mine = (Number(o.type) === 1 && o.id === botId) || (Number(o.type) === 0 && botRoleId && o.id === botRoleId);
-    return mine && (BigInt(o.allow ?? 0) & SEND) !== 0n;
+    return mine && (BigInt(o.allow ?? 0) & flag) !== 0n;
   });
+}
+
+/** ... allow View? The read-only door. */
+export function explicitViewGrant(overwrites, ids) {
+  return explicitGrant(overwrites, ids, VIEW);
 }
 
 /**
@@ -109,7 +140,9 @@ export function fromGateway(guild, botUser, { bound = new Set(), askIds = new Se
       topic: channel.topic,
       position: channel.rawPosition ?? channel.position ?? 0,
       explicitSend: explicitGrant(overwrites, { botId: botUser.id, botRoleId }),
+      explicitView: explicitViewGrant(overwrites, { botId: botUser.id, botRoleId }),
       canSend: perms.has(VIEW) && perms.has(SEND),
+      canView: perms.has(VIEW),
       canThread: perms.has(THREADS),
       everyoneCanView: everyone ? (channel.permissionsFor(everyone)?.has(VIEW) ?? false) : true,
       visibleTo: viewersOf(overwrites, {
@@ -143,7 +176,9 @@ export function fromRest(inspected, permissionsIn, { bound = new Set(), askIds =
       topic: raw.topic,
       position: raw.position ?? 0,
       explicitSend: explicitGrant(raw.permission_overwrites, { botId, botRoleId }),
+      explicitView: explicitViewGrant(raw.permission_overwrites, { botId, botRoleId }),
       canSend: perms.has(VIEW) && perms.has(SEND),
+      canView: perms.has(VIEW),
       canThread: perms.has(THREADS),
       everyoneCanView,
       visibleTo: viewersOf(raw.permission_overwrites, {
@@ -165,6 +200,7 @@ export function render(entries, { defaultId = null } = {}) {
   const lines = entries.map((e) => {
     const marks = [];
     if (e.role === "ask") marks.push("ASK CHANNEL: members ask questions here; never post routine output here");
+    if (e.role === "read") marks.push("READ ONLY: you may read it, never post in it");
     if (e.visibility === "restricted")
       marks.push(
         e.visibleTo?.length ? `visible to: ${e.visibleTo.join(", ")}` : "restricted: not every member can see it",
@@ -173,7 +209,8 @@ export function render(entries, { defaultId = null } = {}) {
     const tail = [e.topic, marks.length ? `[${marks.join("; ")}]` : null].filter(Boolean).join(" ");
     return `#${e.name} (channel_id ${e.id})${tail ? ` — ${tail}` : ""}`;
   });
-  return `CHANNELS YOU MAY POST IN\n\n${lines.join("\n")}`;
+  const anyRead = entries.some((e) => e.role === "read");
+  return `CHANNELS YOU MAY POST IN${anyRead ? " (OR READ)" : ""}\n\n${lines.join("\n")}`;
 }
 
 // --- the live provider ---------------------------------------------------------

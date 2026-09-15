@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PermissionFlagsBits as P } from "discord.js";
-import { classify, explicitGrant, fromRest, render } from "../src/directory.js";
+import { classify, explicitGrant, explicitViewGrant, fromRest, render } from "../src/directory.js";
 import { permissionsIn } from "../src/discord-rest.js";
 
 const str = (b) => b.toString();
@@ -105,4 +105,26 @@ test("fromRest builds the directory the boot check and setup agree on", () => {
   assert.match(block, /#leaders .*restricted/);
   assert.match(block, /#ask .*ASK CHANNEL/);
   assert.equal(render([]), null);
+});
+
+test("an explicit View grant without Send is a read-only entry; inherited View is nothing; posts there are refused", () => {
+  // #elixir, 2026-09-15: the operator let the bot into the older bot's
+  // channel to look, and a directory built on Send alone could not see it.
+  const base = { id: "2", name: "elixir", topic: "The old bot", canSend: false, canView: true, everyoneCanView: false };
+  const read = classify({ ...base, explicitView: true });
+  assert.equal(read.role, "read");
+  assert.equal(read.threads, false);
+  assert.equal(read.visibility, "restricted");
+  assert.equal(classify({ ...base, explicitView: false }), null, "View from @everyone is not an invitation");
+  assert.equal(classify({ ...base, explicitView: true, canView: false }), null, "a View the overwrites then deny");
+  assert.equal(
+    classify({ ...base, explicitView: true, explicitSend: true, canSend: true }).role,
+    null,
+    "Send makes it an ordinary entry",
+  );
+  const ids = { botId: "bot", botRoleId: "botrole" };
+  assert.equal(explicitViewGrant([{ id: "botrole", type: 0, allow: str(P.ViewChannel), deny: "0" }], ids), true);
+  assert.equal(explicitViewGrant([{ id: "everyone", type: 0, allow: str(P.ViewChannel), deny: "0" }], ids), false);
+  assert.match(render([read]), /CHANNELS YOU MAY POST IN \(OR READ\)/);
+  assert.match(render([read]), /READ ONLY: you may read it, never post in it/);
 });

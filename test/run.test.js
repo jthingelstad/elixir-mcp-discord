@@ -311,15 +311,18 @@ test("a turn posts through post_message to the channel it chose, and the rules h
     { id: "11", name: "news", topic: "Clan news", visibility: "everyone", threads: false, role: null },
     { id: "12", name: "leaders", topic: "Leaders", visibility: "restricted", threads: false, role: null },
     { id: "13", name: "ask", topic: "Ask", visibility: "everyone", threads: true, role: "ask" },
+    { id: "14", name: "elixir", topic: "The old bot", visibility: "restricted", threads: false, role: "read" },
   ];
   const resolve = async (id) => ({ 11: news, 12: leaders })[id] ?? null;
   const seen = {};
   const askFn = async ({ system, localTools }) => {
-    assert.match(system, /CHANNELS YOU MAY POST IN/);
+    assert.match(system, /CHANNELS YOU MAY POST IN \(OR READ\)/);
     assert.match(system, /#leaders .*restricted/);
+    assert.match(system, /#elixir .*READ ONLY/);
     const tool = localTools.find((t) => t.name === POST_TOOL.name);
     seen.unknown = await tool.handler({ channel_id: "99", content: "x" });
     seen.ask = await tool.handler({ channel_id: "13", content: "x" });
+    seen.read = await tool.handler({ channel_id: "14", content: "x" });
     seen.first = await tool.handler({ channel_id: "11", content: "Two joined today." });
     seen.second = await tool.handler({ channel_id: "12", content: "One left: an elder." });
     seen.third = await tool.handler({ channel_id: "11", content: "again" });
@@ -334,6 +337,7 @@ test("a turn posts through post_message to the channel it chose, and the rules h
   });
   assert.equal(seen.unknown.code, "unknown_channel");
   assert.equal(seen.ask.code, "ask_channel");
+  assert.equal(seen.read.code, "read_only", "let in to look, not to speak");
   assert.equal(seen.first.ok, true);
   assert.equal(seen.second.ok, true);
   assert.equal(seen.third.ok, true);
@@ -433,5 +437,52 @@ test("a routine turn can read the room: the last two hours in a directory channe
     "two hours, oldest first, humans and bots",
   );
   assert.match(out.body.messages[0].text, /decks done/);
+  assert.equal((await tool.handler({ channel_id: "99" })).ok, false, "only directory channels");
+});
+
+test("the operator can study a channel: whole messages, read-only channels included, paged backwards", async () => {
+  const { studyTool } = await import("../src/run.js");
+  const t0 = Date.parse("2026-09-01T00:00:00Z");
+  const page = (n, before) => {
+    // 120 messages, ids "1".."120", newest last; a page is the `limit`
+    // newest ids below `before`.
+    const upper = before ? Number(before) : 121;
+    const ids = [];
+    for (let id = upper - 1; id >= 1 && ids.length < n; id -= 1) ids.push(id);
+    return new Map(
+      ids.map((id) => [
+        String(id),
+        {
+          id: String(id),
+          createdTimestamp: t0 + id * 3600_000,
+          cleanContent: id % 7 === 0 ? "" : `**Post ${id}.** the old bot said something long enough to matter`,
+          author: { username: "Elixir", bot: true },
+          embeds: id % 7 === 0 ? [{ title: `Embed ${id}`, description: "an embed only" }] : [],
+        },
+      ]),
+    );
+  };
+  const tool = studyTool({
+    entries: [{ id: "14", name: "elixir", role: "read" }],
+    resolve: async () => ({ messages: { fetch: async ({ limit, before }) => page(limit, before) } }),
+  });
+  const first = await tool.handler({ channel_id: "14", limit: 100 });
+  assert.equal(first.ok, true);
+  assert.equal(first.body.channel, "#elixir");
+  assert.equal(first.body.messages.length, 100);
+  assert.equal(first.body.messages.at(-1).message_id, "120", "newest last");
+  assert.equal(first.body.messages[0].message_id, "21");
+  assert.equal(first.body.oldest_message_id, "21");
+  assert.match(first.body.messages.at(-1).who, /Elixir \(bot\)/);
+  const embedOnly = first.body.messages.find((m) => m.message_id === "112");
+  assert.equal(embedOnly.text, "");
+  assert.equal(embedOnly.embeds[0].title, "Embed 112", "an embed-only post is not dropped");
+
+  const second = await tool.handler({ channel_id: "14", limit: 100, before: first.body.oldest_message_id });
+  assert.equal(second.body.messages.length, 20);
+  assert.equal(second.body.messages[0].message_id, "1");
+  const end = await tool.handler({ channel_id: "14", before: "1" });
+  assert.equal(end.body.messages.length, 0);
+  assert.match(end.body.note, /Nothing further back/);
   assert.equal((await tool.handler({ channel_id: "99" })).ok, false, "only directory channels");
 });
