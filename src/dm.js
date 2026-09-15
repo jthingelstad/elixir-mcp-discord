@@ -104,6 +104,35 @@ const dmRoutine = () => ({
 
 // -------------------------------------------------------------- helpers
 
+/** A paste over 2,000 characters arrives as a `message.txt` attachment, not
+ *  as text; Discord does that on its own. Read text attachments so a pasted
+ *  FAQ is the message. Only text, only the operator's own upload from
+ *  Discord's CDN, bounded — this is not web access. */
+const ATTACHMENT_MAX_BYTES = 200_000;
+const ATTACHMENT_MAX_CHARS = 60_000;
+
+export async function attachedText(message, { fetchFn = fetch } = {}) {
+  const parts = [];
+  for (const a of message.attachments?.values?.() ?? []) {
+    const type = String(a.contentType ?? "").toLowerCase();
+    const name = String(a.name ?? "");
+    if (!(type.startsWith("text/") || /\.(txt|md|markdown|csv)$/i.test(name))) continue;
+    if ((a.size ?? 0) > ATTACHMENT_MAX_BYTES) {
+      parts.push(`[${name}: ${a.size} bytes, too large to read — paste the part that matters]`);
+      continue;
+    }
+    try {
+      const res = await fetchFn(a.url, { signal: AbortSignal.timeout(10_000) });
+      const text = (await res.text()).slice(0, ATTACHMENT_MAX_CHARS);
+      parts.push(`--- ${name} ---\n${text}`);
+    } catch (error) {
+      log.warn("dm_attachment_unread", { name, error: error.message });
+      parts.push(`[${name}: could not be read]`);
+    }
+  }
+  return parts.join("\n\n");
+}
+
 function turnIdIn(text) {
   const link = /discord(?:app)?\.com\/channels\/\d+\/\d+\/(\d+)/.exec(text);
   if (link) return state.turnForMessage(link[1])?.turnId ?? null;
@@ -305,14 +334,16 @@ function lookupTool() {
   };
 }
 
-async function converse(message, { askFn = ask } = {}) {
+async function converse(message, options = {}) {
+  const { askFn = ask } = options;
   const blocked = spendBlock("review");
   if (blocked) {
     await send(message, `The review lane's budget is ${blocked.reason} for the month ($${blocked.spent?.toFixed(2) ?? "?"} of $${blocked.budget?.toFixed(2) ?? "?"}), and DM turns are charged there. \`why\`, \`try\`, \`memory\` and \`budget\` still work.`);
     return;
   }
   const routine = dmRoutine();
-  const question = message.cleanContent.trim();
+  const attached = await attachedText(message, options);
+  const question = [message.cleanContent.trim(), attached].filter(Boolean).join("\n\n");
   const history = await dmHistory(message.channel, message.id);
   const files = readAgentFiles();
   const proposals = [];
@@ -395,7 +426,7 @@ export async function handleDm(message, options = {}) {
     return { refused: true };
   }
   const text = message.cleanContent.trim();
-  if (!text) return null;
+  if (!text && !message.attachments?.size) return null;
 
   if (/^why\b/i.test(text) || /discord(?:app)?\.com\/channels\//.test(text)) return why(message, text);
   const tryMatch = /^try\s+([a-z0-9-]+)\s*$/i.exec(text);

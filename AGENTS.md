@@ -232,6 +232,13 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
   `lookup_turn`. A proposal rides the review machinery — a `review` record
   with `trigger: "dm"` — so Apply/Skip/Undo and `.history/` are the same
   code. Charged to the `review` lane; ledgered as lane `dm`.
+- **A long paste is an attachment.** Over 2,000 characters Discord sends
+  `message.txt` instead of text, and the first pasted FAQ arrived as an
+  empty message. `attachedText` reads text attachments (text/* or
+  .txt/.md/.csv, ≤200 KB, ≤60K chars) from Discord's CDN — the operator's
+  own upload, not the web, which was tried for the DM and pulled the same
+  day (`web_fetch` needed a code-execution container across rounds, and a
+  fetched page is not the operator's words the way a paste is).
 - **What the DM never does:** post to a member channel. There is no
   `post_message` tool in the lane; `post it` sends only a rehearsal the
   operator has already read. The DM brief also refuses to remember game

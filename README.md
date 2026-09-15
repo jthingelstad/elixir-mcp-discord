@@ -204,6 +204,10 @@ nobody else sees it, and anyone else who DMs it gets one polite line:
   `agent/memory.md` and an Apply button; on tap it is live. Context that
   is only true for a while carries an `until` date and drops out on its
   own. Ask it to forget and it proposes the removal.
+- **Paste it something long.** A clan FAQ, a rules post: Discord turns a
+  long paste into `message.txt`, and the bot reads that too. It proposes
+  the parts worth remembering, three at a time. It has no web access;
+  pasting is you saying it.
 - **Ask why.** `why d98fe553`, or paste a link to one of its messages: the
   transcript — what it was asked, what it thought, what every tool
   returned. Tell it what it should have done and it proposes the change.

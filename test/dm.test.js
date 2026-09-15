@@ -38,7 +38,7 @@ function dm(content, { userId = ADMIN, history = [] } = {}) {
     },
     messages: { fetch: async () => new Map(history.map((m, i) => [`h${i}`, { id: `h${i}`, author: { id: m.bot ? "bot" : userId, bot: Boolean(m.bot), username: "jamie" }, cleanContent: m.text, pinned: false }])) },
   };
-  return { sent, message: { id: "m1", guildId: null, cleanContent: content, author: { id: userId, username: "jamie", bot: false }, channel } };
+  return { sent, message: { id: "m1", guildId: null, cleanContent: content, author: { id: userId, username: "jamie", bot: false }, channel, attachments: new Map() } };
 }
 
 const turnFixture = (turnId) => {
@@ -168,4 +168,37 @@ test("a notice reaches every admin once, then stays quiet for the hour", async (
   assert.match(sent[0][1], /🔔 \*\*routine failed\*\* · movers: overloaded/);
   notify.configure({ client: null });
   assert.equal(await notify.notify("budget", "x"), 0, "no client is a log line, not a throw");
+});
+
+test("a long paste that Discord turned into message.txt is read as the message", async () => {
+  fresh();
+  const { message } = dm("Please use what is helpful in here:");
+  message.attachments = new Map([["a1", { name: "message.txt", contentType: "text/plain; charset=utf-8", size: 6000, url: "https://cdn.discordapp.com/attachments/x/message.txt" }]]);
+  let seen;
+  await handleDm(message, {
+    fetchFn: async (url) => ({ text: async () => (url.endsWith("message.txt") ? "About the Clan\n\nWhy the name POAP KINGS?\nThe clan began by publishing POAP collectibles." : "") }),
+    askFn: async ({ messages }) => {
+      seen = messages.at(-1).content;
+      return { ok: true, text: "Read it.", called: [], errors: [], trace: [], envelopes: [], usd: 0.01, usage: null, turnId: "dm000002", ms: 1, rounds: 1, stopReason: "end_turn", model: "m", effort: "e" };
+    },
+  });
+  assert.match(seen, /Please use what is helpful in here:/);
+  assert.match(seen, /--- message\.txt ---\nAbout the Clan/);
+  assert.match(seen, /POAP collectibles/);
+});
+
+test("a non-text attachment is ignored and an oversized one is named, not read", async () => {
+  fresh();
+  const { message } = dm("here");
+  message.attachments = new Map([
+    ["img", { name: "deck.png", contentType: "image/png", size: 100, url: "https://cdn.discordapp.com/x/deck.png" }],
+    ["big", { name: "dump.txt", contentType: "text/plain", size: 5_000_000, url: "https://cdn.discordapp.com/x/dump.txt" }],
+  ]);
+  let seen;
+  await handleDm(message, {
+    fetchFn: async () => assert.fail("nothing should be fetched"),
+    askFn: async ({ messages }) => ((seen = messages.at(-1).content), { ok: true, text: "ok", called: [], errors: [], trace: [], envelopes: [], usd: 0.01, usage: null, turnId: "dm000003", ms: 1, rounds: 1, stopReason: "end_turn", model: "m", effort: "e" }),
+  });
+  assert.doesNotMatch(seen, /deck\.png/);
+  assert.match(seen, /dump\.txt: 5000000 bytes, too large/);
 });
