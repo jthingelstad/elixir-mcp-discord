@@ -87,7 +87,13 @@ for leaders); the same text twice is not.
 
 Read the room first: recent_channel_messages on the channel you are about to
 post in. If the people there already said it, add what the record adds or
-post nothing; never restate a member's own news back to them.`;
+post nothing; never restate a member's own news back to them.
+
+Channels marked READ ONLY were opened to you to listen, not to speak: they are
+where members talk. When what they have been saying could change what you
+post - a member already celebrating the thing, a war-day mood, a question
+the record answers - read them too before you post. Never post there, and
+never quote a member's words back into another channel.`;
 
 const QUOTA = `Prefer recorded data. A live read goes out to the collector fleet and draws on a
 daily quota shared with every other consumer — spend one only when a fresh read

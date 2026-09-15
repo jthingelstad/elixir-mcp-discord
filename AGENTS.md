@@ -486,7 +486,12 @@ skip; prose with no call still goes to the default (legacy), or is
   `list_channels`' description says the same, so the model cannot invent a
   registration step. `read_channel` is the operator's study tool — whole
   messages, embeds, 100 a page, `before` to page back — and lives in the
-  DM lane only; routines keep the two-hour room tool.
+  DM lane only; routines keep the two-hour room tool. Jamie's intent for
+  read-only channels is LISTENING: "a good way for the bot to listen to
+  what is being discussed for awareness" - member channels opened View-only
+  so a routine reads the mood before it posts elsewhere. The posting rule
+  says so (read them when what members said could change the post; never
+  post there; never quote a member's words into another channel).
 - **The ask lane never gets the tool or the directory.** Its input is
   untrusted; where it listens stays an explicit binding. `postTool` also
   refuses `role: "ask"` channels, the post cap (`MAX_POSTS_PER_TURN`, 3),
