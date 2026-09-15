@@ -22,7 +22,7 @@ import { startEventLoop } from "./events.js";
 import { startScheduler } from "./scheduler.js";
 import { startReview } from "./review.js";
 import * as notify from "./notify.js";
-import { handleDm } from "./dm.js";
+import { handleDm, introduce } from "./dm.js";
 import { loadRoutines, routinesFor } from "./routines.js";
 import { registerCommands, handleInteraction } from "./commands.js";
 import { checkChannelPermissions } from "./permissions.js";
@@ -251,8 +251,10 @@ client.once(Events.ClientReady, async (ready) => {
     if (!routine.disabled && routine.channel) await resolveChannel(routine.channel);
   }
   if (routines.every((routine) => routine.disabled)) {
-    log.error("no_active_routines", { dir: config.agentDir });
-    await notify.notify("no routines", `nothing is enabled in ${config.agentDir}; the bot is connected and doing nothing.`);
+    // Not an error on a fresh instance: setup wires the connection and the
+    // bot introduces itself here. An error only when it stays that way.
+    log[routines.length ? "error" : "warn"]("no_active_routines", { dir: config.agentDir, hint: "the admins are being introduced by DM" });
+    await introduce({ guildName: guild?.name, subject: state.get("principal")?.subject });
   }
   // Loud, per channel, before anything runs: a wrong id or a missing
   // permission is a routine that spends a model call and then cannot post.

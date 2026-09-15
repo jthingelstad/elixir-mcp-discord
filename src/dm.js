@@ -34,7 +34,10 @@
  * these conversations too.
  */
 
-import { config } from "./config.js";
+import path from "node:path";
+import { config, repoRoot } from "./config.js";
+import { catalog } from "./setup-catalog.js";
+import { notify } from "./notify.js";
 import { ask, spendBlock } from "./claude.js";
 import { systemFor, readMemory, parseMemoryEntry, MEMORY_MAX_CHARS } from "./prompt.js";
 import { loadRoutines } from "./routines.js";
@@ -44,7 +47,7 @@ import { post, chunk } from "./post.js";
 import { renderTrace } from "./trace.js";
 import { renderTurn } from "./turns.js";
 import { budgetReply, routinesReply } from "./commands.js";
-import { FIELDS } from "./routines.js";
+import { FIELDS, splitFrontMatter } from "./routines.js";
 import { planEdit, proposalMessage, toComponents, readAgentFiles } from "./review.js";
 import { isConversational } from "./ask.js";
 import { turnRecord } from "./run.js";
@@ -78,6 +81,18 @@ into your reply — the diff is sent separately.
 
 ASK YOU TO FORGET: propose removing that line from memory.md. Ask "memory"
 to see the current lines if you need the exact text.
+
+SET IT UP, the first time. When list_routines is empty the bot does
+nothing yet. Call list_example_routines (the shipped set, each with its
+fields and full brief) and list_channels (where the bot may post, and the
+ask channel). Offer the examples in a few lines each; if they say "the
+usual", propose create for ask, clan-feed, notable-movers and
+war-deck-check with the example's own fields and brief, times moved to
+their evening if they said one. Propose the ask routine first — it is
+what makes the ask channel answer. Three proposals per message; say what
+else is on offer. Then ask about the clan: what they call things, what to
+keep in mind — memory.md lines. This is also how a new routine is written
+later: start from the nearest example's brief and change what differs.
 
 MANAGE THE ROUTINES — what runs, when, where, and what it says. Call
 list_routines first; it returns every routine with its fields and its
@@ -384,6 +399,45 @@ function routinesTool() {
   };
 }
 
+function examplesTool() {
+  return {
+    name: "list_example_routines",
+    description: "The routines this bot ships as examples — each with its fields and its full brief — to offer when setting up, and to start from when writing a new one.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    async handler() {
+      const entries = catalog({ exampleDir: path.join(repoRoot, "agent"), instanceDir: config.agentDir });
+      return {
+        ok: true,
+        body: {
+          examples: entries
+            .filter((e) => e.example && e.routine)
+            .map((e) => ({ key: e.key, installed: e.installed, description: e.routine.description, fields: splitFrontMatter(e.text).fields, brief: e.routine.prompt })),
+          the_usual: ["ask", "clan-feed", "notable-movers", "war-deck-check"],
+        },
+      };
+    },
+  };
+}
+
+function channelsTool() {
+  return {
+    name: "list_channels",
+    description: "Where this bot may post (its directory: channels where its role is explicitly granted), with topics and who can see them, and which channel is bound as the ask channel.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    async handler() {
+      const entries = directory();
+      return {
+        ok: true,
+        body: {
+          channels: entries.map((e) => ({ name: e.name, id: e.id, role: e.role, topic: e.topic ?? null, visibility: e.visibility ?? null, visible_to: e.visibleTo ?? null })),
+          bound: Object.fromEntries([...config.channels].map(([name, id]) => [name, entries.find((e) => e.id === id)?.name ? `#${entries.find((e) => e.id === id).name}` : id])),
+          timezone: config.timezone,
+        },
+      };
+    },
+  };
+}
+
 function lookupTool() {
   return {
     name: "lookup_turn",
@@ -421,7 +475,7 @@ async function converse(message, options = {}) {
     maxTokens: routine.maxTokens,
     routineKey: "dm",
     lane: "review",
-    localTools: [proposeTool({ files, proposals, by: "owner" }), routinesTool(), lookupTool()],
+    localTools: [proposeTool({ files, proposals, by: "owner" }), routinesTool(), examplesTool(), channelsTool(), lookupTool()],
     maxRounds: 8,
   });
 
@@ -510,6 +564,31 @@ export async function handleDm(message, options = {}) {
     );
   }
   return converse(message, options);
+}
+
+/**
+ * THE INTRODUCTION. A bot with nothing enabled says so to its admins, by
+ * DM, on boot: what it is connected to, where it may post, what it could
+ * run. Setup used to make this choice at the terminal; the person choosing
+ * is on a phone, and the bot only knows the channels and the clan once it
+ * is connected. Deterministic, free, once a day at most.
+ */
+export async function introduce({ guildName, subject, examples = null } = {}) {
+  const entries = directory();
+  const postable = entries.filter((e) => e.role !== "ask").map((e) => `#${e.name}`);
+  const askId = config.channels.get("ask");
+  const askName = entries.find((e) => e.id === askId)?.name;
+  const shipped = examples ?? catalog({ exampleDir: path.join(repoRoot, "agent"), instanceDir: config.agentDir }).filter((e) => e.example && e.routine);
+  const lines = [
+    `I'm connected to **${guildName ?? "the server"}**${subject?.name ? ` for **${subject.name}**${subject.members ? ` (${subject.members} members)` : ""}` : ""}, and nothing runs yet.`,
+    `I may post in ${postable.length ? postable.join(", ") : "no channel yet — grant my role Send Messages where I should post"}${askName ? `; questions are answered in #${askName}` : ""}. Times are ${config.timezone}.`,
+    "",
+    "What I can run:",
+    ...shipped.map((e) => `• **${e.key}** — ${e.routine.description}`),
+    "",
+    'Say **the usual** for ask, clan-feed, notable-movers and war-deck-check, or tell me which you want and when. Each comes back as a proposal with an Apply button. Then tell me about the clan — what you call things, what to keep in mind.',
+  ];
+  return notify("welcome", lines.join("\n"), { fingerprint: "introduce", every: 24 * 3600 * 1000 });
 }
 
 /** For tests: the outstanding drafts. */

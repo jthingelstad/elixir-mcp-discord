@@ -202,3 +202,46 @@ test("a non-text attachment is ignored and an oversized one is named, not read",
   assert.doesNotMatch(seen, /deck\.png/);
   assert.match(seen, /dump\.txt: 5000000 bytes, too large/);
 });
+
+test("a bot with nothing enabled introduces itself: where it may post, what it can run, how to say yes", async () => {
+  fresh();
+  const sent = [];
+  notify.configure({ client: { users: { fetch: async (id) => ({ send: async (m) => sent.push([id, m.content]) }) } } });
+  directory.configure({ list: () => [{ id: "77", name: "news", role: "post" }, { id: "2", name: "ask-elixir", role: "ask" }], resolve: null });
+  const { introduce } = await import("../src/dm.js");
+  const reached = await introduce({ guildName: "POAP KINGS Discord", subject: { name: "POAP KINGS", members: 47 } });
+  assert.equal(reached, 1);
+  const text = sent.map((s) => s[1]).join("\n");
+  assert.match(text, /connected to \*\*POAP KINGS Discord\*\* for \*\*POAP KINGS\*\* \(47 members\), and nothing runs yet/);
+  assert.match(text, /I may post in #news; questions are answered in #ask-elixir/);
+  assert.match(text, /• \*\*ask\*\* — Answers members' questions/);
+  assert.match(text, /• \*\*war-deck-check\*\* — /);
+  assert.match(text, /Say \*\*the usual\*\*/);
+  assert.equal(await introduce({ guildName: "x" }), 0, "once a day, not once a boot loop");
+  directory.configure({ list: () => [], resolve: null });
+  notify.configure({ client: null });
+});
+
+test("the DM lane can list the shipped examples with their briefs, and the channels", async () => {
+  fresh();
+  directory.configure({ list: () => [{ id: "77", name: "news", role: "post", topic: "Clan news" }], resolve: null });
+  const { message } = dm("what can you run?");
+  let tools;
+  await handleDm(message, {
+    askFn: async ({ localTools }) => {
+      tools = Object.fromEntries(localTools.map((t) => [t.name, t]));
+      return { ok: true, text: "…", called: [], errors: [], trace: [], envelopes: [], usd: 0.01, usage: null, turnId: "dm000004", ms: 1, rounds: 1, stopReason: "end_turn", model: "m", effort: "e" };
+    },
+  });
+  const examples = await tools.list_example_routines.handler({});
+  assert.equal(examples.ok, true);
+  const ask = examples.body.examples.find((e) => e.key === "ask");
+  assert.equal(ask.fields.trigger, "message");
+  assert.match(ask.brief, /\S/);
+  assert.deepEqual(examples.body.the_usual, ["ask", "clan-feed", "notable-movers", "war-deck-check"]);
+  const channels = await tools.list_channels.handler({});
+  assert.equal(channels.body.channels[0].name, "news");
+  assert.equal(channels.body.channels[0].topic, "Clan news");
+  assert.equal(channels.body.bound.ask, "2", "CHANNEL_ASK from the test env, not in the directory");
+  directory.configure({ list: () => [], resolve: null });
+});

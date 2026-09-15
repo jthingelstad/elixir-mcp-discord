@@ -111,17 +111,21 @@ feed cursor and feedback inbox are its own) and its own Claude key. Logs are
 - **`npm run setup -- <instance-dir>` is the whole process** (`src/setup.js`,
   helpers in `src/setup-catalog.js`, `src/discord-rest.js`, `src/env-file.js`):
   Elixir key, Claude key and Discord app each tried against its service BEFORE
-  `.env` is written; invite link printed when the bot is not in the server; a
-  routine picker over the checkout's `agent/routines` (each carries a
-  `description:` front-matter field — a real field, the parser rejects
-  unknown ones); schedule times rewritten in the instance copy; channels
-  picked from the server's list and permission-checked over REST
-  (`computePermissions` reproduces Discord's overwrite algorithm so
-  `inspectChannel` judges a REST channel by the boot check's rule); clan
-  notes appended to `identity.md` once; budget estimate; admin ids checked as
-  members; then an offer to install the service and show the boot lines.
-  **Setup only ever ADDS routine files** — never overwrites or deletes one;
-  chosen-off is `ROUTINES_DISABLED`. `--check` is the no-prompt form and
+  `.env` is written; invite link printed when the bot is not in the server;
+  the timezone; the ask channel picked from the server's list and
+  permission-checked over REST (`computePermissions` reproduces Discord's
+  overwrite algorithm so `inspectChannel` judges a REST channel by the boot
+  check's rule) — bound whether or not a message routine exists yet;
+  budgets; admin ids checked as members; then an offer to install the
+  service and show the boot lines. **Since 2026-09-14 setup wires the
+  connection and nothing else**: routines, schedules and the clan notes
+  moved to the DM (below), because choosing them needs the directory, the
+  clan and the operator's evening, which the bot has only once connected —
+  and the person choosing is on a phone. The terminal picker remains behind
+  a yes/no (default no). A bot that boots with nothing enabled sends
+  `introduce()` — where it may post, what it can run, "say the usual" — as
+  a `welcome` notice, once a day. **Setup only ever ADDS routine files** —
+  never overwrites or deletes one; chosen-off is `ROUTINES_DISABLED`. `--check` is the no-prompt form and
   passes on poapkings. It does not import `config.js`'s validated sections on
   purpose — those read the cwd, and setup's directory may have no `.env` yet;
   `initialize(auth)` in `src/mcp.js` takes an override for the same reason.
@@ -233,8 +237,10 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
   `lookup_turn`. A proposal rides the review machinery — a `review` record
   with `trigger: "dm"` — so Apply/Skip/Undo and `.history/` are the same
   code. Charged to the `review` lane; ledgered as lane `dm`.
-- **The operator runs the calendar from the DM.** `list_routines` (a
-  tool) and `routines` (a command) show what runs; `propose_change` has
+- **The operator runs the calendar from the DM.** `list_routines`,
+  `list_example_routines` (the checkout's `agent/routines`, with briefs, for
+  first setup and as the pattern for a new one) and `list_channels` (the
+  directory plus the ask binding) are tools; `routines` is a command; `propose_change` has
   three operator-only ops on `routines/<key>.md` — `set_fields` (front
   matter: `at`, `days`, `channel`, `model`, `enabled`, `may_skip`, ...;
   `""` removes a key), `create` (fields + the brief) and `delete` — beside

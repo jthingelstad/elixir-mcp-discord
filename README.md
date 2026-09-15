@@ -20,7 +20,7 @@ your bot — no fork, no code to edit.
 ```bash
 git clone https://github.com/jthingelstad/elixir-mcp-discord && cd elixir-mcp-discord
 npm install
-npm run setup -- ~/.elixir-mcp-discord/myclan     # guided: keys, Discord app, routines, channels
+npm run setup -- ~/.elixir-mcp-discord/myclan     # guided: keys, Discord app, channels; then DM the bot
 ```
 
 That is the whole install. Setup asks for each thing, tries it against the
@@ -94,8 +94,11 @@ and it is what lets one checkout run several clans.
 
 ## Setup
 
-`npm run setup -- <instance-dir>` is the whole process for one bot, in order,
-with every step tried before anything is written:
+`npm run setup -- <instance-dir>` wires one bot — keys, the Discord app, the
+ask channel, admins, budgets — with every step tried before anything is
+written. What the bot *does* is decided afterwards, in a DM with the bot:
+it introduces itself once it is connected, offers the routines it can run,
+and each choice comes back as a proposal with an Apply button. In order:
 
 1. **Elixir** — the key must open an *agent* door with a clan. An agent has
    its own URL (`/a/<id>/mcp`), its own event feed and its own feedback
@@ -107,24 +110,26 @@ with every step tried before anything is written:
    the Message Content intent on, in the server you named. Not invited yet?
    It prints the invite link with both scopes and exactly the permission bits
    the lanes need, and waits.
-4. **Routines** — a checklist of everything in the checkout's
-   `agent/routines`, each with its one-line `description`. Chosen files are
-   copied into the instance; a file already there is **never overwritten**
-   (that rewrite is yours), and one chosen off goes to `ROUTINES_DISABLED`
-   rather than being deleted.
-5. **Schedule** — your timezone, then each scheduled routine's time, written
-   back into the instance's copy.
+4. **Routines** — none, by default: the bot offers them by DM once it can
+   see your channels and your clan. Answer *yes* here to use the terminal
+   checklist instead. Either way a file already in the instance is **never
+   overwritten**, and one turned off goes to `ROUTINES_DISABLED` rather
+   than being deleted.
+5. **Schedule** — your timezone (schedules and the DM's "run it at 7:30"
+   are read in it).
 6. **Channels** — shows where the bot may post (every channel where its role
    is *explicitly* granted Send Messages), insists on at least one, and asks
    which channel is the ask channel, checking thread permissions there.
    Create channels in Discord first; the bot does not need Manage Channels
    and never asks for it.
-7. **Identity** — a sentence or two about this clan, appended to
-   `identity.md` under its own heading; after that the file is yours.
-8. **Budgets** — an estimate from the routines you chose, then the two pots.
-9. **Admins** — each user id checked to be a member of the server.
-10. Writes `.env`, prints what runs where and when, and offers to install and
-    start the service, showing the boot check's lines from the log.
+7. **Identity** — nothing to type: tell the bot about the clan in the DM and
+   it proposes the lines to keep. `identity.md` is yours to edit any time.
+8. **Budgets** — the two pots (an estimate once routines exist; the bot
+   says what a set would cost when you choose it).
+9. **Admins** — each user id checked to be a member of the server. These are
+   the people the bot DMs.
+10. Writes `.env` and offers to install and start the service, showing the
+    boot check's lines from the log. Then DM it.
 
 Every failure comes with its fix and a chance to retry; `skip` moves on.
 Re-running keeps every value on Enter, so it is also how you rotate one key,

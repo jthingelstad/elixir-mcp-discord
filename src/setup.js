@@ -53,7 +53,6 @@ import {
   rewriteAt,
   estimateMonthly,
   describeWhen,
-  withClanSection,
 } from "./setup-catalog.js";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -382,15 +381,20 @@ const entries = catalog({ exampleDir, instanceDir: agentDir });
 for (const entry of entries.filter((e) => e.error)) fail({ detail: `${entry.key}: ${entry.error}` });
 const usable = entries.filter((e) => e.routine);
 const previouslyDisabled = new Set((values.ROUTINES_DISABLED || "").split(",").map((k) => k.trim()).filter(Boolean));
-const chosen = new Set(
-  usable
-    .filter((e) => (e.installed ? !previouslyDisabled.has(e.key) : !fs.existsSync(envFile)))
-    .map((e) => e.key),
-);
-if (interactive) {
+// WHAT THE BOT DOES IS DECIDED IN THE DM, NOT HERE. Choosing routines needs
+// the channel directory, the clan's name and its evenings, all of which the
+// bot only has once it is connected; and the person choosing is on a phone,
+// not at this terminal. So setup wires the connection and leaves the
+// instance with whatever routines it already has — none, on a fresh one —
+// and the bot's first DM to the admins is the introduction. The picker is
+// still here for anyone who prefers the terminal.
+const chosen = new Set(usable.filter((e) => e.installed && !previouslyDisabled.has(e.key)).map((e) => e.key));
+const pickHere = interactive && (await yesNo(`Pick routines here now? (No: the bot introduces itself by DM and you choose there)`, false));
+if (pickHere) {
   note("Each routine is one file in agent/routines; pick the ones this clan wants.");
   note("A file already in the instance is never overwritten — rewrite it freely.");
   console.log();
+  for (const e of usable) if (!e.installed) chosen.add(e.key);
   await chooseMany(
     usable.map((e) => ({
       key: e.key,
@@ -414,7 +418,7 @@ if (!checkOnly) {
     delete values.ROUTINES_DISABLED;
   }
 }
-if (chosen.size === 0) fail({ detail: "no routines chosen", fix: "the bot would connect and do nothing" });
+if (chosen.size === 0) note("no routines yet — the bot will DM the admins to set them up once it is running");
 save("routines");
 
 // --- 6. Schedule ------------------------------------------------------------------
@@ -444,11 +448,16 @@ for (const routine of active.filter((r) => r.trigger === "schedule")) {
 }
 const routines = loadRoutines({ dir: agentDir }).routines.filter((r) => chosen.has(r.key));
 ok(`${routines.length} routines active`);
+note("later, from the DM: reschedule, edit, add or remove any of them — no restart.");
 
 // --- 7. Channels ------------------------------------------------------------------
 
 heading("Channels");
 const requirements = requirementsFor(routines, { feedbackChannel: values.FEEDBACK_CHANNEL || null });
+// The ask channel is the one binding that stays explicit, whether or not a
+// message routine exists yet: it is where members will speak, and the DM
+// introduction offers the ask routine first.
+if (!requirements.some((r) => r.name === "ask")) requirements.unshift(requirementsFor([{ trigger: "message", channel: "ask", disabled: false }], { feedbackChannel: null })[0]);
 if (!inspected?.guild) {
   note("skipped: the bot is not in the server yet, so nothing can be checked.");
   if (values.DISCORD_APP_ID && values.DISCORD_GUILD_ID) note(`invite: ${inviteUrl(values.DISCORD_APP_ID, values.DISCORD_GUILD_ID)}`);
@@ -541,29 +550,26 @@ heading("Identity (how this bot speaks)");
 const identityFile = path.join(agentDir, "identity.md");
 const identity = fs.readFileSync(identityFile, "utf8");
 if (identity.includes("## About this clan")) {
-  ok(`${identityFile} already has its clan section; edit the file directly to change it`);
-} else if (checkOnly) {
-  note(`${identityFile} has no clan section yet`);
+  ok(`${identityFile} already has its clan section; edit the file directly, or tell the bot by DM`);
 } else {
-  note("identity.md is prepended to every prompt: voice, boundaries, what it is for.");
-  note("The shipped version is plain on purpose. Add anything this clan's bot should");
-  note("know or do differently — a sentence or two is plenty, Enter for none.");
-  const notes = await ask("Notes for this clan");
-  const updated = withClanSection(identity, { clanName: clanName ?? "this clan", notes });
-  if (updated) {
-    fs.writeFileSync(identityFile, updated);
-    ok(`added "About this clan" to ${identityFile}`);
-  }
+  note(`${identityFile} is prepended to every prompt: voice, boundaries, what it is for.`);
+  note("Tell the bot about this clan in the DM once it is running — what you call");
+  note("things, what it should keep in mind — and it proposes the lines to keep.");
 }
 
 // --- 9. Money, polling, admins ----------------------------------------------------
 
 heading("Budgets");
 const estimate = estimateMonthly(routines);
-for (const line of estimate.lines) note(`${line.key.padEnd(22)} ~${String(line.runs).padStart(3)} posts/month  ~${money(line.usd)}`);
-note(`≈ ${money(estimate.usd)}/month at ~${money(estimate.perPostUsd)} a post — a starting point, not a forecast.`);
+if (routines.length) {
+  for (const line of estimate.lines) note(`${line.key.padEnd(22)} ~${String(line.runs).padStart(3)} posts/month  ~${money(line.usd)}`);
+  note(`≈ ${money(estimate.usd)}/month at ~${money(estimate.perPostUsd)} a post — a starting point, not a forecast.`);
+} else {
+  note("No routines yet, so no estimate: a scheduled post is roughly $0.10, and the");
+  note("bot says what a set would cost when you choose it in the DM.");
+}
 note("Budgets are strict: a lane stops BEFORE a turn that could cross the line.");
-const suggested = Math.max(5, Math.ceil(estimate.usd * 2)).toFixed(2);
+const suggested = routines.length ? Math.max(5, Math.ceil(estimate.usd * 2)).toFixed(2) : "20.00";
 values.MONTHLY_BUDGET_USD = await askValid("Monthly budget for schedules and events, USD", { fallback: values.MONTHLY_BUDGET_USD || suggested, validate: numberIn("a budget", 0) });
 values.ASK_MONTHLY_BUDGET_USD = await askValid("Monthly budget for member questions, USD", { fallback: values.ASK_MONTHLY_BUDGET_USD || "10.00", validate: numberIn("a budget", 0) });
 save("budgets");
@@ -623,6 +629,7 @@ for (const routine of routines) {
   note(`${routine.key.padEnd(22)} ${describeWhen(routine).padEnd(34)} ${where}`);
 }
 if (values.ROUTINES_DISABLED) note(`off: ${values.ROUTINES_DISABLED}`);
+if (routines.length === 0) note("routines: none yet — chosen in the DM");
 note(`commands: /${values.COMMAND_PREFIX ? `${values.COMMAND_PREFIX}-` : ""}run, -budget, -routines · admins: ${values.ADMIN_USER_IDS}`);
 note(`budgets: ${money(values.MONTHLY_BUDGET_USD)} routines + ${money(values.ASK_MONTHLY_BUDGET_USD)} ask per month · schedule in ${values.TIMEZONE}`);
 
@@ -666,5 +673,8 @@ if (interactive) {
   note(`next: ./scripts/install-launchd.sh ${instanceDir}`);
 }
 if (!checkOnly && unresolved.length === 0) {
-  note(`try a prompt any time: INSTANCE_DIR=${instanceDir} npm run try <routine>`);
+  note("next: DM the bot from an admin account. It introduces itself, offers the");
+  note("routines it can run, and proposes each with an Apply button; tell it about");
+  note("the clan the same way. Everything it proposes is a file under agent/.");
+  note(`from the terminal any time: INSTANCE_DIR=${instanceDir} npm run try <routine>`);
 }
