@@ -144,10 +144,11 @@ export function renderTurn(turn, { full = false } = {}) {
   if (flags.length) out.push(`\n_${flags.join(" · ")}_`);
   for (const f of output.footers || []) out.push(`\n${clip(f, full ? Infinity : 500)}`);
 
-  if (turn.reactions?.length || turn.filed?.length || turn.findings?.length || turn.interventions?.length) {
+  if (turn.reactions?.length || turn.filed?.length || turn.findings?.length || turn.interventions?.length || turn.retractions?.length) {
     out.push("");
     out.push("### Afterwards");
     out.push("");
+    for (const r of turn.retractions || []) out.push(`- 🗑 RETRACTED by discord:${r.by}${r.at ? ` at ${r.at.slice(0, 16)}Z` : ""} (${r.deleted} message(s))${r.reason ? ` — "${r.reason}"` : ""}`);
     for (const r of turn.reactions || []) out.push(`- ${r.reaction === "up" ? "👍" : "👎"} discord:${r.userId}${r.at ? ` at ${r.at.slice(0, 16)}Z` : ""}${r.note ? ` — "${r.note}"` : ""}`);
     for (const i of turn.interventions || []) out.push(`- 🙋 ${i.by === "other_member" ? "another member stepped in" : "the asker pushed back"} (discord:${i.userId}): "${clip(i.text, full ? Infinity : 200)}"`);
     for (const f of turn.findings || []) out.push(`- 🔎 ${f.class} (${f.source}): ${f.note}`);

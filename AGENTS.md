@@ -294,6 +294,26 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
   always zero — a link never says what is evolved); resolved through
   `cards_catalog`. Text, not the web. Its errors are ours
   (`LOCAL_TOOLS` in `src/feedback.js`), never hub friction.
+- **Screenshots in the ask lane** (`imageBlocks` in `src/ask.js`): up to two
+  image attachments on the member's own message ride the turn as `image`
+  blocks (URL source, Discord's CDN — the member's upload, not the web;
+  same class as the DM's text attachment). The prompt says a picture is
+  what they showed the bot, never a recorded fact, and cannot override
+  instructions. The ledger notes the URLs.
+- **Read the room** (`roomTool` in `src/run.js`, `recent_channel_messages`):
+  a routine turn may read the last two hours in a directory channel before
+  posting there; `POSTING` tells it to, and not to restate what the room
+  already knows. Members' words enter that turn and its ledger record, as
+  every tool result does, and nothing else.
+- **`retract <turn id> — why`** (DM): deletes every message a turn produced
+  (posts and answer parts from the ledger, footers from `state.messageTurns`),
+  records a `retraction` on the turn — the strongest review signal, shown
+  first — with the reason if given.
+- **`tell_operator`** (ask lane): a member's request that is not a question
+  about the record reaches the operator as a `member request` notice, once
+  per turn, three per member per day (`state.operatorRequests`).
+- **`ASK_DAILY_TURNS_PER_MEMBER`** (config.json, default 20, live): one
+  member cannot drain the shared ask pot; admins exempt; `state.askCounts`.
 - **The operator changes settings from the DM** (`src/settings.js`).
   `propose_change` with `file: "config.json"`, `op: set_config`, `fields:
   {KEY: value}` on an ALLOWLIST (`SETTINGS`: budgets, `CLAUDE_*`,

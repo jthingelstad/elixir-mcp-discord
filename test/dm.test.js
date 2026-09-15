@@ -245,3 +245,30 @@ test("the DM lane can list the shipped examples with their briefs, and the chann
   assert.equal(channels.body.bound.ask, "2", "CHANNEL_ASK from the test env, not in the directory");
   directory.configure({ list: () => [], resolve: null });
 });
+
+test("retract deletes every message a turn produced and records it on the turn", async () => {
+  fresh();
+  const routine = parseRoutine("movers", "---\ntrigger: schedule\nat: 01:00\n---\nMovers.");
+  ledger.append(
+    ledger.turnEntry({
+      routine,
+      lane: "routines",
+      result: { turnId: "ab120001", text: "", called: [], errors: [], trace: [], envelopes: [], usd: 0.01, ms: 1, rounds: 1, stopReason: "end_turn", model: "m", effort: "e" },
+      system: "s",
+      input: { kind: "schedule", brief: "Movers." },
+      output: { text: "**x** — 1-9.", posts: [{ channelId: "77", channelName: "news", messageIds: ["m1", "m2"], text: "**x** — 1-9." }], skipped: false, footers: [], ungrounded: false, friction: null },
+    }),
+  );
+  state.rememberTurn("ab120001", { routine: "movers", lane: "routines", question: "q", answer: "a", called: [], errors: [], requestIds: [] }, ["m1", "m2", "m2-note"]);
+  const deleted = [];
+  const { sent, message } = dm("retract ab120001 — named the worst players in #news");
+  await handleDm(message, { deleteFn: async (channelId, id) => deleted.push([channelId, id]) });
+  assert.deepEqual(deleted.sort(), [["77", "m1"], ["77", "m2"], ["77", "m2-note"]]);
+  assert.match(sent[0].content, /deleted 3 messages/);
+  const [turn] = ledger.readTurns({ since: today() });
+  assert.equal(turn.retractions.length, 1);
+  assert.equal(turn.retractions[0].deleted, 3);
+  assert.match(turn.retractions[0].reason, /named the worst players/);
+  const { isFlagged } = await import("../src/review.js");
+  assert.equal(isFlagged(turn), true);
+});

@@ -249,6 +249,52 @@ async function why(message, text) {
   log.info("dm_why", { user: message.author.id, turnId });
 }
 
+/**
+ * RETRACT: delete everything a turn posted. The bot could post and never
+ * take a post back; the review found a named worst-three list in the main
+ * channel and the only remedy was the operator, in Discord, by hand. The
+ * message ids are in the ledger (and state.messageTurns for footers); the
+ * deletion is recorded on the turn as the strongest signal the review has.
+ */
+async function retract(message, text, { deleteFn = null } = {}) {
+  const turnId = turnIdIn(text);
+  const turn = findTurn(turnId);
+  if (!turn) {
+    await send(message, turnId ? `I have no turn \`${turnId}\` in the last 60 days.` : "Say `retract <turn id>` (the footer under a post shows it), and optionally why after a dash.");
+    return;
+  }
+  if (turn.lane === "dm") {
+    await send(message, "That was a DM turn; nothing was posted to a channel.");
+    return;
+  }
+  const reason = /—|-\s/.test(text) ? text.split(/—|-\s/).slice(1).join(" ").trim().slice(0, 200) || null : null;
+  // Every message the turn produced: posts and answer parts from the ledger,
+  // footers from the state map.
+  const places = new Map();
+  for (const p of turn.output?.posts || []) for (const id of p.messageIds || []) places.set(id, p.channelId);
+  for (const id of turn.output?.messageIds || []) places.set(id, turn.input?.threadId ?? turn.input?.channelId ?? null);
+  const messageTurns = state.get("messageTurns") || {};
+  for (const [id, tid] of Object.entries(messageTurns)) if (tid === turn.turnId && !places.has(id)) places.set(id, [...places.values()][0] ?? null);
+  let deleted = 0;
+  const failed = [];
+  for (const [id, channelId] of places) {
+    try {
+      if (deleteFn) await deleteFn(channelId, id);
+      else {
+        const channel = channelId ? await message.client.channels.fetch(channelId).catch(() => null) : null;
+        if (!channel) throw new Error("channel not found");
+        await channel.messages.delete(id);
+      }
+      deleted += 1;
+    } catch (error) {
+      failed.push(`${id} (${error.message})`);
+    }
+  }
+  ledger.append(ledger.retractionEntry({ turnId: turn.turnId, by: message.author.id, deleted, reason }));
+  log.info("dm_retracted", { user: message.author.id, turnId: turn.turnId, deleted, failed: failed.length, reason });
+  await send(message, `Retracted \`${turn.turnId}\` (${turn.routine}): deleted ${deleted} message${deleted === 1 ? "" : "s"}${failed.length ? `; could not delete ${failed.join(", ")}` : ""}.${reason ? ` Noted why: "${reason}".` : ""} The review will see it as the strongest signal there is${reason ? "" : " — say `retract <id> — why` next time and it learns faster"}.`);
+}
+
 /** Drafts from "try", per operator, in memory only: a draft outlives nothing. */
 const drafts = new Map();
 
@@ -685,6 +731,7 @@ export async function handleDm(message, options = {}) {
   const text = message.cleanContent.trim();
   if (!text && !message.attachments?.size) return null;
 
+  if (/^retract\b/i.test(text)) return retract(message, text, options);
   if (/^why\b/i.test(text) || /discord(?:app)?\.com\/channels\//.test(text)) return why(message, text);
   const tryMatch = /^try\s+([a-z0-9-]+)\s*$/i.exec(text);
   if (tryMatch) return tryRoutine(message, tryMatch[1].toLowerCase(), options);
@@ -701,6 +748,7 @@ export async function handleDm(message, options = {}) {
       [
         "Tell me something to remember, ask me why I said something (`why <turn id>` or paste a message link), or ask me anything about the record.",
         "`try <routine>` — rehearse a post here; `post it` — send it",
+        "`retract <turn id> — why` — delete everything a turn posted; the review learns from it",
         "`routines` — what runs and when; or just tell me what to change, add or remove",
         "`settings` — budgets, models, the review, timezone, admins, channels; tell me what to change",
         "`memory` — what I have been told and learned · `budget` — this month's spend",

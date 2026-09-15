@@ -311,6 +311,8 @@ export const config = {
   // nudge and the only symptom is silence.
   get monthlyBudgetUsd() { return money("MONTHLY_BUDGET_USD"); },
   get askMonthlyBudgetUsd() { return money("ASK_MONTHLY_BUDGET_USD"); },
+  // One member cannot spend the shared ask pot for everyone. 0 = no cap.
+  get askDailyTurnsPerMember() { return num("ASK_DAILY_TURNS_PER_MEMBER", "20"); },
   // What a single turn is assumed to cost before we have seen one. A lane
   // refuses to start a turn that could take it past its budget, and this is
   // the floor for that estimate; the real figure climbs to the largest turn

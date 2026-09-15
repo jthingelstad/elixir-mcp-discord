@@ -21,6 +21,7 @@ import { ask, spendBlock, cacheShare } from "./claude.js";
 import { laneFor } from "./budget.js";
 import { detectFriction, sweepFriction, looksUngrounded } from "./feedback.js";
 import { systemFor, nowLine } from "./prompt.js";
+import { config } from "./config.js";
 import { chunk } from "./post.js";
 import { renderTrace, errorFooter, UNGROUNDED_FOOTER } from "./trace.js";
 import { turnRecord } from "./run.js";
@@ -183,6 +184,75 @@ async function recentTurns(thread, upToId, turns) {
 }
 
 /**
+ * A MEMBER'S REQUEST REACHES THE OPERATOR. "Can you post the war reminder
+ * earlier?" is not a question about the record, and until now it died in a
+ * thread. The model may pass it on once per turn; the operator gets it as a
+ * DM with the member's words. Rate-limited per member per day so a
+ * chatty afternoon is not twenty DMs.
+ */
+const REQUESTS_PER_MEMBER_PER_DAY = 3;
+
+export function tellOperatorTool({ message, channelName }) {
+  return {
+    name: "tell_operator",
+    description: "Pass a member's request to whoever runs this bot — a change to what you post or when, a feature, a complaint about a routine. Their words, once per turn. Then tell the member it has been passed on.",
+    input_schema: { type: "object", properties: { request: { type: "string", description: "What they asked for, in their words, under 300 characters." } }, required: ["request"], additionalProperties: false },
+    async handler({ request }) {
+      const today = new Date().toISOString().slice(0, 10);
+      const all = state.get("operatorRequests") || {};
+      const mine = (all[message.author.id] || []).filter((d) => d.startsWith(today));
+      if (mine.length >= REQUESTS_PER_MEMBER_PER_DAY) return { ok: false, code: "rate_limited", error: "that member has already sent the operator three requests today; tell them it will keep for tomorrow" };
+      state.set({ operatorRequests: { ...all, [message.author.id]: [...mine, new Date().toISOString()] } });
+      const who = message.member?.displayName || message.author.username;
+      await notify("member request", `${who} (discord:${message.author.id}) in #${channelName ?? "?"}: "${String(request).slice(0, 300)}"`, { fingerprint: `request:${message.author.id}:${String(request).slice(0, 60)}`, every: 24 * 3600 * 1000 });
+      return { ok: true, body: { passed_on: true } };
+    },
+  };
+}
+
+/**
+ * A PER-MEMBER CAP. One member can drain the shared ask budget for
+ * everyone by chatting. ASK_DAILY_TURNS_PER_MEMBER (config.json, default
+ * 20) is the line, with a polite sentence when it is reached; admins are
+ * exempt because they are the ones paying.
+ */
+export function memberTurnsToday(userId, now = new Date()) {
+  const today = now.toISOString().slice(0, 10);
+  const counts = state.get("askCounts") || {};
+  return counts.date === today ? counts.byUser?.[userId] || 0 : 0;
+}
+
+export function countMemberTurn(userId, now = new Date()) {
+  const today = now.toISOString().slice(0, 10);
+  const counts = state.get("askCounts") || {};
+  const byUser = counts.date === today ? { ...(counts.byUser || {}) } : {};
+  byUser[userId] = (byUser[userId] || 0) + 1;
+  state.set({ askCounts: { date: today, byUser } });
+}
+
+/**
+ * A PICTURE IS THE MEMBER'S OWN UPLOAD. A deck, a battle result, a chest:
+ * members paste screenshots far more than links, and Claude can read them.
+ * An attachment on the member's own message is theirs, from Discord's CDN
+ * — the same class as a pasted text, not the web. At most two, images
+ * only, under the API's size limit. What is in the picture is what the
+ * member showed the bot, never a recorded fact; the prompt says so.
+ */
+const IMAGE_MAX = 2;
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+export function imageBlocks(message) {
+  const blocks = [];
+  for (const a of message.attachments?.values?.() ?? []) {
+    const type = String(a.contentType ?? "").toLowerCase().split(";")[0];
+    if (!/^image\/(png|jpeg|jpg|gif|webp)$/.test(type) || (a.size ?? 0) > IMAGE_MAX_BYTES) continue;
+    blocks.push({ type: "image", source: { type: "url", url: a.url } });
+    if (blocks.length === IMAGE_MAX) break;
+  }
+  return blocks;
+}
+
+/**
  * A HUMAN STEPPING IN. The sikander case of 2026-09-13: the bot followed its
  * rule and asked a member for a tag, a leader nudged it in the thread, and
  * only then did it look the name up. No error, no 👎, no friction — the
@@ -243,7 +313,7 @@ export async function handleAsk(message, routine, options = {}) {
 }
 
 async function handleAskNow(message, routine, { askFn = ask } = {}) {
-  const question = message.cleanContent.trim();
+  const question = message.cleanContent.trim() || (imageBlocks(message).length ? "(a picture, no words)" : "");
   if (!question) return;
 
   const lane = laneFor(routine);
@@ -266,6 +336,13 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
     return;
   }
 
+  const cap = config.askDailyTurnsPerMember;
+  if (cap && !config.adminUserIds.has(String(message.author.id)) && memberTurnsToday(message.author.id) >= cap) {
+    await message.reply(`That's ${cap} questions from you today, which is where I stop so the budget lasts for everyone. Tomorrow resets it.`).catch(() => {});
+    log.info("ask_member_capped", { user: message.author.id, cap });
+    return;
+  }
+
   try {
     const inThread = Boolean(message.channel?.isThread?.());
     const history = inThread
@@ -273,6 +350,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
       : [];
     if (inThread) recordIntervention(message, await threadContext(message.channel, message.id), question);
     const asker = message.member?.displayName || message.author.username;
+    const images = imageBlocks(message);
 
     // A new question opens a thread and is answered inside it; a follow-up is
     // already in one. If threads are not available, reply in place.
@@ -302,6 +380,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
             messageId: message.id,
             question,
             history,
+            images: images.length ? images.map((b) => b.source.url) : undefined,
           },
           output,
         }),
@@ -318,13 +397,14 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
           role: "user",
           // The id rides here rather than in the system block: the system
           // prompt is the cached prefix, and rewriting it per asker would
-          // discard that cache on every single turn.
-          content: `${asker} (discord:${message.author.id}): ${question}\n\n${nowLine()}`,
+          // discard that cache on every single turn. A picture the member
+          // attached comes first, then the words.
+          content: [...images, { type: "text", text: `${asker} (discord:${message.author.id}): ${question}\n\n${nowLine()}` }],
         },
       ],
-      // The one local tool a member's turn gets: reading a pasted deck link,
-      // which is text, not the web (src/deck-link.js).
-      localTools: [deckLinkTool()],
+      // The local tools a member's turn gets: reading a pasted deck link
+      // (text, not the web) and passing a request to the operator.
+      localTools: [deckLinkTool(), tellOperatorTool({ message, channelName: message.channel?.isThread?.() ? message.channel.parent?.name : message.channel?.name })],
       onEvent: (event) => {
         if (event.kind === "tool_start") toolsSoFar.push(event.name);
         else if (event.kind === "text") streamed += event.text;
@@ -381,6 +461,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
     const ungrounded = looksUngrounded({ text: answer, called: result.called });
     if (ungrounded) await footnote(UNGROUNDED_FOOTER, "ungrounded_footer");
 
+    countMemberTurn(message.author.id);
     state.rememberTurn(
       result.turnId,
       turnRecord({ routine, lane, question, text: answer, result, channelId: target?.id }),

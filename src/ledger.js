@@ -28,6 +28,8 @@
  *                 correcting or nudging, or the asker saying it was wrong.
  *                 The strongest signal that a rule was followed and the
  *                 outcome was still bad.
+ *   retraction    the operator deleted what the turn posted ("retract" in
+ *                 the DM). The strongest signal of all.
  *
  * Keyed by reviewId (src/review.js):
  *
@@ -208,6 +210,10 @@ export function interventionEntry({ turnId, by, userId, text }) {
   return { kind: "intervention", v: RECORD_VERSION, turnId, at: new Date().toISOString(), instance: instanceName(), by, userId, text: String(text ?? "").slice(0, 500) };
 }
 
+export function retractionEntry({ turnId, by, deleted, reason = null }) {
+  return { kind: "retraction", v: RECORD_VERSION, turnId, at: new Date().toISOString(), instance: instanceName(), by, deleted, reason };
+}
+
 export function reviewEntry({ reviewId, trigger, window, turnsRead, proposals, report, usd, model }) {
   return { kind: "review", v: RECORD_VERSION, reviewId, at: new Date().toISOString(), instance: instanceName(), trigger, window, turnsRead, proposals, report: String(report ?? "").slice(0, 8000), usd, model };
 }
@@ -266,7 +272,7 @@ export function readRecords({ dir = LEDGER_DIR, since = null, until = null } = {
 export function readTurns(options = {}) {
   const records = readRecords(options);
   const turns = new Map();
-  for (const r of records) if (r.kind === "turn" && r.turnId) turns.set(r.turnId, { ...r, reactions: [], filed: [], findings: [], interventions: [] });
+  for (const r of records) if (r.kind === "turn" && r.turnId) turns.set(r.turnId, { ...r, reactions: [], filed: [], findings: [], interventions: [], retractions: [] });
   for (const r of records) {
     const turn = turns.get(r.turnId);
     if (!turn) continue;
@@ -274,6 +280,7 @@ export function readTurns(options = {}) {
     else if (r.kind === "filed") turn.filed.push(r);
     else if (r.kind === "finding") turn.findings.push(r);
     else if (r.kind === "intervention") turn.interventions.push(r);
+    else if (r.kind === "retraction") turn.retractions.push(r);
   }
   return [...turns.values()];
 }
@@ -302,7 +309,7 @@ export function searchTurns({ query = "", since = null, until = null, lane = nul
       asked: (t.input?.question ?? t.input?.brief ?? "").slice(0, 160),
       answered: (t.output?.text ?? "").slice(0, 200),
       tools: (t.trace || []).filter((s) => s.kind === "tool").map((s) => s.name),
-      flags: [t.output?.ungrounded ? "ungrounded" : null, t.output?.error ? "failed" : null, t.reactions?.length ? "reacted" : null, t.interventions?.length ? "intervention" : null, t.findings?.length ? "finding" : null].filter(Boolean),
+      flags: [t.output?.ungrounded ? "ungrounded" : null, t.output?.error ? "failed" : null, t.reactions?.length ? "reacted" : null, t.interventions?.length ? "intervention" : null, t.findings?.length ? "finding" : null, t.retractions?.length ? "RETRACTED" : null].filter(Boolean),
       usd: t.usd,
     }));
 }

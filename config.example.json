@@ -10,6 +10,7 @@
   "_budgets": "Strict, UTC calendar months, per lane, nothing rolls over. A lane refuses to START a turn that could take it past the line, using the largest turn it has ever produced as the estimate. Unset means unlimited, which the boot log warns about.",
   "MONTHLY_BUDGET_USD": "20.00",
   "ASK_MONTHLY_BUDGET_USD": "10.00",
+  "_ASK_DAILY_TURNS_PER_MEMBER": "Questions one member may ask per day, so nobody drains the shared pot; 0 = no cap; admins exempt. Default 20.",
   "_TURN_RESERVE_USD": "What one turn is assumed to cost before this install has seen one. Default 0.30.",
   "_DAILY_USD_CAP": "An extra ceiling on top of the monthly budgets. Unset means none.",
 

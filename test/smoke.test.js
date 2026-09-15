@@ -315,7 +315,8 @@ test("a follow-up in the thread sees the starter and the thread only", async () 
   const { message } = threadedMessage("and last month?", { inThread: true, starter, threadMessages: earlier });
   let seen = null;
   await handleAsk(message, ROUTINE, { askFn: async (args) => ((seen = args), RESULT) });
-  const contents = seen.messages.map((m) => m.content);
+  // The current turn is content blocks (a picture may come first); history is text.
+  const contents = seen.messages.map((m) => (Array.isArray(m.content) ? m.content.filter((b) => b.type === "text").map((b) => b.text).join("") : m.content));
   assert.match(contents[0], /how am I playing\?/, "the starter opens the history");
   assert.equal(contents[1], "55-38 this month.");
   assert.match(contents[2], /and last month\?/);
@@ -338,4 +339,54 @@ test("every message a turn produced points back at the turn", async () => {
     assert.equal(state.turnForMessage(p.id)?.turnId, RESULT.turnId, `${p.id} (${p.text.slice(0, 20)})`);
   }
   assert.equal(state.turnForMessage(posted[0].id).question, "who plays Mortar best?");
+});
+
+test("a member's screenshot rides the turn as an image block, before the words, and is noted in the ledger", async () => {
+  const { message } = fakeMessage("is this deck any good?");
+  message.attachments = new Map([
+    ["a", { name: "deck.png", contentType: "image/png", size: 200_000, url: "https://cdn.discordapp.com/attachments/1/2/deck.png" }],
+    ["b", { name: "notes.txt", contentType: "text/plain", size: 100, url: "https://cdn.discordapp.com/attachments/1/2/notes.txt" }],
+    ["c", { name: "huge.png", contentType: "image/png", size: 50_000_000, url: "https://cdn.discordapp.com/attachments/1/2/huge.png" }],
+  ]);
+  let seen;
+  await handleAsk(message, ROUTINE, { askFn: async (args) => ((seen = args), RESULT) });
+  const content = seen.messages.at(-1).content;
+  assert.equal(content[0].type, "image");
+  assert.equal(content[0].source.url, "https://cdn.discordapp.com/attachments/1/2/deck.png");
+  assert.equal(content.length, 2, "one image (the text file and the oversized one are not images), then the words");
+  assert.match(content[1].text, /is this deck any good\?/);
+});
+
+test("a member's request reaches the operator once, three a day, and the cap stops the twenty-first question", async () => {
+  const state = await import("../src/state.js");
+  const notify = await import("../src/notify.js");
+  const { config } = await import("../src/config.js");
+  const sent = [];
+  notify.configure({ client: { users: { fetch: async () => ({ send: async (m) => sent.push(m.content) }) } } });
+  config.adminUserIds = new Set(["9"]);
+  state.set({ operatorRequests: {}, notices: {}, askCounts: null });
+
+  const { message } = fakeMessage("can you post the war reminder earlier?");
+  let tool;
+  await handleAsk(message, ROUTINE, {
+    askFn: async ({ localTools }) => {
+      tool = localTools.find((t) => t.name === "tell_operator");
+      assert.ok(tool, "the ask lane offers tell_operator");
+      return RESULT;
+    },
+  });
+  for (let i = 0; i < 4; i += 1) await tool.handler({ request: `request ${i}` });
+  assert.equal(sent.length, 3, "three per member per day reach the operator");
+  assert.match(sent[0], /member request/);
+  assert.match(sent[0], /request 0/);
+
+  config.askDailyTurnsPerMember = 2;
+  const { message: second, posted } = fakeMessage("and again?");
+  await handleAsk(second, ROUTINE, { askFn: async () => RESULT });
+  const { message: third, posted: blocked } = fakeMessage("one more");
+  await handleAsk(third, ROUTINE, { askFn: async () => assert.fail("capped: no model call") });
+  assert.match(blocked[0].text, /questions from you today/);
+  assert.ok(posted.length > 0);
+  config.askDailyTurnsPerMember = 20;
+  notify.configure({ client: null });
 });

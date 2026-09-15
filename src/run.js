@@ -83,6 +83,56 @@ function postTool({ routine, entries, dryRun, posts, resolve = resolveById }) {
   };
 }
 
+/**
+ * READ THE ROOM. A scheduled post knew the bot's own last posts (recall)
+ * and nothing about what the humans said in the channel in the last hour,
+ * so the movers post could repeat what a member had just celebrated and
+ * the war-deck nudge could land under "everyone's done". The last few
+ * messages in a directory channel, on request, before posting there. The
+ * words enter this turn only (and its ledger record, as every tool result
+ * does); nothing is kept.
+ */
+export const ROOM_TOOL = {
+  name: "recent_channel_messages",
+  description:
+    "What people said in one of the channels you may post in, recently — newest last, humans and bots, the last two hours. Read the room before posting there: do not repeat what it already knows, add what the record adds, or post nothing.",
+  input_schema: {
+    type: "object",
+    properties: {
+      channel_id: { type: "string", description: "A channel_id from the directory." },
+      limit: { type: "integer", minimum: 1, maximum: 30, description: "How many messages, default 15." },
+    },
+    required: ["channel_id"],
+    additionalProperties: false,
+  },
+};
+
+const ROOM_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+export function roomTool({ entries, resolve = resolveById, now = () => Date.now() }) {
+  return {
+    ...ROOM_TOOL,
+    async handler({ channel_id, limit }) {
+      const entry = entries.find((e) => e.id === String(channel_id));
+      if (!entry) return { ok: false, code: "unknown_channel", error: `channel_id ${channel_id} is not in the directory` };
+      const channel = await resolve(entry.id);
+      if (!channel?.messages?.fetch) return { ok: false, code: "unresolvable", error: `#${entry.name} could not be read` };
+      let fetched;
+      try {
+        fetched = await channel.messages.fetch({ limit: Math.min(30, limit || 15) });
+      } catch (error) {
+        return { ok: false, code: "unreadable", error: error.message };
+      }
+      const since = now() - ROOM_WINDOW_MS;
+      const messages = [...fetched.values()]
+        .filter((m) => (m.createdTimestamp ?? 0) >= since && (m.cleanContent || "").trim())
+        .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+        .map((m) => ({ at: new Date(m.createdTimestamp).toISOString(), who: m.author?.bot ? `${m.author.username} (bot)` : m.member?.displayName || m.author?.username || "someone", text: String(m.cleanContent).slice(0, 300) }));
+      return { ok: true, body: { channel: `#${entry.name}`, messages, note: messages.length ? "What the room already knows. Add to it or stay quiet; do not restate it." : "Quiet for two hours." } };
+    },
+  };
+}
+
 /** Reply under the last message of a post without pinging anyone; a failure
  *  to attach a footer must never undo the post. */
 async function footnote(last, content, what) {
@@ -191,7 +241,7 @@ async function runRoutineNow(
     effort: routine.effort,
     routineKey: routine.key,
     lane,
-    localTools: withTool ? [postTool({ routine, entries: directoryEntries, dryRun: dryRun || false, posts, resolve })] : [],
+    localTools: withTool ? [postTool({ routine, entries: directoryEntries, dryRun: dryRun || false, posts, resolve }), roomTool({ entries: directoryEntries, resolve })] : [],
   });
 
   if (!result.ok) {

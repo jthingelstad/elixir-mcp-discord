@@ -409,3 +409,19 @@ test("the ask lane never sees the directory or the post tool", async () => {
   assert.match(scheduled, /YOU POST BY CALLING post_message/);
   assert.doesNotMatch(scheduled, /YOUR WHOLE REPLY IS THE POST/);
 });
+
+test("a routine turn can read the room: the last two hours in a directory channel, newest last", async () => {
+  const { roomTool } = await import("../src/run.js");
+  const now = Date.parse("2026-09-15T20:00:00Z");
+  const messages = new Map([
+    ["1", { createdTimestamp: now - 10 * 60000, cleanContent: "GG everyone, decks done", author: { username: "levy", bot: false }, member: { displayName: "King Levy" } }],
+    ["2", { createdTimestamp: now - 3 * 3600 * 1000, cleanContent: "old news", author: { username: "x", bot: false } }],
+    ["3", { createdTimestamp: now - 5 * 60000, cleanContent: "-# 👋 Online", author: { username: "Elixir MCP", bot: true } }],
+  ]);
+  const tool = roomTool({ entries: [{ id: "77", name: "news" }], resolve: async () => ({ messages: { fetch: async () => messages } }), now: () => now });
+  const out = await tool.handler({ channel_id: "77" });
+  assert.equal(out.ok, true);
+  assert.deepEqual(out.body.messages.map((m) => m.who), ["King Levy", "Elixir MCP (bot)"], "two hours, oldest first, humans and bots");
+  assert.match(out.body.messages[0].text, /decks done/);
+  assert.equal((await tool.handler({ channel_id: "99" })).ok, false, "only directory channels");
+});

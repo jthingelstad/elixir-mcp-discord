@@ -189,6 +189,15 @@ No member-facing turn reads this back — it is a record for judging answers,
 not memory — and it holds members' names and questions, so it stays under
 `state/`, which is gitignored.
 
+Members can paste a **screenshot** — a deck, a battle result — and the
+bot reads it, answering from the record; and a **deck link**, which it
+reads off the URL. When a member asks for something that is not a
+question ("can the war reminder come earlier?") the bot passes it to you
+by DM. Each member gets `ASK_DAILY_TURNS_PER_MEMBER` questions a day
+(default 20), so nobody drains the pot for everyone. Before a scheduled
+post, the bot can read the last two hours in the channel so it does not
+restate what the room already said.
+
 ## Letting it review itself
 
 Set `REVIEW=on` (and `ADMIN_USER_IDS`) and once a week the bot reads its
@@ -225,6 +234,9 @@ nobody else sees it, and anyone else who DMs it gets one polite line:
   long paste into `message.txt`, and the bot reads that too. It proposes
   the parts worth remembering, three at a time. It has no web access;
   pasting is you saying it.
+- **Take a post back.** `retract <turn id> — why`: every message that
+  turn posted is deleted, and the review treats it as the strongest signal
+  it has.
 - **Ask why.** `why d98fe553`, or paste a link to one of its messages: the
   transcript — what it was asked, what it thought, what every tool
   returned. Tell it what it should have done and it proposes the change.

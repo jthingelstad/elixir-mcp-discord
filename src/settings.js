@@ -65,6 +65,7 @@ export const SETTINGS = {
   MONTHLY_BUDGET_USD: { about: "monthly budget for scheduled and event posts, USD; empty = unlimited", check: money("MONTHLY_BUDGET_USD") },
   ASK_MONTHLY_BUDGET_USD: { about: "monthly budget for members' questions, USD; empty = unlimited", check: money("ASK_MONTHLY_BUDGET_USD") },
   REVIEW_MONTHLY_BUDGET_USD: { about: "monthly budget for the review lane and DM turns, USD", check: money("REVIEW_MONTHLY_BUDGET_USD") },
+  ASK_DAILY_TURNS_PER_MEMBER: { about: "questions one member may ask per day; 0 = no cap; admins exempt", check: intAtLeast(0, "ASK_DAILY_TURNS_PER_MEMBER") },
   DAILY_USD_CAP: { about: "a daily ceiling on top of the monthly budgets; empty = none", check: money("DAILY_USD_CAP") },
   TURN_RESERVE_USD: { about: "what one turn is assumed to cost before any has run", check: money("TURN_RESERVE_USD") },
   CLAUDE_MODEL: { about: "default model for routines that name none", check: pricedModel },

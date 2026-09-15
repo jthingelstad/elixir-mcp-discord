@@ -262,7 +262,8 @@ export function windowFor(now = new Date()) {
 
 export const isFlagged = (t) =>
   Boolean(
-    t.reactions?.length ||
+    t.retractions?.length ||
+      t.reactions?.length ||
       t.interventions?.length ||
       t.findings?.length ||
       t.output?.ungrounded ||
@@ -274,6 +275,7 @@ export const isFlagged = (t) =>
 
 function afterwards(t) {
   const lines = [];
+  for (const r of t.retractions || []) lines.push(`THE OPERATOR RETRACTED THIS POST (deleted ${r.deleted} message(s))${r.reason ? `: "${r.reason}"` : ""} — the strongest signal there is; find the rule that let it happen`);
   for (const r of t.reactions || []) lines.push(`${r.reaction === "up" ? "👍" : "👎"}${r.note ? ` — "${r.note}"` : ""}`);
   for (const i of t.interventions || []) lines.push(`${i.by === "other_member" ? "ANOTHER MEMBER stepped in" : "THE ASKER pushed back"}: "${i.text}"`);
   for (const f of t.findings || []) lines.push(`sweep verdict (${f.class}): ${f.note}`);
