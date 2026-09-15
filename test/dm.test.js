@@ -67,8 +67,9 @@ test("a stranger gets one polite line a day and nothing runs", async () => {
 test("the operator's fact becomes a memory proposal with a diff and an Apply button, and nothing is written", async () => {
   fresh();
   const { sent, message } = dm("we call war days boat days");
-  const askFn = async ({ localTools, system, messages }) => {
+  const askFn = async ({ localTools, system, messages, serverTools }) => {
     assert.match(system, /talking to the person who runs you/);
+    assert.equal(serverTools?.[0]?.name, "web_fetch", "the operator's links are readable in this lane only");
     assert.match(messages.at(-1).content, /jamie \(discord:9\): we call war days boat days/);
     const propose = localTools.find((t) => t.name === "propose_change");
     const bad = await propose.handler({ file: "memory.md", summary: "x", edit: { op: "append", text: "- 2026-09-14 (turns abc): no" } });

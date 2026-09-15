@@ -204,6 +204,9 @@ nobody else sees it, and anyone else who DMs it gets one polite line:
   `agent/memory.md` and an Apply button; on tap it is live. Context that
   is only true for a while carries an `until` date and drops out on its
   own. Ask it to forget and it proposes the removal.
+- **Give it a link.** Paste your clan's FAQ or rules page and it reads it
+  and proposes the parts worth remembering, three at a time. Only in the
+  DM: nothing a member writes can make it fetch a page.
 - **Ask why.** `why d98fe553`, or paste a link to one of its messages: the
   transcript — what it was asked, what it thought, what every tool
   returned. Tell it what it should have done and it proposes the change.
