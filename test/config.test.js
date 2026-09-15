@@ -42,3 +42,21 @@ test("a pre-config.json instance is migrated once: settings to config.json, .env
   assert.ok(fs.existsSync(path.join(dir, ".history")), "the config.json before is kept");
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test("settings are live: a change to config.json is seen on the next read, no restart", async () => {
+  const { config, _setSettings } = await import("../src/config.js");
+  _setSettings({ ASK_MONTHLY_BUDGET_USD: "15", TIMEZONE: "America/Chicago", ADMIN_USER_IDS: "111111111111111111", CHANNEL_ASK: "2", REVIEW: "on", REVIEW_AT: "sat 09:00" });
+  assert.equal(config.askMonthlyBudgetUsd, 15);
+  assert.equal(config.timezone, "America/Chicago");
+  assert.deepEqual([...config.adminUserIds], ["111111111111111111"]);
+  assert.equal(config.review.enabled, true);
+  assert.deepEqual(config.review.at, { days: [6], hour: 9, minute: 0 });
+  _setSettings({ ASK_MONTHLY_BUDGET_USD: "40", TIMEZONE: "not/a/zone", CHANNEL_ASK: "2" });
+  assert.equal(config.askMonthlyBudgetUsd, 40, "the new value on the next read");
+  assert.equal(config.timezone, "America/Chicago", "an invalid zone written later keeps the last good one");
+  _setSettings(null);
+  const { needsRestart } = await import("../src/settings.js");
+  assert.equal(needsRestart(["ASK_MONTHLY_BUDGET_USD", "REVIEW_AT"]), false);
+  assert.equal(needsRestart(["COMMAND_PREFIX"]), true);
+  assert.equal(needsRestart(["EVENT_POLL_SECONDS"]), true);
+});

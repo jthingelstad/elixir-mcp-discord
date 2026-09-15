@@ -121,7 +121,37 @@ export function migrateEnvToConfig({ parsed = loaded.parsed, env = envFile, cfg 
 }
 
 export const migrated = migrateEnvToConfig();
-const settings = readConfigFile() || {};
+
+/**
+ * THE SETTINGS ARE LIVE. config.json is re-read when its mtime moves, so a
+ * change from the DM (src/settings.js) or by hand takes effect on the next
+ * use with no restart — a budget, the review's clock, the timezone, who is
+ * an admin, the ask channel. The exceptions are the values something is
+ * BUILT from at boot: the slash-command prefix (registered once), the feed
+ * poll interval (a timer), and whether the review's slash command exists.
+ * Those say "restart" in the DM; everything else says "live now".
+ */
+let settingsCache = { mtimeMs: -1, values: {} };
+let settingsOverride = null;
+
+function liveSettings() {
+  if (settingsOverride) return settingsOverride;
+  let mtimeMs = 0;
+  try {
+    mtimeMs = fs.statSync(configFile).mtimeMs;
+  } catch {
+    mtimeMs = 0;
+  }
+  if (mtimeMs !== settingsCache.mtimeMs) settingsCache = { mtimeMs, values: readConfigFile() || {} };
+  return settingsCache.values;
+}
+
+/** Tests: pin the settings to an object (null to go back to the file). */
+export function _setSettings(values) {
+  settingsOverride = values;
+}
+
+const settings = new Proxy({}, { get: (_, key) => liveSettings()[key], has: (_, key) => Object.hasOwn(liveSettings(), key), ownKeys: () => Reflect.ownKeys(liveSettings()), getOwnPropertyDescriptor: (_, key) => (Object.hasOwn(liveSettings(), key) ? { value: liveSettings()[key], enumerable: true, configurable: true } : undefined) });
 
 /**
  * Where a value comes from. Secrets and paths: the environment (the shell,
@@ -132,7 +162,8 @@ const settings = readConfigFile() || {};
  */
 export function lookup(name) {
   if (isEnvFile(name) || isEnvOnly(name)) return (process.env[name] || "").trim();
-  if (Object.hasOwn(settings, name)) return settings[name].trim();
+  const live = liveSettings();
+  if (Object.hasOwn(live, name)) return String(live[name]).trim();
   return (process.env[name] || "").trim();
 }
 
@@ -149,7 +180,8 @@ export function lookup(name) {
 export const provenance = [];
 
 function tracked(name, fallback) {
-  const fromConfig = Object.hasOwn(settings, name) ? settings[name].trim() : "";
+  const live = liveSettings();
+  const fromConfig = Object.hasOwn(live, name) ? String(live[name]).trim() : "";
   const fromEnv = (process.env[name] || "").trim();
   const fromFile = (loaded.parsed?.[name] || "").trim();
   let source = "default";
@@ -211,7 +243,7 @@ export function channelEnvName(name) {
   return `CHANNEL_${name.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
 }
 
-export function readChannels(env = { ...process.env, ...settings }) {
+export function readChannels(env = { ...process.env, ...liveSettings() }) {
   const channels = new Map();
   for (const [key, value] of Object.entries(env)) {
     const match = /^CHANNEL_([A-Z0-9_]+)$/.exec(key);
@@ -233,34 +265,40 @@ function validTimezone(tz) {
   }
 }
 
+const num = (name, fallback) => Number(optional(name, fallback));
+const money = (name) => (lookup(name) ? Number(lookup(name)) : null);
+let lastGoodTimezone = null;
+
 export const config = {
   // THE MODEL IS THE OPERATOR'S CHOICE. This is the default for every routine
   // that does not name its own; prices live in agent/models.json, and a model
-  // with no price is refused rather than billed at zero.
+  // with no price is refused rather than billed at zero. Live: a routine
+  // re-reads it every run.
   claude: {
-    model: tracked("CLAUDE_MODEL", "claude-sonnet-5"),
-    effort: tracked("CLAUDE_EFFORT", "medium"),
-    maxTokens: Number(optional("CLAUDE_MAX_TOKENS", "8000")),
+    get model() { return optional("CLAUDE_MODEL", "claude-sonnet-5"); },
+    get effort() { return optional("CLAUDE_EFFORT", "medium"); },
+    get maxTokens() { return num("CLAUDE_MAX_TOKENS", "8000"); },
   },
   // Schedules are written in whatever timezone the clan lives in. UTC is the
   // default because it is the only one that is never surprising, but an
-  // operator writing "22:00" means their own evening, not Greenwich's.
-  timezone: (() => {
-    const tz = tracked("TIMEZONE", "UTC");
-    if (!validTimezone(tz)) {
-      throw new Error(
-        `TIMEZONE "${tz}" is not a recognised IANA zone (e.g. America/Chicago).`,
-      );
+  // operator writing "22:00" means their own evening, not Greenwich's. An
+  // invalid zone is fatal at boot and ignored (last good one kept) later.
+  get timezone() {
+    const tz = optional("TIMEZONE", "UTC");
+    if (validTimezone(tz)) {
+      lastGoodTimezone = tz;
+      return tz;
     }
-    return tz;
-  })(),
+    if (lastGoodTimezone) return lastGoodTimezone;
+    throw new Error(`TIMEZONE "${tz}" is not a recognised IANA zone (e.g. America/Chicago).`);
+  },
   // How often the feed is read. Thirty minutes, not five: every poll is a
   // metered call against the OWNER's budget, the feed is empty most of the
   // time, and the hub's own agents page says hourly is plenty. Five minutes
   // is 288 calls a day for the feed alone — more than half a member's whole
   // daily allowance — which is fine for an unlimited agent and a bad default
-  // for an example project.
-  eventPollSeconds: Number(optional("EVENT_POLL_SECONDS", "1800")),
+  // for an example project. Read once: it is a timer.
+  eventPollSeconds: num("EVENT_POLL_SECONDS", "1800"),
 
   // MONTHLY BUDGETS, per lane, in dollars. Unset means unlimited — which is a
   // choice, not a default anybody should arrive at by accident, so the boot
@@ -271,66 +309,117 @@ export const config = {
   // routines you wrote), and ASK_MONTHLY_BUDGET_USD is what clan members ask
   // for. One pot means a chatty afternoon quietly cancels tomorrow's war-deck
   // nudge and the only symptom is silence.
-  monthlyBudgetUsd: lookup("MONTHLY_BUDGET_USD") ? Number(lookup("MONTHLY_BUDGET_USD")) : null,
-  askMonthlyBudgetUsd: lookup("ASK_MONTHLY_BUDGET_USD") ? Number(lookup("ASK_MONTHLY_BUDGET_USD")) : null,
+  get monthlyBudgetUsd() { return money("MONTHLY_BUDGET_USD"); },
+  get askMonthlyBudgetUsd() { return money("ASK_MONTHLY_BUDGET_USD"); },
   // What a single turn is assumed to cost before we have seen one. A lane
   // refuses to start a turn that could take it past its budget, and this is
   // the floor for that estimate; the real figure climbs to the largest turn
   // the lane has actually produced.
-  turnReserveUsd: Number(optional("TURN_RESERVE_USD", "0.30")),
+  get turnReserveUsd() { return num("TURN_RESERVE_USD", "0.30"); },
 
   // Soft guard on top of the monthly budgets: the process stops answering once
   // the day's measured spend crosses this. Unset means no daily cap.
-  dailyUsdCap: lookup("DAILY_USD_CAP") ? Number(lookup("DAILY_USD_CAP")) : null,
+  get dailyUsdCap() { return money("DAILY_USD_CAP"); },
   // Where the prompts live: `agent/` in the instance directory. Relative paths
   // resolve against the cwd, not the checkout — see instanceDir above.
   agentDir: path.resolve(instanceDir, optional("AGENT_DIR", "agent")),
   // Optional prefix for the slash commands. Three bots in one server each
   // register their own `/run`, and Discord tells them apart only by the
   // bot's avatar in the picker; `COMMAND_PREFIX=pk` makes this one's
-  // `/pk-run` and leaves nothing to squint at.
+  // `/pk-run` and leaves nothing to squint at. Read once: registered at boot.
   commandPrefix: optional("COMMAND_PREFIX", "")
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, ""),
   // SCHEDULE_DISABLED is the pre-refactor name and still works; routines are
   // no longer only schedules, hence the better one.
-  disabled: new Set([
-    ...list("ROUTINES_DISABLED"),
-    ...list("SCHEDULE_DISABLED"),
-  ]),
-  // Discord ids allowed to use the admin slash commands (/run, /routines, /budget).
-  adminUserIds: list("ADMIN_USER_IDS"),
+  get disabled() {
+    return new Set([...list("ROUTINES_DISABLED"), ...list("SCHEDULE_DISABLED")]);
+  },
+  // Discord ids allowed to use the admin slash commands and to DM the bot.
+  get adminUserIds() { return list("ADMIN_USER_IDS"); },
   // Logical channel name for maintainer replies to filed feedback. Unset falls
   // back to the first event routine's channel.
-  feedbackChannel: optional("FEEDBACK_CHANNEL", "") || null,
+  get feedbackChannel() { return optional("FEEDBACK_CHANNEL", "") || null; },
   // How many post_message calls one turn may make. One event can fairly be
   // two posts (a welcome for members, a note for leaders); it is never five.
-  maxPostsPerTurn: Number(optional("MAX_POSTS_PER_TURN", "3")),
+  get maxPostsPerTurn() { return num("MAX_POSTS_PER_TURN", "3"); },
   // The boot hello: one line in the first channel of the directory saying
   // the bot is up and what build it is. STARTUP_MESSAGE=off to silence it.
-  startupMessage: optional("STARTUP_MESSAGE", "on").toLowerCase() !== "off",
+  get startupMessage() { return optional("STARTUP_MESSAGE", "on").toLowerCase() !== "off"; },
 
   // THE REVIEW LANE (src/review.js): the bot reading its own turn ledger and
   // proposing edits to agent/ — evaluation as a feature, off by default. Its
   // own model, because judging answers is a different job from giving them;
   // its own budget, because a week's reading is one big turn and must never
   // cost the ask lane a question; its own clock, in the operator's timezone.
+  // All live except the slash command's existence (registered at boot).
   review: {
-    enabled: optional("REVIEW", "off").toLowerCase() === "on",
-    model: tracked("REVIEW_MODEL", "claude-opus-5"),
-    effort: tracked("REVIEW_EFFORT", "high"),
-    monthlyBudgetUsd: lookup("REVIEW_MONTHLY_BUDGET_USD") ? Number(lookup("REVIEW_MONTHLY_BUDGET_USD")) : null,
+    get enabled() { return optional("REVIEW", "off").toLowerCase() === "on"; },
+    get model() { return optional("REVIEW_MODEL", "claude-opus-5"); },
+    get effort() { return optional("REVIEW_EFFORT", "high"); },
+    get monthlyBudgetUsd() { return money("REVIEW_MONTHLY_BUDGET_USD"); },
     // "sun 20:00" — weekday (or "daily") and wall time. Weekly is the shape
     // this was designed for: enough turns to see a pattern, few enough
     // proposals to read.
-    at: parseReviewAt(optional("REVIEW_AT", "sun 20:00")),
+    get at() { return parseReviewAt(optional("REVIEW_AT", "sun 20:00")); },
     // Let the review write agent/memory.md without a click. Never
     // identity.md, never a routine — those are policy and stay gated.
-    autoMemory: optional("REVIEW_AUTO_MEMORY", "false").toLowerCase() === "true",
+    get autoMemory() { return optional("REVIEW_AUTO_MEMORY", "false").toLowerCase() === "true"; },
     // Proposals per review. Three is a decision; ten is a backlog.
-    maxProposals: Number(optional("REVIEW_MAX_PROPOSALS", "3")),
+    get maxProposals() { return num("REVIEW_MAX_PROPOSALS", "3"); },
   },
 };
+
+/**
+ * Every live getter above accepts assignment: a set value overrides the
+ * file for this process. That is for tests (config.monthlyBudgetUsd = 10)
+ * and for nothing else; the DM writes config.json.
+ */
+function overridable(target) {
+  const overrides = new Map();
+  for (const key of Object.keys(target)) {
+    const descriptor = Object.getOwnPropertyDescriptor(target, key);
+    if (!descriptor?.get) {
+      if (descriptor && typeof descriptor.value === "object" && descriptor.value && !Array.isArray(descriptor.value) && !(descriptor.value instanceof Set)) overridable(descriptor.value);
+      continue;
+    }
+    Object.defineProperty(target, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (overrides.has(key) ? overrides.get(key) : descriptor.get.call(target)),
+      set: (value) => {
+        overrides.set(key, value);
+      },
+    });
+  }
+  return target;
+}
+overridable(config);
+
+// Boot-time provenance for the log, and a fail-fast on a bad zone.
+tracked("CLAUDE_MODEL", "claude-sonnet-5");
+tracked("CLAUDE_EFFORT", "medium");
+tracked("TIMEZONE", "UTC");
+tracked("REVIEW_MODEL", "claude-opus-5");
+tracked("REVIEW_EFFORT", "high");
+void config.timezone;
+
+lazy(config, "mcp", () => ({
+  // No default. The old one pointed at the personal /mcp door, which is not
+  // where an agent lives, and a default that authenticates as the wrong kind
+  // of principal is worse than an error message.
+  url: required("ELIXIR_MCP_URL"),
+  token: required("ELIXIR_MCP_TOKEN"),
+  // The name the Claude API uses to reference this server in an mcp_toolset.
+  serverName: "elixir-mcp",
+}));
+
+lazy(config, "discord", () => ({
+  token: required("DISCORD_BOT_TOKEN"),
+  guildId: required("DISCORD_GUILD_ID"),
+}));
+
+Object.defineProperty(config, "channels", { enumerable: true, get: () => readChannels() });
 
 /** "sun 20:00" | "daily 07:30" | "mon,thu 21:00" -> { days: [0] | null, hour, minute }. */
 export function parseReviewAt(raw) {
@@ -349,20 +438,3 @@ export function parseReviewAt(raw) {
   if (days.some((d) => d < 0)) throw new Error(`REVIEW_AT "${raw}": unknown weekday`);
   return { days, hour, minute };
 }
-
-lazy(config, "mcp", () => ({
-  // No default. The old one pointed at the personal /mcp door, which is not
-  // where an agent lives, and a default that authenticates as the wrong kind
-  // of principal is worse than an error message.
-  url: required("ELIXIR_MCP_URL"),
-  token: required("ELIXIR_MCP_TOKEN"),
-  // The name the Claude API uses to reference this server in an mcp_toolset.
-  serverName: "elixir-mcp",
-}));
-
-lazy(config, "discord", () => ({
-  token: required("DISCORD_BOT_TOKEN"),
-  guildId: required("DISCORD_GUILD_ID"),
-}));
-
-lazy(config, "channels", () => readChannels());

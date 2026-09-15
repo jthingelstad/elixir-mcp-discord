@@ -20,7 +20,7 @@
 import { ask, spendBlock, cacheShare } from "./claude.js";
 import { laneFor } from "./budget.js";
 import { detectFriction, sweepFriction, looksUngrounded } from "./feedback.js";
-import { systemFor } from "./prompt.js";
+import { systemFor, nowLine } from "./prompt.js";
 import { chunk } from "./post.js";
 import { renderTrace, errorFooter, UNGROUNDED_FOOTER } from "./trace.js";
 import { turnRecord } from "./run.js";
@@ -318,7 +318,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
           // The id rides here rather than in the system block: the system
           // prompt is the cached prefix, and rewriting it per asker would
           // discard that cache on every single turn.
-          content: `${asker} (discord:${message.author.id}): ${question}`,
+          content: `${asker} (discord:${message.author.id}): ${question}\n\n${nowLine()}`,
         },
       ],
       onEvent: (event) => {

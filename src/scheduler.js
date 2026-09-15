@@ -7,13 +7,33 @@
  * and a restart between attempts is how a person stops iterating.
  */
 
+import fs from "node:fs";
+import path from "node:path";
 import { config } from "./config.js";
 import { dueRoutines, currentPeriods } from "./schedule.js";
 import { runRoutine } from "./run.js";
 import { spendBlock } from "./claude.js";
+import { withFields } from "./routines.js";
 import { log } from "./log.js";
 import { notify } from "./notify.js";
 import * as state from "./state.js";
+
+/** A one-shot has fired: write it back disabled, keeping the file. */
+export function retireOnce(routine, { agentDir = config.agentDir } = {}) {
+  const file = path.join(agentDir, "routines", `${routine.key}.md`);
+  try {
+    const text = fs.readFileSync(file, "utf8");
+    const history = path.join(agentDir, ".history");
+    fs.mkdirSync(history, { recursive: true });
+    fs.copyFileSync(file, path.join(history, `routines__${routine.key}.md.${new Date().toISOString().replace(/[:.]/g, "-")}`));
+    fs.writeFileSync(file, withFields(text, { enabled: "false" }));
+    log.info("routine_once_done", { routine: routine.key });
+    return true;
+  } catch (error) {
+    log.warn("routine_once_retire_failed", { routine: routine.key, error: error.message });
+    return false;
+  }
+}
 
 export async function tick(routines, resolveChannel, now = new Date()) {
   const due = dueRoutines(routines, { now, ledger: state.get("runs") || {} });
@@ -45,12 +65,17 @@ export async function tick(routines, resolveChannel, now = new Date()) {
       });
       continue;
     }
-    await runRoutine(routine, { channel }).catch((error) =>
+    const run = await runRoutine(routine, { channel }).catch((error) => {
       log.error("scheduled_crashed", {
         routine: routine.key,
         error: error.message,
-      }),
-    );
+      });
+      return null;
+    });
+    if (routine.once && run) {
+      retireOnce(routine);
+      await notify("one-shot done", `${routine.key} ran${run.ok ? (run.skipped ? " (and chose to post nothing)" : "") : ` and failed: ${run.error}`}; it is now disabled. Delete it from the DM when you are done with it.`, { fingerprint: `once:${routine.key}` });
+    }
   }
 }
 

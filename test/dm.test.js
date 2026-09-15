@@ -23,7 +23,7 @@ const ADMIN = "9";
 function fresh() {
   fs.rmSync(ledger.LEDGER_DIR, { recursive: true, force: true });
   state.set({ dmRefused: {}, notices: {} });
-  config.adminUserIds.add(ADMIN);
+  config.adminUserIds = new Set([ADMIN]);
   _drafts.clear();
 }
 

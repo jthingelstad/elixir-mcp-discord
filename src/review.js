@@ -48,8 +48,8 @@ import { MECHANICS, MEMORY_MAX_CHARS, MEMORY_ENTRY, parseMemoryEntry } from "./p
 import { renderTurn } from "./turns.js";
 import { dueRoutines, periodKey, lastOccurrence } from "./schedule.js";
 import { chunk } from "./post.js";
-import { splitFrontMatter, parseRoutine, FIELDS } from "./routines.js";
-import { checkSetting, withSettings, settingsPreview, readConfigText, writeConfig, serviceManaged, restartSoon } from "./settings.js";
+import { splitFrontMatter, parseRoutine, withFields, FIELDS } from "./routines.js";
+import { checkSetting, withSettings, settingsPreview, readConfigText, writeConfig, serviceManaged, restartSoon, needsRestart } from "./settings.js";
 import * as budget from "./budget.js";
 import * as ledger from "./ledger.js";
 import { log } from "./log.js";
@@ -98,21 +98,6 @@ function bodyStart(text) {
 }
 
 const memoryLines = (text) => (text || "").split("\n").filter((l) => parseMemoryEntry(l));
-
-/** A routine file with its front matter fields set (a value of "" or null
- *  removes the key). Comments in the front matter do not survive; the
- *  fields do, and the parser is the judge of the result. */
-export function withFields(text, fields, body = null) {
-  const parsed = splitFrontMatter(text || "");
-  const merged = { ...(parsed.fields || {}) };
-  for (const [k, v] of Object.entries(fields || {})) {
-    const key = String(k).toLowerCase();
-    if (v === null || v === undefined || String(v).trim() === "") delete merged[key];
-    else merged[key] = String(v).trim();
-  }
-  const fm = Object.entries(merged).map(([k, v]) => `${k}: ${v}`).join("\n");
-  return `---\n${fm}\n---\n${(body ?? parsed.body).trim()}\n`;
-}
 
 /** Must parse as a routine, or the proposal is refused with the parser's words. */
 function checkRoutine(file, next) {
@@ -653,11 +638,12 @@ function applySettings({ review, proposal, by }) {
     return { ok: false, error: plan.error };
   }
   const backup = writeConfig(plan.next);
-  const managed = serviceManaged();
-  ledger.append(ledger.decisionEntry({ reviewId: review.reviewId, proposalId: proposal.id, decision: "applied", by, detail: { backup, afterSha: ledger.sha(plan.next), settings: true, restart: managed ? "automatic" : "needed" } }));
-  log.info("settings_applied", { reviewId: review.reviewId, proposal: proposal.id, keys: Object.keys(proposal.edit.fields || {}).join(","), by, restart: managed ? "automatic" : "needed" });
-  if (managed) restartSoon();
-  return { ok: true, file: "config.json", backup, restart: managed ? "automatic" : "needed" };
+  const keys = Object.keys(proposal.edit.fields || {});
+  const restart = !needsRestart(keys) ? "none" : serviceManaged() ? "automatic" : "needed";
+  ledger.append(ledger.decisionEntry({ reviewId: review.reviewId, proposalId: proposal.id, decision: "applied", by, detail: { backup, afterSha: ledger.sha(plan.next), settings: true, restart } }));
+  log.info("settings_applied", { reviewId: review.reviewId, proposal: proposal.id, keys: keys.join(","), by, restart });
+  if (restart === "automatic") restartSoon();
+  return { ok: true, file: "config.json", backup, restart };
 }
 
 /** Put the file back as it was before this proposal, if nothing else has touched it since. */
@@ -667,10 +653,11 @@ export function undoProposal({ review, proposal, by, agentDir = config.agentDir 
     if (!decision || decision.decision !== "applied") return { ok: false, error: "not applied" };
     if (ledger.sha(readConfigText()) !== decision.detail?.afterSha) return { ok: false, error: `config.json has changed since; restore by hand from ${decision.detail?.backup}` };
     writeConfig(fs.readFileSync(decision.detail.backup, "utf8"));
-    ledger.append(ledger.decisionEntry({ reviewId: review.reviewId, proposalId: proposal.id, decision: "reverted", by }));
-    log.info("settings_reverted", { reviewId: review.reviewId, proposal: proposal.id, by });
-    if (serviceManaged()) restartSoon();
-    return { ok: true, restart: serviceManaged() ? "automatic" : "needed" };
+    const restart = !needsRestart(Object.keys(proposal.edit?.fields || {})) ? "none" : serviceManaged() ? "automatic" : "needed";
+    ledger.append(ledger.decisionEntry({ reviewId: review.reviewId, proposalId: proposal.id, decision: "reverted", by, detail: { restart } }));
+    log.info("settings_reverted", { reviewId: review.reviewId, proposal: proposal.id, by, restart });
+    if (restart === "automatic") restartSoon();
+    return { ok: true, restart };
   }
   // A refused re-apply does not un-apply anything: look past it.
   const decision = lastDecision(review, proposal.id, { ignore: ["refused"] });
@@ -737,7 +724,7 @@ export function proposalMessage(review, proposal, { index, total, decision = nul
     "```diff",
     proposal.preview,
     "```",
-    status ? `${status}${decision?.by && decision.by !== "auto" ? ` by <@${decision.by}>` : ""}${decision?.detail?.restart === "automatic" ? " · restarting to apply, back in under a minute" : decision?.detail?.restart === "needed" ? " · **restart the bot to apply**" : ""}${decision?.detail?.backup ? `\n-# backup: ${path.basename(decision.detail.backup)}` : ""}${decision?.decision === "refused" ? `\n-# ${decision.detail}` : ""}` : null,
+    status ? `${status}${decision?.by && decision.by !== "auto" ? ` by <@${decision.by}>` : ""}${decision?.detail?.restart === "automatic" ? " · restarting to apply, back in under a minute" : decision?.detail?.restart === "needed" ? " · **restart the bot to apply**" : decision?.detail?.settings ? " · live now" : ""}${decision?.detail?.backup ? `\n-# backup: ${path.basename(decision.detail.backup)}` : ""}${decision?.decision === "refused" ? `\n-# ${decision.detail}` : ""}` : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -886,8 +873,14 @@ export async function tick({ client, now = new Date() }) {
 }
 
 export function startReview(client) {
-  if (!config.review.enabled) return null;
+  // The clock runs whether or not the lane is on: REVIEW is live in
+  // config.json, and reviewRoutine() reads it on every tick.
   const routine = reviewRoutine();
+  if (!config.review.enabled) {
+    log.info("review_off", { hint: "REVIEW=on in config.json turns it on live; the /review command appears after a restart" });
+    const run = () => tick({ client }).catch((error) => log.error("review_tick_failed", { error: error.message }));
+    return setInterval(run, 60_000);
+  }
   // Seed, never drain: a fresh install does not owe last Sunday's review.
   const runs = state.get("runs") || {};
   if (!runs[routine.key]) state.set({ runs: { ...runs, [routine.key]: periodKey(lastOccurrence(routine)) } });

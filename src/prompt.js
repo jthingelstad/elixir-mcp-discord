@@ -260,9 +260,21 @@ export const MECHANICS = { GROUNDING, DISCORD_FORMAT, POSTING, WHO_IS_ASKING, QU
 export const DELIVER = `Deliver your post by calling post_message. If there is nothing to post, make no
 call and reply SKIP.`;
 
+/**
+ * The clock, in the operator's zone, on every user turn. The model has no
+ * other way to know the date: it was spending a game_clock call to learn
+ * the weekday, and writing "until Friday" as a date it had to guess. In
+ * the user turn, not the system block, so the cached prefix is untouched.
+ */
+export function nowLine(now = new Date(), timezone = config.timezone) {
+  const text = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "long", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now);
+  const get = (type) => text.find((p) => p.type === type)?.value;
+  return `[now: ${get("weekday")} ${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")} ${timezone}]`;
+}
+
 /** The routine's own prompt, plus whatever its trigger handed it. */
-export function userMessageFor(routine, { events, recent, withTool = false } = {}) {
-  const parts = [routine.prompt];
+export function userMessageFor(routine, { events, recent, withTool = false, now = new Date() } = {}) {
+  const parts = [nowLine(now), routine.prompt];
   if (events && (Array.isArray(events) ? events.length : true)) {
     parts.push(
       `FROM THE ELIXIR MCP TIMELINE — \`timeline\` is what happened in the window, oldest first, one item each with a sentence and its facts; \`entries\` is the window's context per subject, sections null when nothing happened. Facts with their own timestamps, not a report: drill with the tools where it earns its place, and never announce the time from them.\n\n${JSON.stringify(events, null, 2)}`,

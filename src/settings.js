@@ -18,11 +18,13 @@
  *   is one the bot may see. A value the bot could not boot on never reaches
  *   a button — the parser-checks-the-routine rule, for settings.
  *
- *   A RESTART TO APPLY. config.json is read at boot. When the bot runs as a
- *   service (launchd KeepAlive, systemd Restart=always) it drains and exits
- *   after applying, and the service brings it back on the new values;
- *   otherwise it says a restart is needed. The prior config.json is kept
- *   under .history/ in the instance, beside agent/'s.
+ *   LIVE, MOSTLY. config.json is re-read on use (src/config.js), so nearly
+ *   every change is in effect the moment it is written. The exceptions are
+ *   marked `restart` below: values something was built from at boot (the
+ *   slash-command prefix, the feed poll timer). For those the bot drains
+ *   and exits after applying when a service (launchd KeepAlive, systemd
+ *   Restart=always) will bring it back; otherwise it says a restart is
+ *   needed. The prior config.json is kept under .history/ in the instance.
  */
 
 import fs from "node:fs";
@@ -68,22 +70,25 @@ export const SETTINGS = {
   CLAUDE_MODEL: { about: "default model for routines that name none", check: pricedModel },
   CLAUDE_EFFORT: { about: "default effort: low, medium, high, xhigh, max", check: effort },
   CLAUDE_MAX_TOKENS: { about: "default output ceiling per turn", check: intAtLeast(256, "CLAUDE_MAX_TOKENS") },
-  REVIEW: { about: "the review lane: on or off", check: onOff },
+  REVIEW: { about: "the review lane: on or off (the /review slash command appears after a restart; the lane itself is live)", check: onOff },
   REVIEW_AT: { about: '"<weekday|daily> HH:MM" in TIMEZONE, e.g. "sun 20:00"', check: (v) => { try { parseReviewAt(v); return null; } catch (error) { return error.message; } } },
   REVIEW_MODEL: { about: "model for the review lane", check: pricedModel },
   REVIEW_EFFORT: { about: "effort for the review lane", check: effort },
   REVIEW_AUTO_MEMORY: { about: "let the review write memory.md without a click: true or false", check: trueFalse },
   REVIEW_MAX_PROPOSALS: { about: "proposals per review", check: intAtLeast(1, "REVIEW_MAX_PROPOSALS") },
   TIMEZONE: { about: "IANA zone schedules are written in, e.g. America/Chicago", check: (v) => (isTimezone(v) ? null : `"${v}" is not an IANA timezone (Region/City)`) },
-  EVENT_POLL_SECONDS: { about: "how often the timeline is read; every poll is a metered call", check: intAtLeast(60, "EVENT_POLL_SECONDS") },
+  EVENT_POLL_SECONDS: { about: "how often the timeline is read; every poll is a metered call (restart)", check: intAtLeast(60, "EVENT_POLL_SECONDS"), restart: true },
   STARTUP_MESSAGE: { about: "the one-line hello on boot: on or off", check: onOff },
   MAX_POSTS_PER_TURN: { about: "how many posts one routine turn may make", check: intAtLeast(1, "MAX_POSTS_PER_TURN") },
-  COMMAND_PREFIX: { about: "slash-command prefix (/<prefix>-run); empty for plain /run", check: (v) => (/^[a-z0-9_-]*$/.test(v) ? null : "letters, digits, - and _ only") },
+  COMMAND_PREFIX: { about: "slash-command prefix (/<prefix>-run); empty for plain /run (restart)", check: (v) => (/^[a-z0-9_-]*$/.test(v) ? null : "letters, digits, - and _ only"), restart: true },
   FEEDBACK_CHANNEL: { about: "logical channel name for Elixir's replies to filed feedback", check: (v) => (/^[a-z0-9-]*$/.test(v) ? null : "a channel's logical name (lowercase, hyphens)") },
   ADMIN_USER_IDS: { about: "who may DM the bot and use its commands; comma-separated Discord user ids", check: (v) => (v.split(",").every((id) => /^\d{5,}$/.test(id.trim())) ? null : "comma-separated numeric Discord user ids") },
 };
 
 export const isSetting = (key) => Object.hasOwn(SETTINGS, key) || /^CHANNEL_[A-Z0-9_]+$/.test(key);
+
+/** Do any of these keys need the process rebuilt to take effect? */
+export const needsRestart = (keys) => (keys || []).some((k) => SETTINGS[String(k).toUpperCase()]?.restart);
 
 /**
  * Check one change against the running bot. `by` is the operator's id: they
@@ -162,8 +167,8 @@ export function serviceManaged() {
   return process.env.SERVICE_MANAGED === "1" || process.ppid === 1;
 }
 
-/** Drain and exit so the service restarts on the new config.json. The
- *  caller has already told the operator. */
+/** Drain and exit so the service restarts on the new config.json — only
+ *  for the few keys that need it. The caller has already told the operator. */
 export function restartSoon({ delayMs = 1500 } = {}) {
   log.info("restart_requested", { reason: "settings changed by DM", managed: serviceManaged() });
   setTimeout(() => process.kill(process.pid, "SIGTERM"), delayMs).unref();

@@ -39,7 +39,7 @@ import { config, repoRoot } from "./config.js";
 import { catalog } from "./setup-catalog.js";
 import { notify } from "./notify.js";
 import { ask, spendBlock } from "./claude.js";
-import { systemFor, readMemory, parseMemoryEntry, MEMORY_MAX_CHARS } from "./prompt.js";
+import { systemFor, nowLine, readMemory, parseMemoryEntry, MEMORY_MAX_CHARS } from "./prompt.js";
 import { loadRoutines } from "./routines.js";
 import { runRoutine } from "./run.js";
 import { directory, resolveById } from "./directory.js";
@@ -101,9 +101,10 @@ read, the ask channel, who is an admin. propose_change with file
 "config.json", op set_config and fields {KEY: value}: the keys and what each means are in
 the tool's description; "settings" shows the current values. A channel
 may be given as #name. Each value is checked the way setup checks it.
-Applying rewrites config.json and restarts the bot (it says so; it is
-back in under a minute); if it is not running as a service the operator
-restarts it. Never a token or a key (those are in .env, not here) and
+Applying rewrites config.json; nearly everything is live at once. The
+two that are not (the command prefix, the feed poll interval) restart the
+bot, which says so and is back in under a minute; if it is not running
+as a service the operator restarts it. Never a token or a key (those are in .env, not here) and
 never the Elixir URL or the app and server ids — those are wiring.
 
 ADD TO A FILE: op append works on identity.md and a routine's brief too —
@@ -484,7 +485,7 @@ async function converse(message, options = {}) {
 
   const result = await askFn({
     system,
-    messages: [...history, { role: "user", content: `${message.author.username} (discord:${message.author.id}): ${question}` }],
+    messages: [...history, { role: "user", content: `${message.author.username} (discord:${message.author.id}): ${question}\n\n${nowLine()}` }],
     model: routine.model,
     effort: routine.effort,
     maxTokens: routine.maxTokens,
@@ -567,7 +568,7 @@ export async function handleDm(message, options = {}) {
   if (/^memory\s*[?]?$/i.test(text)) return showMemory(message);
   if (/^(budget|spend)\s*[?]?$/i.test(text)) return send(message, budgetReply());
   if (/^routines\s*[?]?$/i.test(text)) return send(message, routinesReply());
-  if (/^settings\s*[?]?$/i.test(text)) return send(message, `**Settings** (${serviceManaged() ? "a change restarts me automatically" : "not running as a service: a change needs you to restart me"})\n\`\`\`\n${describeSettings()}\n\`\`\``);
+  if (/^settings\s*[?]?$/i.test(text)) return send(message, `**Settings** (live on Apply; the ones marked restart ${serviceManaged() ? "restart me automatically" : "need you to restart me"})\n\`\`\`\n${describeSettings()}\n\`\`\``);
   if (/^(help|\?)$/i.test(text)) {
     return send(
       message,

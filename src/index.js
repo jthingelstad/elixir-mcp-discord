@@ -278,8 +278,7 @@ client.once(Events.ClientReady, async (ready) => {
   timers.push(startScheduler(() => routinesFor("schedule"), resolveChannel));
   // After the scheduler: both seed the same run ledger, and the scheduler's
   // first seeding replaces it wholesale.
-  const review = startReview(client);
-  if (review) timers.push(review);
+  timers.push(startReview(client));
 });
 
 /**

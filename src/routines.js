@@ -45,6 +45,10 @@ export const FIELDS = new Set([
   "sections",
   "kinds",
   "may_skip",
+  // A one-shot: fires at its next occurrence, then is written back with
+  // enabled: false. "Remind the clan Friday at 8" is a routine, not a
+  // special case.
+  "once",
   "recall",
   "history_turns",
   "trace",
@@ -99,6 +103,21 @@ export function splitFrontMatter(text) {
   return { fields, body: text.slice(match[0].length).trim() };
 }
 
+/** A routine file with its front matter fields set (a value of "" or null
+ *  removes the key). Comments in the front matter do not survive; the
+ *  fields do, and the parser is the judge of the result. */
+export function withFields(text, fields, body = null) {
+  const parsed = splitFrontMatter(text || "");
+  const merged = { ...(parsed.fields || {}) };
+  for (const [k, v] of Object.entries(fields || {})) {
+    const key = String(k).toLowerCase();
+    if (v === null || v === undefined || String(v).trim() === "") delete merged[key];
+    else merged[key] = String(v).trim();
+  }
+  const fm = Object.entries(merged).map(([k, v]) => `${k}: ${v}`).join("\n");
+  return `---\n${fm}\n---\n${(body ?? parsed.body).trim()}\n`;
+}
+
 export function parseRoutine(key, text) {
   const { fields, body } = splitFrontMatter(text);
   if (!fields) fail(key, "no front matter — a routine starts with a --- block");
@@ -139,6 +158,7 @@ export function parseRoutine(key, text) {
       fields.may_skip === undefined
         ? false
         : asBool(key, "may_skip", fields.may_skip),
+    once: fields.once === undefined ? false : asBool(key, "once", fields.once),
     // How many of the bot's own recent messages in the destination channel to
     // show the model. This is the cheapest possible memory and it needs no
     // storage: Discord already kept them. Without it a daily routine happily
@@ -191,6 +211,7 @@ export function parseRoutine(key, text) {
       `at/days/catch_up_hours only mean something for trigger: schedule`,
     );
   }
+  if (routine.once && trigger !== "schedule") fail(key, "once only means something for trigger: schedule");
 
   // A routine says which timeline items wake it: `kinds:` (member_joined,
   // week_resolved, ...) and/or `sections:` (roster, war, ...). Naming none
