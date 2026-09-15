@@ -35,10 +35,6 @@ export const isSecret = (key) => SECRET_KEYS.includes(key);
 export const isEnvFile = (key) => ENV_FILE_KEYS.includes(key);
 export const isEnvOnly = (key) => ENV_ONLY_KEYS.includes(key);
 
-export function isChannelKey(key) {
-  return /^CHANNEL_[A-Z0-9_]+$/.test(key);
-}
-
 /** .env: secrets, wiring, and any path override, nothing else. */
 export function renderSecrets({ values, instanceDir }) {
   return [

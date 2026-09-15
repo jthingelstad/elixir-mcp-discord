@@ -35,7 +35,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
-import { SECRET_KEYS, WIRING_KEYS, ENV_FILE_KEYS, ENV_ONLY_KEYS, isSecret, isEnvFile, isEnvOnly, renderSecrets, renderConfig, parseConfig } from "./env-file.js";
+import { SECRET_KEYS, WIRING_KEYS, ENV_FILE_KEYS, ENV_ONLY_KEYS, isEnvFile, isEnvOnly, renderSecrets, renderConfig, parseConfig } from "./env-file.js";
 
 export { SECRET_KEYS, WIRING_KEYS, ENV_FILE_KEYS, ENV_ONLY_KEYS, renderConfig };
 

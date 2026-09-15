@@ -7,6 +7,9 @@ node_modules/
 !.env.example
 # config.json is an INSTANCE's settings; the checkout ships config.example.json.
 /config.json
+# The bot's own backups of files it changed; only an instance has them.
+.history/
+agent/.history/
 state/
 *.log
 

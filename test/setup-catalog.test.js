@@ -17,7 +17,6 @@ import {
   rewriteAt,
   estimateMonthly,
   describeWhen,
-  withClanSection,
 } from "../src/setup-catalog.js";
 
 const EXAMPLE = path.join(path.dirname(new URL(import.meta.url).pathname), "..", "agent");
@@ -91,12 +90,4 @@ test("the monthly estimate counts schedules and events, never the ask lane", () 
   assert.equal(estimate.runs, 30 + 4 + 30);
   assert.equal(estimate.usd, estimate.runs * 0.1);
   assert.deepEqual(estimate.lines.map((l) => l.key), ["daily", "weekly", "feed"]);
-});
-
-test("clan notes are appended once and then left to the operator", () => {
-  const first = withClanSection("# House rules\n\nPlain.\n", { clanName: "Ship It!", notes: "We are a casual clan." });
-  assert.ok(first.endsWith("## About this clan\n\nYou work for Ship It!.\n\nWe are a casual clan.\n"));
-  assert.equal(withClanSection(first, { clanName: "Other", notes: "x" }), null);
-  const bare = withClanSection("rules", { clanName: "Ship It!", notes: "" });
-  assert.ok(bare.endsWith("You work for Ship It!.\n"));
 });

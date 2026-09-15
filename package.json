@@ -1,6 +1,6 @@
 {
   "name": "elixir-mcp-discord",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": false,
   "description": "A Discord bot powered entirely by the Elixir MCP server. One checkout, one instance directory per clan; prompts, schedules and channels are files an operator owns, and the code is a runner with no clan in it.",
   "license": "MIT",

@@ -100,18 +100,3 @@ export function costOf(model, usage) {
     1_000_000
   );
 }
-
-/**
- * The most a single turn could plausibly cost, used to refuse a turn BEFORE it
- * runs rather than discovering the overspend afterwards.
- *
- * Output is bounded by max_tokens and priced exactly. Input is not bounded by
- * anything we control — an MCP turn's tool results can be enormous — so it is
- * estimated from what turns on this lane have actually cost, floored by
- * configuration. A budget is only as strict as this number is honest, which is
- * why it climbs to meet reality: see budget.js.
- */
-export function turnCeiling(model, maxTokens) {
-  const rate = rateFor(model);
-  return (maxTokens * rate.output) / 1_000_000;
-}

@@ -329,7 +329,8 @@ channel's topic is how you tell it what that channel is for. Write topics;
 they are the prompt for this choice.
 
 A routine may still name a `channel:` as its default ("here unless another
-clearly fits"), by logical name bound in `.env` or simply by channel name.
+clearly fits"), by logical name bound in `config.json` (`CHANNEL_<NAME>`) or
+simply by channel name.
 Making no `post_message` call is how a routine posts nothing; up to
 `MAX_POSTS_PER_TURN` (3) posts may go to different channels when they
 genuinely differ.
@@ -385,11 +386,13 @@ a prompt bug is visible rather than looking like a quiet week.
 
 ## Budgets
 
-Two monthly pots, because two different people spend them:
+Three monthly pots in `config.json`, because three different things spend
+them:
 
-```
-MONTHLY_BUDGET_USD=20.00       # what the bot does on its own
-ASK_MONTHLY_BUDGET_USD=10.00   # what clan members ask for
+```json
+"MONTHLY_BUDGET_USD": "20.00",         what the bot does on its own
+"ASK_MONTHLY_BUDGET_USD": "10.00",     what clan members ask for
+"REVIEW_MONTHLY_BUDGET_USD": "10.00",  the review lane and your DMs
 ```
 
 The split is the point. Scheduled posts and event briefs cost what your
@@ -405,9 +408,10 @@ bot stops slightly short of your number rather than slightly past it. A lane
 that runs out says so — in the log for routines, and in the channel for asks,
 in a sentence aimed at a member rather than an operator.
 
-Months are UTC calendar months and nothing rolls over. `npm run routines` and
-`/budget` in Discord both show where you are; `npm run setup` suggests a
-starting number from the routines you chose.
+Months are UTC calendar months and nothing rolls over. `npm run routines`,
+`/budget` and `budget` in the DM all show where you are, and "raise the ask
+budget to $15" in the DM changes it, live. `ASK_DAILY_TURNS_PER_MEMBER`
+(default 20) keeps one member from spending the ask pot for everyone.
 
 ## Choosing a model
 

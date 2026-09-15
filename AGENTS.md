@@ -123,8 +123,9 @@ feed cursor and feedback inbox are its own) and its own Claude key. Logs are
 - **There is no `.env` in the checkout any more**, so a bare `npm run try`
   fails and says so. The instance is the cwd OR `INSTANCE_DIR`:
   `INSTANCE_DIR=~/.elixir-mcp-discord/shipit npm run try <routine>` / `probe`
-  / `routines`. (Your shell's `CLAUDE_EFFORT=high` shadows every instance's
-  .env for CLI runs — the provenance line says so; launchd is unaffected.)
+  / `routines`. (A shell `CLAUDE_EFFORT` no longer shadows anything:
+  `config.json` wins for every setting it names; the provenance line says
+  where each value came from.)
 - **`npm run setup -- <instance-dir>` is the whole process** (`src/setup.js`,
   helpers in `src/setup-catalog.js`, `src/discord-rest.js`, `src/env-file.js`):
   Elixir key, Claude key and Discord app each tried against its service BEFORE
@@ -164,6 +165,20 @@ feed cursor and feedback inbox are its own) and its own Claude key. Logs are
   so a crash loop does not repeat it. The bot keeps running — the lanes that
   work should — but a pasted id from the wrong clan's channel is now a loud
   boot, not a stranger's clan report.
+
+## Proposals — since 2026-09-15
+
+`src/proposals.js` is the one machinery every change to the operator's files
+goes through, from the review lane and from the DM: `planEdit` checks an
+edit against the file AS IT IS NOW and returns the text it would become and
+the diff; `applyProposal` re-plans (a hand edit in between refuses), writes
+with a backup under `.history/`, records the decision, commits when the
+instance is a repo; `undoProposal` restores while untouched; `tryProposal`
+runs the routine's dry run on the proposed text. The fences are here too:
+`EDITABLE`, operator-only ops (`edit.by === "owner"`), the memory entry
+format and cap, a routine result that must parse, an owner's memory line
+that only they remove. `src/review.js` re-exports it, so one import means
+"a proposal".
 
 ## The review lane — since 2026-09-14
 
@@ -605,9 +620,11 @@ cannot be enforced is worse than none, because it looks like it works.
 - **Sonnet 5 has no mid-conversation system messages** and rejects
   `budget_tokens` and sampling params. Thinking is `{type: "adaptive"}`; depth
   is `output_config.effort`.
-- **A shell variable outranks `.env`.** dotenv does not override `process.env`,
-  and an exported `CLAUDE_EFFORT=high` ran this bot at high effort for an
-  evening. The service logs provenance at boot and the CLI prints a warning.
+- **A shell variable used to outrank `.env`.** dotenv does not override
+  `process.env`, and an exported `CLAUDE_EFFORT=high` ran this bot at high
+  effort for an evening. Since `config.json` (2026-09-15) a setting the file
+  names wins over the shell; only secrets, wiring and path overrides still
+  come from the environment. The boot log's provenance line says which.
 - **`npm run probe` before debugging anything.** It reports the principal, the
   contract version and the tool fingerprint, and tells you whether the surface
   moved. It must only call tools an agent surface publishes — it used to check

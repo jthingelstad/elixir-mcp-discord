@@ -139,22 +139,3 @@ export function estimateMonthly(routines, { perPostUsd = 0.1 } = {}) {
   }
   return { runs, usd: runs * perPostUsd, perPostUsd, lines };
 }
-
-export const CLAN_SECTION = "## About this clan";
-
-/**
- * Add a clan's own notes under a heading of their own at the end of
- * identity.md. Returns the new text, or null when the section already exists
- * — that is the operator's text now, and setup does not edit it.
- */
-export function withClanSection(identity, { clanName, notes }) {
-  if (identity.includes(CLAN_SECTION)) return null;
-  const body = [
-    `${CLAN_SECTION}`,
-    ``,
-    `You work for ${clanName}.`,
-    ...(notes ? [``, notes.trim()] : []),
-    ``,
-  ].join("\n");
-  return `${identity.trimEnd()}\n\n${body}`;
-}
