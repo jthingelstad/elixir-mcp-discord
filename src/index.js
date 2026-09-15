@@ -164,6 +164,7 @@ client.once(Events.ClientReady, async (ready) => {
         from: state.get("serverVersion"),
         to: handshake.version,
       });
+      await notify.notify("Elixir changed", `contract ${state.get("serverVersion")} → ${handshake.version}. Tool schemas may have moved; the elixir_changelog tool says what.`, { fingerprint: `contract:${handshake.version}` });
     }
     state.set({ serverVersion: handshake.version });
     reportPrincipal(handshake);

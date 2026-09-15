@@ -125,6 +125,9 @@ async function pollRoutine(routine, channel) {
   const version = result.meta?.contract_version;
   if (version && version !== state.get("contractVersion")) {
     log.info("contract_version_changed", { from: state.get("contractVersion"), to: version });
+    if (state.get("contractVersion")) {
+      await notify("Elixir changed", `contract ${state.get("contractVersion")} → ${version} while running. Tool schemas may have moved; the elixir_changelog tool says what.`, { fingerprint: `contract:${version}` });
+    }
     state.set({ contractVersion: version });
   }
 
