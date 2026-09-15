@@ -23,7 +23,7 @@ import { detectFriction, sweepFriction, looksUngrounded } from "./feedback.js";
 import { systemFor, nowLine } from "./prompt.js";
 import { config } from "./config.js";
 import { chunk } from "./post.js";
-import { renderTrace, errorFooter, UNGROUNDED_FOOTER } from "./trace.js";
+import { renderTrace, errorFooter, UNGROUNDED_FOOTER, UNFILED_FOOTER } from "./trace.js";
 import { turnRecord } from "./run.js";
 import { track, isStopping } from "./inflight.js";
 import { log } from "./log.js";
@@ -537,6 +537,10 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
           content: `-# 📮 Filed with Elixir MCP: ${summary}`,
           allowedMentions: { repliedUser: false },
         });
+      } else if (friction.reason === "claimed_filing" && sent) {
+        // The reply said it filed; nothing did, and the sweep declined to.
+        // The reader gets the fact under the claim rather than the claim.
+        await sent.reply({ content: UNFILED_FOOTER, allowedMentions: { repliedUser: false } });
       }
     }
   } catch (error) {

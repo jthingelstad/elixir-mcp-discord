@@ -57,6 +57,8 @@ import * as budget from "./budget.js";
 import { deckLinkTool } from "./deck-link.js";
 import { planEdit, proposalMessage, toComponents, readAgentFiles } from "./review.js";
 import { isConversational } from "./ask.js";
+import { detectFriction, sweepFriction } from "./feedback.js";
+import { UNFILED_FOOTER } from "./trace.js";
 import { turnRecord } from "./run.js";
 import * as ledger from "./ledger.js";
 import { log } from "./log.js";
@@ -833,7 +835,7 @@ function lookupTool() {
 }
 
 async function converse(message, options = {}) {
-  const { askFn = ask } = options;
+  const { askFn = ask, sweepFn = sweepFriction } = options;
   const blocked = spendBlock("review");
   if (blocked) {
     await send(
@@ -888,6 +890,10 @@ async function converse(message, options = {}) {
   const answer =
     (result.text || "").trim() ||
     (proposals.length ? "Here is what I would remember:" : "I got nothing back for that.");
+  // The same friction signatures as the ask lane. This lane had none until
+  // 2026-09-15, and it is where the operator sends the bot to file things:
+  // the one place a "filed it" with no call behind it does the most harm.
+  const friction = detectFriction({ text: answer, called: result.called, errors: result.errors });
   const parts = chunk(answer, 1900);
   if (placeholder)
     await placeholder.edit({ content: parts[0], allowedMentions: { parse: [] } }).catch(() => send(message, parts[0]));
@@ -937,7 +943,7 @@ async function converse(message, options = {}) {
         messageIds: [placeholder?.id].filter(Boolean),
         footers: [],
         ungrounded: false,
-        friction: null,
+        friction: friction?.reason ?? null,
         proposals: proposals.map((p) => p.id),
       },
     }),
@@ -950,7 +956,18 @@ async function converse(message, options = {}) {
     proposals: proposals.length,
     usd: result.usd.toFixed(4),
     ms: result.ms,
+    friction: friction?.reason,
   });
+
+  if (friction) {
+    const summary = await sweepFn({ question, answer, friction, lane: "review", turnId: result.turnId });
+    if (summary) {
+      ledger.append(ledger.filedEntry({ turnId: result.turnId, summary }));
+      await send(message, `-# 📮 Filed with Elixir MCP: ${summary}`);
+    } else if (friction.reason === "claimed_filing") {
+      await send(message, UNFILED_FOOTER);
+    }
+  }
 }
 
 // --------------------------------------------------------------- entry

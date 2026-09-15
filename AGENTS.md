@@ -592,6 +592,22 @@ cannot be enforced is worse than none, because it looks like it works.
   per-member calls and never told anyone. Errors and the trace carry
   `meta.request_id`, and the sweep hands failing ids to the model so a filing
   names the exact call.
+- **A reply that says it filed, with no `elixir_feedback` call, is friction
+  of its own kind — and the DM lane sweeps too (2026-09-15).** The operator
+  DM'd "filing as a bug is the right call" and the bot answered "Filed as a
+  data-quality bug against elixir_timeline ... with the request_id
+  attached" after four reads and no filing; the DM lane had no sweep and
+  hard-coded `friction: null`, so the false statement stood. `claimsFiling`
+  (`CLAIM_MARKERS`, over-inclusive like the limit markers) makes
+  `detectFriction` return `claimed_filing`, which outranks the other
+  signatures; the sweep is told the claim is false as it stands and either
+  files the item so it becomes true (the 📮 footer) or declines, in which
+  case `UNFILED_FOOTER` goes under the reply — a fact about the turn, not
+  the sentence, so it stays true when the reply was discussing someone
+  else's filing. `converse` in `src/dm.js` now runs `detectFriction` and
+  the sweep on the review lane's pot, records `friction` on the turn and
+  `filed` in the ledger, and takes `sweepFn` for tests. The prompt says it
+  too: never claim a filing the call does not back.
 - **Ask history skips footers and pinned messages.** `isConversational` in
   `src/ask.js` drops bot messages starting with `-#` (traces, filed notes,
   the placeholder) and anything pinned; before that the model read its own

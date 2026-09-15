@@ -81,7 +81,9 @@ request rather than guess at it.
 
 File it in the same turn, then answer the member normally. Do not mention the
 filing in your reply unless they asked about it — a short note is appended to
-your message automatically.
+your message automatically. Never say you filed, are filing, or will file
+unless elixir_feedback was actually called in this turn: a claim without the
+call is caught and corrected in public. If you decided not to file, say that.
 `.trim();
 
 function calledFeedback(called) {
@@ -140,6 +142,29 @@ export function recordFinding({ turnId, verdict, source }) {
 function looksLikeLimit(text) {
   const low = (text || "").toLowerCase();
   return LIMIT_MARKERS.some((marker) => low.includes(marker));
+}
+
+/**
+ * A reply that says feedback was filed. On 2026-09-15 the operator told the
+ * bot "filing as a bug is the right call" and it answered "Filed as a
+ * data-quality bug against elixir_timeline ... with the request_id attached"
+ * having made four reads and no elixir_feedback call at all. The model
+ * narrated an action it never took, and nothing on this side compared the
+ * words to the calls. Over-inclusive on purpose, like the limit markers: a
+ * false positive costs one reflection call, a false negative is a lie left
+ * standing in the operator's DM.
+ */
+const CLAIM_MARKERS = [
+  /\bfiled\b/,
+  /\bfiling (this|that|it|as|a|the)\b/,
+  /\bi(?:'ll| will| am| have|'m|'ve) (?:now )?(?:file|filed|filing)\b/,
+  /\b(?:sent|submitted|logged|reported) (?:this|that|it) (?:to|with|as) (?:the )?(?:maintainer|feedback|elixir)/,
+  /\bfeedback (?:has been |is |was )?(?:filed|submitted|sent|logged)\b/,
+];
+
+export function claimsFiling(text) {
+  const low = (text || "").toLowerCase();
+  return CLAIM_MARKERS.some((re) => re.test(low));
 }
 
 /**
@@ -226,6 +251,13 @@ export function looksUngrounded({ text, called, events }) {
 /** Did this turn hit friction worth a second look? */
 export function detectFriction({ text, called, errors }) {
   if (calledFeedback(called)) return null;
+  // The reply claims a filing the calls do not show. Checked before the
+  // rest because it is the one signature that is a false statement to the
+  // reader, not merely a gap: the sweep must either make it true or the
+  // lane must say it was not.
+  if (claimsFiling(text)) {
+    return { reason: "claimed_filing", detail: text.slice(0, 600) };
+  }
   const unexpected = unexpectedErrors(errors);
   if (unexpected.length > 0) {
     return {
@@ -279,7 +311,9 @@ ${CLASSIFY_RULES}`;
         }`
       : friction.reason === "many_calls"
         ? `The turn took ${friction.count} tool calls (${friction.detail}). Was there a tool or an argument that would have answered in fewer, and if not, what is missing?`
-        : `The agent conceded a limit in its answer.`;
+        : friction.reason === "claimed_filing"
+          ? `The agent TOLD the member it had filed (or was filing) feedback, but made no elixir_feedback call in that turn. The claim is false as it stands. If what it described is a real, concrete item, file it now so the claim becomes true (ELIXIR:); if it is not worth filing, say so (NONE) and the member will be told nothing was filed.`
+          : `The agent conceded a limit in its answer.`;
 
   const result = await ask({
     system,

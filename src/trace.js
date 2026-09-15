@@ -62,6 +62,12 @@ export function errorFooter(result) {
   );
 }
 
+/** The correction under a reply that said feedback was filed when no
+ *  elixir_feedback call went out this turn and the sweep filed nothing. A
+ *  statement about the turn, not the sentence: the reply may have been
+ *  discussing someone else's filing, and this is still true. */
+export const UNFILED_FOOTER = "-# ⚠️ No feedback was filed with Elixir MCP in this turn, whatever the reply says.";
+
 /** The caveat under a reply that stated figures without reading anything this turn. */
 export const UNGROUNDED_FOOTER =
   "-# ⚠️ No tool was called for this reply, so any figures in it are repeated from earlier in the conversation, not re-read.";

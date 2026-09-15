@@ -6,7 +6,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { detectFriction } from "../src/feedback.js";
+import { detectFriction, claimsFiling } from "../src/feedback.js";
 import { shouldReadFeedback } from "../src/events.js";
 
 const turn = (errors, text = "Here is the answer.") => ({
@@ -110,4 +110,40 @@ test("figures with no tool call are ungrounded, unless the feed supplied them", 
     false,
   );
   assert.equal(looksUngrounded({ text: "Which player are you?", called: [] }), false, "no figures, no problem");
+});
+
+test("a reply that says it filed, with no elixir_feedback call, is friction of its own kind", () => {
+  // 2026-09-15, the operator's DM: "Filed as a data-quality bug against
+  // elixir_timeline ... with the request_id attached" after four reads and
+  // no filing. The words and the calls disagreed and nothing compared them.
+  const claimed = detectFriction({
+    text: "Filed as a data-quality bug against elixir_timeline, with the request_id attached so the maintainer can see exactly what I saw.",
+    called: ["players_search", "elixir_timeline", "players_profile"],
+    errors: [],
+  });
+  assert.equal(claimed.reason, "claimed_filing");
+  assert.match(claimed.detail, /^Filed as a data-quality bug/);
+  // It outranks the other signatures: a conceded limit in the same reply is
+  // not the headline when the reply also claims a filing.
+  assert.equal(
+    detectFriction({
+      text: "I can't see that, so I'm filing it as a gap.",
+      called: ["players_summary"],
+      errors: [],
+    }).reason,
+    "claimed_filing",
+  );
+  // The call makes the claim true, and then it is not friction at all.
+  assert.equal(
+    detectFriction({
+      text: "Filed as a data-quality bug.",
+      called: ["players_search", "elixir_feedback"],
+      errors: [],
+    }),
+    null,
+  );
+  // Ordinary replies do not trip it.
+  assert.equal(claimsFiling("Your win rate this week is 54% over 31 battles."), false);
+  assert.equal(claimsFiling("I'll file that with the maintainer now."), true);
+  assert.equal(claimsFiling("Feedback has been submitted."), true);
 });

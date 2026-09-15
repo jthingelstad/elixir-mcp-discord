@@ -487,3 +487,69 @@ test("retract deletes every message a turn produced and records it on the turn",
   const { isFlagged } = await import("../src/review.js");
   assert.equal(isFlagged(turn), true);
 });
+
+test("a DM reply that claims a filing with no call behind it is swept: filed for real, or corrected under the claim", async () => {
+  // The operator's DM of 2026-09-15: "Filing as a bug is right call" ->
+  // "Filed as a data-quality bug against elixir_timeline ..." with four
+  // reads and no elixir_feedback call. The lane had no sweep at all.
+  fresh();
+  const modelTurn = (text) => ({
+    ok: true,
+    text,
+    called: ["players_search", "elixir_timeline", "players_profile"],
+    errors: [],
+    trace: [],
+    envelopes: [],
+    usd: 0.05,
+    usage: null,
+    turnId: "dm00claim",
+    ms: 5,
+    rounds: 1,
+    stopReason: "end_turn",
+    model: "m",
+    effort: "e",
+  });
+  const claim =
+    "Filed as a data-quality bug against elixir_timeline, with the request_id attached so the maintainer can see exactly what I saw.";
+
+  // The sweep makes the claim true: the footer names what was filed.
+  const swept = [];
+  const filed = dm("Filing as a bug is right call.");
+  await handleDm(filed.message, {
+    askFn: async () => modelTurn(claim),
+    sweepFn: async (args) => {
+      swept.push(args);
+      return "arena move missing from the clan timeline";
+    },
+  });
+  assert.equal(swept.length, 1);
+  assert.equal(swept[0].friction.reason, "claimed_filing");
+  assert.equal(swept[0].lane, "review", "DM turns are the operator's pot");
+  assert.equal(swept[0].turnId, "dm00claim");
+  assert.equal(filed.sent.at(-1).content, "-# 📮 Filed with Elixir MCP: arena move missing from the clan timeline");
+  const records = ledger.readRecords({ since: today() });
+  assert.deepEqual(
+    records.map((r) => r.kind),
+    ["turn", "filed"],
+  );
+  assert.equal(records[0].output.friction, "claimed_filing");
+
+  // The sweep declines: the reader is told, under the claim, that nothing
+  // was filed this turn.
+  fresh();
+  const declined = dm("Filing as a bug is right call.");
+  await handleDm(declined.message, {
+    askFn: async () => modelTurn(claim),
+    sweepFn: async () => null,
+  });
+  assert.match(declined.sent.at(-1).content, /^-# ⚠️ No feedback was filed with Elixir MCP in this turn/);
+
+  // A reply whose calls include the filing is not swept and gets no footer.
+  fresh();
+  const honest = dm("Filing as a bug is right call.");
+  await handleDm(honest.message, {
+    askFn: async () => ({ ...modelTurn(claim), called: ["elixir_timeline", "elixir_feedback"] }),
+    sweepFn: async () => assert.fail("nothing to sweep"),
+  });
+  assert.equal(honest.sent.at(-1).content, claim);
+});
