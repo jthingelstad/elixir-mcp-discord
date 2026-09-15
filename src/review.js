@@ -42,7 +42,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { config } from "./config.js";
+import { config, instanceDir } from "./config.js";
 import { ask, spendBlock } from "./claude.js";
 import { MECHANICS, MEMORY_MAX_CHARS, MEMORY_ENTRY, parseMemoryEntry } from "./prompt.js";
 import { renderTurn } from "./turns.js";
@@ -56,6 +56,7 @@ import { loadRoutines } from "./routines.js";
 import { readMemory, readIdentity } from "./prompt.js";
 import { splitFrontMatter, parseRoutine, withFields, FIELDS } from "./routines.js";
 import { checkSetting, withSettings, settingsPreview, readConfigText, writeConfig, serviceManaged, restartSoon, needsRestart } from "./settings.js";
+import { commitInstance } from "./instance-git.js";
 import * as budget from "./budget.js";
 import * as ledger from "./ledger.js";
 import { log } from "./log.js";
@@ -657,7 +658,30 @@ export function applyProposal({ review, proposal, by, agentDir = config.agentDir
   }
   ledger.append(ledger.decisionEntry({ reviewId: review.reviewId, proposalId: proposal.id, decision: by === "auto" ? "auto" : "applied", by, detail }));
   log.info("review_applied", { reviewId: review.reviewId, proposal: proposal.id, file: proposal.file, by, backup });
+  if (repoFor(agentDir)) void commitInstance({ message: commitMessage(proposal), body: commitBody(review, proposal, by), dir: repoFor(agentDir) });
   return { ok: true, file: proposal.file, backup };
+}
+
+/** The instance to commit in: only when the files written live inside it. */
+function repoFor(agentDir) {
+  return path.resolve(agentDir).startsWith(path.resolve(instanceDir) + path.sep) ? instanceDir : null;
+}
+
+/** The commit message is the proposal's summary; the body says where it came from. */
+function commitMessage(proposal) {
+  const summary = String(proposal.summary || "").trim().replace(/\s+/g, " ");
+  const verb = { append: "Add to", replace: "Change", remove: "Remove from", set_fields: "Reschedule", create: "Create", delete: "Retire", set_config: "Settings" }[proposal.edit?.op] ?? "Change";
+  return summary ? summary.slice(0, 120) : `${verb} ${proposal.file}`;
+}
+
+function commitBody(review, proposal, by) {
+  return [
+    `file: ${proposal.file} · op: ${proposal.edit?.op ?? "?"} · proposal ${proposal.id} of ${review.trigger === "dm" ? "a DM" : `review ${review.reviewId}`}`,
+    proposal.turnIds?.length ? `turns: ${proposal.turnIds.join(", ")}` : null,
+    `applied by: ${by === "auto" ? "the review (auto)" : `discord:${by}`}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 /** Settings: re-checked against config.json as it is NOW, written with a
@@ -675,7 +699,10 @@ function applySettings({ review, proposal, by }) {
   const restart = !needsRestart(keys) ? "none" : serviceManaged() ? "automatic" : "needed";
   ledger.append(ledger.decisionEntry({ reviewId: review.reviewId, proposalId: proposal.id, decision: "applied", by, detail: { backup, afterSha: ledger.sha(plan.next), settings: true, restart } }));
   log.info("settings_applied", { reviewId: review.reviewId, proposal: proposal.id, keys: keys.join(","), by, restart });
-  if (restart === "automatic") restartSoon();
+  // Commit before a restart, so the history has it even if the exit is quick.
+  void commitInstance({ message: commitMessage(proposal), body: commitBody(review, proposal, by) }).then(() => {
+    if (restart === "automatic") restartSoon();
+  });
   return { ok: true, file: "config.json", backup, restart };
 }
 
@@ -689,7 +716,9 @@ export function undoProposal({ review, proposal, by, agentDir = config.agentDir 
     const restart = !needsRestart(Object.keys(proposal.edit?.fields || {})) ? "none" : serviceManaged() ? "automatic" : "needed";
     ledger.append(ledger.decisionEntry({ reviewId: review.reviewId, proposalId: proposal.id, decision: "reverted", by, detail: { restart } }));
     log.info("settings_reverted", { reviewId: review.reviewId, proposal: proposal.id, by, restart });
-    if (restart === "automatic") restartSoon();
+    void commitInstance({ message: `Undo: ${commitMessage(proposal)}`, body: commitBody(review, proposal, by) }).then(() => {
+      if (restart === "automatic") restartSoon();
+    });
     return { ok: true, restart };
   }
   // A refused re-apply does not un-apply anything: look past it.
@@ -709,6 +738,7 @@ export function undoProposal({ review, proposal, by, agentDir = config.agentDir 
   writeWithHistory({ dir: agentDir, file: proposal.file, next: decision.detail?.created ? null : before });
   ledger.append(ledger.decisionEntry({ reviewId: review.reviewId, proposalId: proposal.id, decision: "reverted", by }));
   log.info("review_reverted", { reviewId: review.reviewId, proposal: proposal.id, file: proposal.file, by });
+  if (repoFor(agentDir)) void commitInstance({ message: `Undo: ${commitMessage(proposal)}`, body: commitBody(review, proposal, by), dir: repoFor(agentDir) });
   return { ok: true };
 }
 

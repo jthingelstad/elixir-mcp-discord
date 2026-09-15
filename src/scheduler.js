@@ -16,6 +16,7 @@ import { spendBlock } from "./claude.js";
 import { withFields } from "./routines.js";
 import { log } from "./log.js";
 import { notify } from "./notify.js";
+import { commitInstance } from "./instance-git.js";
 import * as state from "./state.js";
 
 /** A one-shot has fired: write it back disabled, keeping the file. */
@@ -28,6 +29,7 @@ export function retireOnce(routine, { agentDir = config.agentDir } = {}) {
     fs.copyFileSync(file, path.join(history, `routines__${routine.key}.md.${new Date().toISOString().replace(/[:.]/g, "-")}`));
     fs.writeFileSync(file, withFields(text, { enabled: "false" }));
     log.info("routine_once_done", { routine: routine.key });
+    void commitInstance({ message: `Retire one-shot ${routine.key} after it ran` });
     return true;
   } catch (error) {
     log.warn("routine_once_retire_failed", { routine: routine.key, error: error.message });

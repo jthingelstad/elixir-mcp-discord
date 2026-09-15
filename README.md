@@ -141,6 +141,12 @@ Re-running keeps every value on Enter, so it is also how you rotate one key,
 move one channel, add a routine or change a time. `--check` runs the same
 validation with no prompts and writes nothing.
 
+Setup also offers to make the instance directory a **local git
+repository** (`.env` and `state/` ignored). Then every change you accept
+from the DM is a commit with the proposal's summary as its message — a
+real history of what the bot says and when, with diffs and blame. Nothing
+is ever pushed; there is no remote unless you add one.
+
 Two files come out of it. **`.env` holds what the bot may not change
 about itself** — the three secrets and the three wiring ids — and
 **`config.json` holds every setting it may** — the same key names, flat,

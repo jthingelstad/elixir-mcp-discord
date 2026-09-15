@@ -314,6 +314,17 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
   per turn, three per member per day (`state.operatorRequests`).
 - **`ASK_DAILY_TURNS_PER_MEMBER`** (config.json, default 20, live): one
   member cannot drain the shared ask pot; admins exempt; `state.askCounts`.
+- **Every accepted change is a commit** (`src/instance-git.js`) when the
+  instance directory is a git repository: apply, undo and a one-shot's
+  retirement commit `config.json` and `agent/` with the proposal's summary
+  as the message and its provenance (file, op, review or DM, turns, who)
+  as the body. Zero config: no `.git`, nothing happens. **Local only, never
+  a remote, never a push** (Jamie, 2026-09-15). `initInstanceRepo` (setup
+  offers it, default yes) writes a `.gitignore` for `.env`, `state/` and
+  `.history/` — the pre-git backups are not history twice — and refuses to
+  proceed if `.env` or `state/` is tracked. `commitInstance` never runs in
+  the checkout (`repoRoot`) and only when the written files are inside the
+  instance (`repoFor`). Jamie's three instances are repos since 2026-09-15.
 - **The operator changes settings from the DM** (`src/settings.js`).
   `propose_change` with `file: "config.json"`, `op: set_config`, `fields:
   {KEY: value}` on an ALLOWLIST (`SETTINGS`: budgets, `CLAUDE_*`,

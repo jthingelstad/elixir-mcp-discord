@@ -620,6 +620,20 @@ if (checkOnly) {
 } else {
   save();
   ok(`wrote ${envFile} (secrets) and ${configFile} (settings)`);
+  // The instance as a repository: config.json and agent/ committed, .env and
+  // state/ ignored, every accepted change from the DM a commit. Local only;
+  // nothing here sets a remote.
+  const { isRepo, initInstanceRepo } = await import("./instance-git.js");
+  if (isRepo(instanceDir)) {
+    ok("instance is a git repository; accepted changes are committed");
+  } else if (!interactive || (await yesNo("Track this instance's config and prompts in a local git repository? (never pushed)", true))) {
+    try {
+      const repo = await initInstanceRepo({ dir: instanceDir });
+      ok(`git repository in ${instanceDir}: ${repo.tracked} files at ${repo.sha}; .env and state/ ignored`);
+    } catch (error) {
+      fail({ detail: `git: ${error.message}`, fix: "install git, or skip; the bot works without it" });
+    }
+  }
 }
 
 // --- 11. Summary ------------------------------------------------------------------
