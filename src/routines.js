@@ -108,7 +108,7 @@ export function splitFrontMatter(text) {
  *  fields do, and the parser is the judge of the result. */
 export function withFields(text, fields, body = null) {
   const parsed = splitFrontMatter(text || "");
-  const merged = { ...(parsed.fields || {}) };
+  const merged = { ...parsed.fields };
   for (const [k, v] of Object.entries(fields || {})) {
     const key = String(k).toLowerCase();
     if (v === null || v === undefined || String(v).trim() === "") delete merged[key];

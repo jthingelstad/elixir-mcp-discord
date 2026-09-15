@@ -684,7 +684,7 @@ async function converse(message, options = {}) {
       trigger: "dm",
       window: { since: new Date().toISOString(), until: new Date().toISOString() },
       turnsRead: 0,
-      proposals: proposals.map(({ next, ...p }) => p),
+      proposals: proposals.map(({ next: _next, ...p }) => p),
       report: answer,
       usd: result.usd,
       model: result.model,

@@ -180,10 +180,10 @@ export function describeSettings() {
   const values = currentSettings(readConfigText());
   const entries = directory();
   return Object.keys(SETTINGS)
-    .concat(Object.keys(values).filter((k) => /^CHANNEL_/.test(k)))
+    .concat(Object.keys(values).filter((k) => k.startsWith('CHANNEL_')))
     .map((k) => {
       const raw = values[k];
-      const shown = /^CHANNEL_/.test(k) ? `#${entries.find((e) => e.id === raw)?.name ?? raw}` : raw;
+      const shown = k.startsWith('CHANNEL_') ? `#${entries.find((e) => e.id === raw)?.name ?? raw}` : raw;
       return `${k} = ${raw === undefined ? "(default)" : shown || "(unset)"}${SETTINGS[k] ? ` — ${SETTINGS[k].about}` : ""}`;
     })
     .join("\n");

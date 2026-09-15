@@ -1,0 +1,9 @@
+# Hand-authored prose; prettier pairs glob asterisks as emphasis and corrupts them.
+*.md
+# The example prompts are prose too, and every instance copied them.
+agent/
+# Lockfile, dependencies.
+package-lock.json
+node_modules/
+# Local agent settings: untracked, not ours to format.
+.claude/

@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "builtin": true,
+    "node": true,
+    "es2026": true
+  },
+  "ignorePatterns": ["**/node_modules/**"],
+  "rules": {
+    "eqeqeq": ["error", "smart"],
+    "no-array-constructor": "error",
+    "no-else-return": "error",
+    "no-implicit-coercion": ["error", { "allow": ["!!"] }],
+    "no-unused-expressions": "error",
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "caughtErrors": "none" }],
+    "no-var": "error",
+    "object-shorthand": ["error", "always"],
+    "prefer-const": ["error", { "destructuring": "all" }],
+    "prefer-rest-params": "error",
+    "prefer-spread": "error"
+  }
+}

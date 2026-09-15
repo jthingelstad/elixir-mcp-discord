@@ -35,9 +35,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
-import { SECRET_KEYS, WIRING_KEYS, ENV_FILE_KEYS, ENV_ONLY_KEYS, isEnvFile, isEnvOnly, renderSecrets, renderConfig, parseConfig } from "./env-file.js";
+import { isEnvFile, isEnvOnly, renderSecrets, renderConfig, parseConfig } from "./env-file.js";
 
-export { SECRET_KEYS, WIRING_KEYS, ENV_FILE_KEYS, ENV_ONLY_KEYS, renderConfig };
+export { renderConfig };
 
 export const repoRoot = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -151,7 +151,6 @@ export function _setSettings(values) {
   settingsOverride = values;
 }
 
-const settings = new Proxy({}, { get: (_, key) => liveSettings()[key], has: (_, key) => Object.hasOwn(liveSettings(), key), ownKeys: () => Reflect.ownKeys(liveSettings()), getOwnPropertyDescriptor: (_, key) => (Object.hasOwn(liveSettings(), key) ? { value: liveSettings()[key], enumerable: true, configurable: true } : undefined) });
 
 /**
  * Where a value comes from. Secrets and paths: the environment (the shell,

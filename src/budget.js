@@ -90,12 +90,12 @@ export function check(lane, now = new Date()) {
 export function record(lane, usd, now = new Date()) {
   if (!(usd > 0)) return;
   const key = monthKey(now);
-  const budgets = { ...(state.get("budgets") || {}) };
-  const month = { ...(budgets[key] || {}) };
+  const budgets = { ...state.get("budgets") };
+  const month = { ...budgets[key] };
   month[lane] = (month[lane] || 0) + usd;
   budgets[key] = month;
 
-  const ceilings = { ...(state.get("turnCeilings") || {}) };
+  const ceilings = { ...state.get("turnCeilings") };
   if (usd > (ceilings[lane] || 0)) {
     ceilings[lane] = usd;
     log.info("turn_ceiling_raised", { lane, usd: usd.toFixed(4) });

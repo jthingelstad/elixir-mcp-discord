@@ -125,7 +125,7 @@ export function rememberPost(routineKey, text) {
   const state = read();
   const previous = state.lastPosts?.[routineKey] || [];
   const kept = [String(text).slice(0, LAST_POST_CHARS), ...previous].slice(0, LAST_POSTS_KEEP);
-  write({ ...state, lastPosts: { ...(state.lastPosts || {}), [routineKey]: kept } });
+  write({ ...state, lastPosts: { ...state.lastPosts, [routineKey]: kept } });
 }
 
 /** A routine's own recent posts, newest first. */
@@ -138,9 +138,9 @@ export function recentOwnPosts(routineKey, count) {
 export function rememberTurn(turnId, record, messageIds = []) {
   if (!turnId) return;
   const state = read();
-  const turns = { ...(state.turns || {}) };
+  const turns = { ...state.turns };
   const order = (state.turnOrder || []).filter((id) => id !== turnId);
-  const messageTurns = { ...(state.messageTurns || {}) };
+  const messageTurns = { ...state.messageTurns };
   turns[turnId] = { ...record, reactions: turns[turnId]?.reactions || {} };
   order.push(turnId);
   for (const id of messageIds) if (id) messageTurns[String(id)] = turnId;
@@ -165,7 +165,7 @@ export function markReaction(turnId, kind, value = true) {
   const state = read();
   const turn = state.turns?.[turnId];
   if (!turn) return false;
-  const reactions = { ...(turn.reactions || {}) };
+  const reactions = { ...turn.reactions };
   if (value && reactions[kind]) return false;
   if (value) reactions[kind] = new Date().toISOString();
   else delete reactions[kind];
@@ -175,7 +175,7 @@ export function markReaction(turnId, kind, value = true) {
 
 export function markRun(routineKey, periodKey) {
   const state = read();
-  write({ ...state, runs: { ...(state.runs || {}), [routineKey]: periodKey } });
+  write({ ...state, runs: { ...state.runs, [routineKey]: periodKey } });
 }
 
 /** Adds to today's spend and returns the new total, rolling over at midnight UTC. */

@@ -38,7 +38,7 @@ function recentlySent(fingerprint, every) {
 }
 
 function remember(fingerprint) {
-  const sent = { ...(state.get("notices") || {}), [fingerprint]: new Date().toISOString() };
+  const sent = { ...state.get("notices"), [fingerprint]: new Date().toISOString() };
   const keys = Object.keys(sent).sort((a, b) => (sent[a] < sent[b] ? -1 : 1)).slice(-KEEP);
   state.set({ notices: Object.fromEntries(keys.map((k) => [k, sent[k]])) });
 }

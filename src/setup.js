@@ -499,7 +499,7 @@ if (!inspected?.guild) {
   // The channels a routine binds — today just the ask channel — are chosen
   // from the DIRECTORY, not the whole server: the bot is already granted
   // there, and one of them is usually named for it. That one is the default.
-  let granted = inspected ? fromRest(inspected, permissionsIn) : [];
+  const granted = inspected ? fromRest(inspected, permissionsIn) : [];
   for (const requirement of requirements) {
     const envName = channelEnvName(requirement.name);
     const needsThreads = "CreatePublicThreads" in requirement.needs;

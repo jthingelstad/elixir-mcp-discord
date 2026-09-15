@@ -356,7 +356,7 @@ export function undoProposal({ review, proposal, by, agentDir = config.agentDir 
  * routine) runs with the proposed text in its prompt. Charged to the
  * review lane. Nothing is applied and nothing is posted.
  */
-export async function tryProposal({ review, proposal, agentDir = config.agentDir, runFn = runRoutine }) {
+export async function tryProposal({ proposal, agentDir = config.agentDir, runFn = runRoutine }) {
   const current = (() => {
     try {
       return fs.readFileSync(path.join(agentDir, proposal.file), "utf8");

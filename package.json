@@ -16,11 +16,22 @@
     "turns": "node src/turns.js",
     "review": "node src/cli.js review",
     "test": "node --test --import ./scripts/setup-tests.js",
+    "lint": "oxlint --deny-warnings --report-unused-disable-directives .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "knip": "knip",
+    "audit": "npm audit --omit=dev --audit-level=high",
+    "verify": "npm run format:check && npm run lint && npm run knip && npm run test",
     "setup": "node src/setup.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
     "discord.js": "^14.16.3",
     "dotenv": "^17.0.0"
+  },
+  "devDependencies": {
+    "knip": "^6.35.1",
+    "oxlint": "^1.83.0",
+    "prettier": "^3.9.6"
   }
 }

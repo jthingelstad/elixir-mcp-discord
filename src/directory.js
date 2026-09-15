@@ -193,7 +193,3 @@ export async function resolveById(id) {
   if (!provider?.resolve) return null;
   return provider.resolve(id);
 }
-
-export function postable(id) {
-  return directory().some((e) => e.id === id && e.role !== "ask");
-}

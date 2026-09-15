@@ -56,7 +56,7 @@ import { readAgentFiles, planEdit, applyProposal, undoProposal, tryProposal, ski
 
 // The editing machinery lives in src/proposals.js; re-exported so the DM
 // lane and the tests have one import for "a proposal".
-export { readAgentFiles, planEdit, applyProposal, undoProposal, tryProposal, skipProposal, findReview, lastDecision, withFields } from "./proposals.js";
+export { readAgentFiles, planEdit, applyProposal, undoProposal, tryProposal, findReview, lastDecision } from "./proposals.js";
 
 export const REPO_ISSUES = "https://github.com/jthingelstad/elixir-mcp-discord/issues";
 
@@ -384,7 +384,7 @@ export async function runReview({ trigger = "schedule", dryRun = false, askFn = 
     trigger,
     window,
     turnsRead: turns.length,
-    proposals: proposals.map(({ next, ...p }) => p),
+    proposals: proposals.map(({ next: _next, ...p }) => p),
     report,
     usd: result.usd,
     model: result.model,

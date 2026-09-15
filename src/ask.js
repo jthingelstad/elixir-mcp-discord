@@ -225,7 +225,7 @@ export function memberTurnsToday(userId, now = new Date()) {
 export function countMemberTurn(userId, now = new Date()) {
   const today = now.toISOString().slice(0, 10);
   const counts = state.get("askCounts") || {};
-  const byUser = counts.date === today ? { ...(counts.byUser || {}) } : {};
+  const byUser = counts.date === today ? { ...counts.byUser } : {};
   byUser[userId] = (byUser[userId] || 0) + 1;
   state.set({ askCounts: { date: today, byUser } });
 }
