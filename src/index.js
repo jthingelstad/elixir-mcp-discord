@@ -21,6 +21,8 @@ import { handleReaction } from "./reactions.js";
 import { startEventLoop } from "./events.js";
 import { startScheduler } from "./scheduler.js";
 import { startReview } from "./review.js";
+import * as notify from "./notify.js";
+import { handleDm } from "./dm.js";
 import { loadRoutines, routinesFor } from "./routines.js";
 import { registerCommands, handleInteraction } from "./commands.js";
 import { checkChannelPermissions } from "./permissions.js";
@@ -41,6 +43,8 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     // Reader 👍 / 👎 on a post is feedback; see src/reactions.js.
     GatewayIntentBits.GuildMessageReactions,
+    // The operator's console (src/dm.js) and where notices land (src/notify.js).
+    GatewayIntentBits.DirectMessages,
   ],
   // A reaction on a message posted before this process started arrives with
   // the message, the reaction and sometimes the user uncached; partials let
@@ -128,6 +132,7 @@ function reportPrincipal(handshake) {
 
 client.once(Events.ClientReady, async (ready) => {
   log.info("discord_ready", { user: ready.user.tag, guild: config.discord.guildId, build: buildId() });
+  notify.configure({ client });
   // Which instance this is, first. One checkout can run several bots, and a
   // log line that does not say whose .env it read is a log line that will be
   // read as another clan's.
@@ -149,6 +154,7 @@ client.once(Events.ClientReady, async (ready) => {
   const handshake = await initialize();
   if (!handshake.ok) {
     log.error("mcp_unreachable_at_boot", { error: handshake.error });
+    await notify.notify("Elixir unreachable at boot", `initialize failed: ${handshake.error}. Every lane will fail until it is back.`);
   } else {
     if (
       state.get("serverVersion") &&
@@ -165,6 +171,11 @@ client.once(Events.ClientReady, async (ready) => {
 
   const { routines, errors } = loadRoutines();
   for (const failure of errors) log.error("routine_invalid", failure);
+  if (errors.length) {
+    // The 2026-09-13 outage: every routine failed to parse and the only
+    // record was here. Now it is also a DM.
+    await notify.notify("routine files", `${errors.length} routine file${errors.length === 1 ? "" : "s"} failed to load and ${errors.length === 1 ? "is" : "are"} off the air: ${errors.map((e) => `${e.key} — ${e.error}`).join("; ")}`, { fingerprint: `routine_invalid:${errors.map((e) => e.key).join(",")}` });
+  }
 
   // THE DIRECTORY: where the model may post, from Discord's own permissions
   // (src/directory.js). Built from the gateway cache on demand; the ask
@@ -212,6 +223,7 @@ client.once(Events.ClientReady, async (ready) => {
       });
     } catch (error) {
       log.error("model_unpriced", { model, error: error.message });
+      await notify.notify("unpriced model", `${model} has no price in agent/models.json, so no budget could be enforced against it; the bot will not run until it does.`);
       throw error;
     }
   }
@@ -239,10 +251,14 @@ client.once(Events.ClientReady, async (ready) => {
   }
   if (routines.every((routine) => routine.disabled)) {
     log.error("no_active_routines", { dir: config.agentDir });
+    await notify.notify("no routines", `nothing is enabled in ${config.agentDir}; the bot is connected and doing nothing.`);
   }
   // Loud, per channel, before anything runs: a wrong id or a missing
   // permission is a routine that spends a model call and then cannot post.
-  await checkChannelPermissions({ client, routines, resolveChannel });
+  const problems = await checkChannelPermissions({ client, routines, resolveChannel });
+  if (problems.length) {
+    await notify.notify("channels", `${problems.length} bound channel${problems.length === 1 ? "" : "s"} unusable: ${problems.map((p) => `${p.name} (${p.reason}${p.missing?.length ? `: ${p.missing.join(", ")}` : ""})`).join("; ")}. Routines bound to them will fail until fixed and restarted.`, { fingerprint: `channels:${problems.map((p) => p.name).join(",")}` });
+  }
 
   await registerCommands(client);
   await postHello({ handshake, routines });
@@ -331,6 +347,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot || message.system) return;
+
+  // A direct message is the operator's console, or a stranger to turn away.
+  if (!message.guildId) {
+    await handleDm(message).catch((error) => log.error("dm_crashed", { error: error.message, stack: error.stack?.slice(0, 400) }));
+    return;
+  }
 
   // Routines are re-read per message so a prompt edit takes effect on the next
   // question, not the next restart. A message in a thread under the routine's

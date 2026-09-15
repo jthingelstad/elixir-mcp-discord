@@ -235,9 +235,9 @@ if (checkOnly && !fs.existsSync(agentDir)) {
 if (!checkOnly) {
   fs.mkdirSync(path.join(instanceDir, "state"), { recursive: true });
   fs.mkdirSync(path.join(agentDir, "routines"), { recursive: true });
-  // lessons.md too: the review lane writes it, and the example's header tells
+  // memory.md too: the review lane writes it, and the example's header tells
   // the model (and the operator) what the file is for. Missing is legal.
-  for (const file of ["identity.md", "models.json", "lessons.md"]) {
+  for (const file of ["identity.md", "models.json", "memory.md"]) {
     if (!fs.existsSync(path.join(agentDir, file))) fs.copyFileSync(path.join(exampleDir, file), path.join(agentDir, file));
   }
 }

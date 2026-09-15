@@ -12,6 +12,7 @@ import { dueRoutines, currentPeriods } from "./schedule.js";
 import { runRoutine } from "./run.js";
 import { spendBlock } from "./claude.js";
 import { log } from "./log.js";
+import { notify } from "./notify.js";
 import * as state from "./state.js";
 
 export async function tick(routines, resolveChannel, now = new Date()) {
@@ -26,6 +27,7 @@ export async function tick(routines, resolveChannel, now = new Date()) {
       reason: blocked.reason,
       due: due.map((entry) => entry.routine.key).join(","),
     });
+    await notify("budget", `${due.map((e) => e.routine.key).join(", ")} due and not run: the routines lane is ${blocked.reason} ($${blocked.spent?.toFixed(2) ?? "?"} of $${blocked.budget?.toFixed(2) ?? "?"} this month). They run again when it resets.`, { fingerprint: `budget:routines:${blocked.reason}`, every: 24 * 3600 * 1000 });
     return;
   }
 

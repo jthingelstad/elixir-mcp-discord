@@ -249,9 +249,9 @@ export const config = {
     // this was designed for: enough turns to see a pattern, few enough
     // proposals to read.
     at: parseReviewAt(optional("REVIEW_AT", "sun 20:00")),
-    // Let the review write agent/lessons.md without a click. Never
+    // Let the review write agent/memory.md without a click. Never
     // identity.md, never a routine — those are policy and stay gated.
-    autoLessons: optional("REVIEW_AUTO_LESSONS", "false").toLowerCase() === "true",
+    autoMemory: optional("REVIEW_AUTO_MEMORY", "false").toLowerCase() === "true",
     // Proposals per review. Three is a decision; ten is a backlog.
     maxProposals: Number(optional("REVIEW_MAX_PROPOSALS", "3")),
   },

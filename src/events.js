@@ -27,6 +27,7 @@ import { runRoutine } from "./run.js";
 import { newFeedbackResponses } from "./feedback.js";
 import { directory, resolveById } from "./directory.js";
 import { log } from "./log.js";
+import { notify } from "./notify.js";
 import * as state from "./state.js";
 
 /**
@@ -185,18 +186,20 @@ export function shouldReadFeedback({ seeded, pending }) {
  * argument for the product there is.
  */
 export async function postFeedbackResponses(channel, { seedOnly = false } = {}) {
-  if (!channel) return;
   for (const item of await newFeedbackResponses({ seedOnly })) {
     const shipped = item.shippedIn ? ` (shipped in ${item.shippedIn})` : "";
-    await channel.send(
-      [
-        `**Elixir MCP answered feedback this agent filed**${shipped}`,
-        `> ${item.message.slice(0, 400).replace(/\n/g, "\n> ")}`,
-        "",
-        item.response.slice(0, 1200),
-      ].join("\n"),
-    );
-    log.info("feedback_response_posted", { id: item.id });
+    const text = [
+      `**Elixir MCP answered feedback this agent filed**${shipped}`,
+      `> ${item.message.slice(0, 400).replace(/\n/g, "\n> ")}`,
+      "",
+      item.response.slice(0, 1200),
+    ].join("\n");
+    if (channel) await channel.send(text);
+    // The operator is the one who can act on an answer ("pass the segment",
+    // "that ships next week"), so it is also a DM — whether or not a channel
+    // is bound.
+    await notify("Elixir answered", text, { fingerprint: `feedback_response:${item.id}` });
+    log.info("feedback_response_posted", { id: item.id, channel: channel ? channel.id : "dm only" });
   }
 }
 
@@ -225,8 +228,9 @@ export function startEventLoop(routinesFn, resolveChannel) {
     for (const routine of routines) {
       const channel = routine.channel ? await resolveChannel(routine.channel) : null;
       if (routine.channel && !channel) continue;
-      const meta = await pollRoutine(routine, channel).catch((error) => {
+      const meta = await pollRoutine(routine, channel).catch(async (error) => {
         log.error("events_routine_crashed", { routine: routine.key, error: error.message });
+        await notify("feed routine crashed", `${routine.key}: ${error.message.slice(0, 300)}`, { fingerprint: `events_crashed:${routine.key}` });
         return null;
       });
       if (meta?.feedback_responses_pending !== undefined) {

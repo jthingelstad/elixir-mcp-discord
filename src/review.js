@@ -5,7 +5,7 @@
  * reads the turn ledger (src/ledger.js) for a window, grades what the bot said
  * against the bot's own rules, and turns what it finds into EDITS to the
  * files the operator owns — proposed by DM with a button to apply. Accepted
- * edits are the bot's memory (agent/lessons.md, identity.md, a routine's
+ * edits are the bot's memory (agent/memory.md, identity.md, a routine's
  * brief); prompts hot-load, so accepting is deploying.
  *
  * Why it is shaped this way, in order of importance:
@@ -29,11 +29,11 @@
  *   model-written prompt edits from becoming drift.
  *
  *   BOUNDED. At most REVIEW_MAX_PROPOSALS per review; diffs, never rewrites;
- *   each cites turns; lessons.md has a hard cap and the review prunes it.
+ *   each cites turns; memory.md has a hard cap and the review prunes it.
  *   Its own model, budget lane and clock, so it can never cost a member an
  *   answer.
  *
- * What it may touch: files under agent/ — lessons.md, identity.md,
+ * What it may touch: files under agent/ — memory.md, identity.md,
  * routines/<key>.md below the front matter. Nothing else, ever: not src/,
  * not .env, not a routine's fields. Every write keeps the prior version under
  * agent/.history/. Nothing here posts to a member channel.
@@ -44,13 +44,14 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 import { ask, spendBlock } from "./claude.js";
-import { MECHANICS, LESSONS_MAX_CHARS } from "./prompt.js";
+import { MECHANICS, MEMORY_MAX_CHARS, MEMORY_ENTRY, parseMemoryEntry } from "./prompt.js";
 import { renderTurn } from "./turns.js";
 import { dueRoutines, periodKey, lastOccurrence } from "./schedule.js";
 import { chunk } from "./post.js";
 import * as budget from "./budget.js";
 import * as ledger from "./ledger.js";
 import { log } from "./log.js";
+import { notify } from "./notify.js";
 import * as state from "./state.js";
 
 export const REPO_ISSUES = "https://github.com/jthingelstad/elixir-mcp-discord/issues";
@@ -60,18 +61,18 @@ const DAY_MS = 86_400_000;
 const WINDOW_CHARS = 700_000;
 /** A flagged turn is shown with tool bodies, unless it is this big. */
 const FULL_TURN_CHARS = 30_000;
-const MAX_LESSON_ENTRIES = 20;
+const MAX_MEMORY_ENTRIES = 20;
 const MAX_MECHANICS_REPORTS = 5;
 const HISTORY_DIR = ".history";
 
 // ---------------------------------------------------------------- the files
 
-const EDITABLE = /^(lessons\.md|identity\.md|routines\/[a-z0-9-]+\.md)$/;
+const EDITABLE = /^(memory\.md|identity\.md|routines\/[a-z0-9-]+\.md)$/;
 
 /** The operator's files as the review may see and edit them. */
 export function readAgentFiles({ dir = config.agentDir } = {}) {
   const files = {};
-  for (const name of ["identity.md", "lessons.md"]) {
+  for (const name of ["identity.md", "memory.md"]) {
     try {
       files[name] = fs.readFileSync(path.join(dir, name), "utf8");
     } catch {
@@ -94,7 +95,7 @@ function bodyStart(text) {
   return match ? match[0].length : 0;
 }
 
-const lessonLines = (text) => (text || "").split("\n").filter((l) => /^- /.test(l));
+const memoryLines = (text) => (text || "").split("\n").filter((l) => parseMemoryEntry(l));
 
 /**
  * Check an edit against the file as it is NOW, and produce the file as it
@@ -103,17 +104,17 @@ const lessonLines = (text) => (text || "").split("\n").filter((l) => /^- /.test(
  * apply time, so a file edited by hand in between refuses cleanly.
  */
 export function planEdit({ file, edit, current }) {
-  if (!EDITABLE.test(file)) return { ok: false, error: `${file} is not editable; only lessons.md, identity.md and routines/<key>.md are` };
+  if (!EDITABLE.test(file)) return { ok: false, error: `${file} is not editable; only memory.md, identity.md and routines/<key>.md are` };
   const text = current ?? "";
   const op = edit?.op;
   if (op === "append") {
-    if (file !== "lessons.md") return { ok: false, error: "append is only for lessons.md; use replace for the other files" };
+    if (file !== "memory.md") return { ok: false, error: "append is only for memory.md; use replace for the other files" };
     const entry = String(edit.text ?? "").trim();
-    if (!/^- \d{4}-\d{2}-\d{2} /.test(entry)) return { ok: false, error: 'a lesson is one line: "- YYYY-MM-DD (turns a1b2c3d4, ...): what to do here"' };
-    if (entry.includes("\n")) return { ok: false, error: "a lesson is one line" };
-    if (lessonLines(text).length >= MAX_LESSON_ENTRIES) return { ok: false, error: `lessons.md already has ${MAX_LESSON_ENTRIES} entries; propose removing one first` };
+    if (entry.includes("\n")) return { ok: false, error: "a memory entry is one line" };
+    if (!MEMORY_ENTRY.test(entry)) return { ok: false, error: 'a memory entry is one line: "- YYYY-MM-DD (turns a1b2c3d4, ...): ..." or "- YYYY-MM-DD (from owner): ..." with an optional " until YYYY-MM-DD" before the colon' };
+    if (memoryLines(text).length >= MAX_MEMORY_ENTRIES) return { ok: false, error: `memory.md already has ${MAX_MEMORY_ENTRIES} entries; propose removing one first` };
     const next = `${text.trim() ? `${text.replace(/\s*$/, "")}\n` : ""}${entry}\n`;
-    if (next.length > LESSONS_MAX_CHARS) return { ok: false, error: `lessons.md would exceed ${LESSONS_MAX_CHARS} characters; prune first` };
+    if (next.length > MEMORY_MAX_CHARS) return { ok: false, error: `memory.md would exceed ${MEMORY_MAX_CHARS} characters; prune first` };
     return { ok: true, next, preview: `+ ${entry}` };
   }
   if (op === "replace" || op === "remove") {
@@ -127,6 +128,10 @@ export function planEdit({ file, edit, current }) {
     if (op === "replace" && !replacement.trim()) return { ok: false, error: "replace is empty; use remove to delete" };
     let next = text.slice(0, first) + replacement + text.slice(first + find.length);
     if (op === "remove") next = next.replace(/\n{3,}/g, "\n\n");
+    // What the operator said is theirs to remove, never the review's.
+    if (file === "memory.md" && op === "remove" && edit.by !== "owner" && find.split("\n").some((l) => parseMemoryEntry(l)?.source === "owner")) {
+      return { ok: false, error: "that entry came from the operator; only they remove it" };
+    }
     const preview = [
       ...find.split("\n").map((l) => `- ${l}`),
       ...(op === "remove" ? [] : replacement.split("\n").map((l) => `+ ${l}`)),
@@ -252,16 +257,18 @@ your own reading of the rubric. Read the flagged turns first; they are shown
 in full.
 
 WHAT YOU CAN CHANGE — call propose_change, at most the number allowed:
-- lessons.md (append): one dated line on how to do this job HERE — which tool
-  answers which question and with what arguments, what this clan calls
-  things, what a brief left out. Never a fact about the game (Elixir has
-  those), never anything about a person, never a member's name or tag.
+- memory.md (append): one line, "- YYYY-MM-DD (turns a1b2c3d4, e5f6a7b8):
+  ...", on how to do this job HERE — which tool answers which question and
+  with what arguments, what this clan calls things, what a brief left out.
+  Never a fact about the game (Elixir has those), never anything about a
+  person, never a member's name or tag. Entries marked "(from owner)" are
+  the operator's own words: never propose removing or rewording them.
 - identity.md (replace/remove): a house rule that produced bad outcomes.
 - routines/<key>.md (replace/remove): a brief that asks for the wrong thing.
   The front matter is not editable.
 Rules for proposals: the SMALLEST edit that fixes the pattern — diffs, never
 rewrites. Each must cite at least two turns, or one turn with a human signal.
-Prefer lessons.md for procedure; touch identity.md or a brief only when a
+Prefer memory.md for procedure; touch identity.md or a brief only when a
 rule is wrong. Quote \`find\` text exactly as it appears in the file. If a
 proposal is refused, read the error and fix it or drop it.
 
@@ -269,17 +276,18 @@ WHAT YOU CANNOT CHANGE: MECHANICS (code). If the fix belongs there, call
 report_mechanics — it becomes a report the operator can paste into an issue.
 If the fix is Elixir's (a tool's shape, a misleading note, a missing
 capability), call elixir_feedback with the request ids — and if you ALSO add
-a lesson that works around it, say so in the lesson so it can be dropped when
-Elixir ships the fix.
+a memory entry that works around it, say so in the entry so it can be
+dropped when Elixir ships the fix.
 
 MEASURE FIRST. The previous review's proposals and what the operator did with
 them are listed. For each APPLIED or AUTO edit, say from the turns since
 whether it did what it claimed, with turn ids and counts. If it did not,
 propose reverting it (a remove or replace edit).
 
-PRUNE. A lessons.md entry that no turn in this window needed and that is
-older than 30 days gets a remove proposal, unless it is plainly still
-load-bearing. Reversing something a human accepted needs a reason; say it.
+PRUNE. A turn-cited memory.md entry that no turn in this window needed and
+that is older than 30 days gets a remove proposal, unless it is plainly
+still load-bearing. Reversing something a human accepted needs a reason;
+say it. Expired "until" entries drop out on their own; leave them.
 
 YOUR FINAL TEXT IS THE REPORT the operator reads in a DM, Discord markdown,
 under 1500 characters, no greeting. Three parts, in this order:
@@ -297,7 +305,7 @@ function proposeTool({ files, proposals, max }) {
     input_schema: {
       type: "object",
       properties: {
-        file: { type: "string", description: "lessons.md, identity.md, or routines/<key>.md" },
+        file: { type: "string", description: "memory.md, identity.md, or routines/<key>.md" },
         rule: { type: "string", description: "The rule this is about, in a few words (e.g. 'first-contact identity', 'notable-movers brief')." },
         turn_ids: { type: "array", items: { type: "string" }, description: "The turns that taught this. At least two, or one with a human signal." },
         summary: { type: "string", description: "What changes and why, for the operator, under 200 characters." },
@@ -305,7 +313,7 @@ function proposeTool({ files, proposals, max }) {
           type: "object",
           properties: {
             op: { type: "string", enum: ["append", "replace", "remove"] },
-            text: { type: "string", description: "append: the one-line lesson, '- YYYY-MM-DD (turns ...): ...'" },
+            text: { type: "string", description: "append: the one-line memory entry, '- YYYY-MM-DD (turns ...): ...'" },
             find: { type: "string", description: "replace/remove: the exact text to change, quoted from the file, occurring once" },
             replace: { type: "string", description: "replace: the new text" },
           },
@@ -321,7 +329,7 @@ function proposeTool({ files, proposals, max }) {
       const ids = (turn_ids || []).map(String).filter(Boolean);
       if (ids.length === 0) return { ok: false, code: "uncited", error: "cite the turn ids that taught this" };
       // The plan runs against the file plus any earlier proposal to the same
-      // file this review, so two edits to lessons.md do not both claim slot 20.
+      // file this review, so two edits to memory.md do not both claim slot 20.
       const current = proposals.filter((p) => p.file === file).at(-1)?.next ?? files[file] ?? "";
       const plan = planEdit({ file, edit, current });
       if (!plan.ok) return { ok: false, code: "refused", error: plan.error };
@@ -364,7 +372,7 @@ function reportTool({ reports }) {
   };
 }
 
-function userMessage({ window, previous, files, rendered, lessonsCap }) {
+function userMessage({ window, previous, files, rendered, memoryCap }) {
   const fileBlocks = Object.entries(files)
     .filter(([, text]) => text !== null)
     .map(([name, text]) => `### ${name}\n\`\`\`\n${text}\n\`\`\``)
@@ -373,7 +381,7 @@ function userMessage({ window, previous, files, rendered, lessonsCap }) {
     .map(([name, text]) => `### ${name}\n${text}`)
     .join("\n\n");
   return [
-    `## WINDOW\n${window.since.slice(0, 16)}Z to ${window.until.slice(0, 16)}Z. ${rendered.shown} turns shown (${rendered.flagged} flagged, shown in full); ${rendered.omitted} older turns omitted for length. lessons.md may hold ${MAX_LESSON_ENTRIES} entries / ${lessonsCap} characters.`,
+    `## WINDOW\n${window.since.slice(0, 16)}Z to ${window.until.slice(0, 16)}Z. ${rendered.shown} turns shown (${rendered.flagged} flagged, shown in full); ${rendered.omitted} older turns omitted for length. memory.md may hold ${MAX_MEMORY_ENTRIES} entries / ${memoryCap} characters.`,
     `## PREVIOUS REVIEW\n${describePrevious(previous)}`,
     `## THE OPERATOR'S FILES (editable through propose_change)\n\n${fileBlocks || "(none)"}`,
     `## MECHANICS (code; report_mechanics if the fix is here)\n\n${mechanics}`,
@@ -383,7 +391,7 @@ function userMessage({ window, previous, files, rendered, lessonsCap }) {
 
 /**
  * Run one review. Reads the window, calls the model, persists the review
- * record, applies auto-lessons if configured, and returns everything the
+ * record, applies memory entries unattended if configured, and returns everything the
  * caller needs to deliver it. `dryRun` reads and calls but persists nothing.
  */
 export async function runReview({ trigger = "schedule", dryRun = false, askFn = ask, now = new Date(), agentDir = config.agentDir } = {}) {
@@ -415,7 +423,7 @@ export async function runReview({ trigger = "schedule", dryRun = false, askFn = 
     : SYSTEM;
   const result = await askFn({
     system,
-    messages: [{ role: "user", content: userMessage({ window, previous, files, rendered, lessonsCap: LESSONS_MAX_CHARS }) }],
+    messages: [{ role: "user", content: userMessage({ window, previous, files, rendered, memoryCap: MEMORY_MAX_CHARS }) }],
     model: config.review.model,
     effort: config.review.effort,
     maxTokens: 16000,
@@ -426,6 +434,7 @@ export async function runReview({ trigger = "schedule", dryRun = false, askFn = 
   });
   if (!result.ok) {
     log.error("review_failed", { reviewId, error: result.error });
+    if (!dryRun) await notify("review failed", String(result.error).slice(0, 300));
     return { ok: false, error: result.error, reviewId };
   }
 
@@ -451,9 +460,9 @@ export async function runReview({ trigger = "schedule", dryRun = false, askFn = 
     ledger.append(record);
     for (const summary of filed) ledger.append({ ...ledger.filedEntry({ turnId: null, summary }), reviewId });
     state.set({ reviewedThrough: window.until });
-    if (config.review.autoLessons) {
+    if (config.review.autoMemory) {
       for (const p of proposals) {
-        if (p.file !== "lessons.md" || p.edit?.op !== "append") continue;
+        if (p.file !== "memory.md" || p.edit?.op !== "append") continue;
         const outcome = applyProposal({ review: record, proposal: p, by: "auto", agentDir });
         if (outcome.ok) applied.push(p.id);
       }
@@ -570,7 +579,7 @@ export function parseButtonId(customId) {
 /** Message + buttons for one proposal, as discord.js message options. */
 export function proposalMessage(review, proposal, { index, total, decision = null, components = true }) {
   const status = decision
-    ? { applied: "✅ Applied", auto: "✅ Applied automatically (lessons)", skipped: "⏭ Skipped", reverted: "↩️ Reverted", refused: "⚠️ Could not apply" }[decision.decision] ?? decision.decision
+    ? { applied: "✅ Applied", auto: "✅ Applied automatically (memory)", skipped: "⏭ Skipped", reverted: "↩️ Reverted", refused: "⚠️ Could not apply" }[decision.decision] ?? decision.decision
     : null;
   const content = [
     `**Proposal ${index} of ${total}** · \`${proposal.file}\` · ${proposal.rule}`,
@@ -597,7 +606,7 @@ export function proposalMessage(review, proposal, { index, total, decision = nul
   return { content: content.slice(0, 2000), buttons };
 }
 
-function toComponents(buttons) {
+export function toComponents(buttons) {
   if (!buttons.length) return [];
   return [
     {
@@ -722,7 +731,7 @@ export async function tick({ client, now = new Date() }) {
     log.error("review_crashed", { error: error.message });
     return { ok: false, error: error.message };
   });
-  // Re-read from the ledger so auto-applied lessons carry their decisions.
+  // Re-read from the ledger so auto-applied memory entries carry their decisions.
   if (outcome.ok && !outcome.empty) await deliver({ client, review: findReview(outcome.reviewId) ?? outcome.record, outcome });
   return true;
 }
@@ -738,7 +747,7 @@ export function startReview(client) {
     effort: config.review.effort,
     at: `${routine.days ? routine.days.map((d) => ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][d]).join(",") : "daily"} ${routine.at.hour}:${String(routine.at.minute).padStart(2, "0")}`,
     budget: config.review.monthlyBudgetUsd ?? "UNLIMITED",
-    autoLessons: config.review.autoLessons || undefined,
+    autoMemory: config.review.autoMemory || undefined,
     admins: config.adminUserIds.size,
   });
   const run = () => tick({ client }).catch((error) => log.error("review_tick_failed", { error: error.message }));

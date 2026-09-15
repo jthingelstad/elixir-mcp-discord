@@ -34,7 +34,7 @@
  *   review        one run of the review lane — the window it read, what it
  *                 proposed, the report it wrote
  *   decision      what the operator did with a proposal: applied, skipped,
- *                 removed, or auto (lessons written without a click)
+ *                 removed, or auto (memory written without a click)
  *
  * Later signals are their own lines rather than edits to the turn line, so a
  * file is only ever appended to and a reader joins on turnId.

@@ -30,7 +30,7 @@ import {
 } from "../src/review.js";
 import { parseVerdict } from "../src/feedback.js";
 import { looksLikeCorrection } from "../src/ask.js";
-import { readLessons, systemFor } from "../src/prompt.js";
+import { readMemory, systemFor } from "../src/prompt.js";
 import { parseRoutine } from "../src/routines.js";
 import { handleAsk } from "../src/ask.js";
 import { handleReaction } from "../src/reactions.js";
@@ -78,12 +78,18 @@ const turn = (overrides = {}) => {
 
 // ------------------------------------------------------------ planEdit
 
-test("a lesson appends as one dated line, and lessons.md is the only file that appends", () => {
-  const ok = planEdit({ file: "lessons.md", edit: { op: "append", text: "- 2026-09-14 (turns a1b2c3d4): pass segment to battles_meta_cards" }, current: "# Lessons\n" });
+test("a memory entry appends as one dated line with its provenance, and memory.md is the only file that appends", () => {
+  const ok = planEdit({ file: "memory.md", edit: { op: "append", text: "- 2026-09-14 (turns a1b2c3d4): pass segment to battles_meta_cards" }, current: "# Memory\n" });
   assert.equal(ok.ok, true);
   assert.match(ok.next, /\n- 2026-09-14 \(turns a1b2c3d4\): pass segment/);
   assert.equal(ok.preview.startsWith("+ - 2026-09-14"), true);
-  assert.equal(planEdit({ file: "lessons.md", edit: { op: "append", text: "pass segment" }, current: "" }).ok, false, "undated is refused");
+  assert.equal(planEdit({ file: "memory.md", edit: { op: "append", text: "pass segment" }, current: "" }).ok, false, "undated is refused");
+  assert.equal(planEdit({ file: "memory.md", edit: { op: "append", text: "- 2026-09-14: no provenance" }, current: "" }).ok, false, "provenance is required");
+  assert.equal(planEdit({ file: "memory.md", edit: { op: "append", text: "- 2026-09-14 (from owner) until 2026-09-21: pushing for top 10" }, current: "" }).ok, true, "owner entries with an expiry");
+  // What the operator wrote is theirs to remove.
+  const owned = "- 2026-09-14 (from owner): we call war days boat days\n";
+  assert.match(planEdit({ file: "memory.md", edit: { op: "remove", find: "- 2026-09-14 (from owner): we call war days boat days" }, current: owned }).error, /came from the operator/);
+  assert.equal(planEdit({ file: "memory.md", edit: { op: "remove", find: "- 2026-09-14 (from owner): we call war days boat days", by: "owner" }, current: owned }).ok, true);
   assert.equal(planEdit({ file: "identity.md", edit: { op: "append", text: "- 2026-09-14 x" }, current: "" }).ok, false, "append is lessons-only");
 });
 
@@ -104,11 +110,11 @@ test("nothing outside agent/'s three kinds of file is editable, whatever the pat
   }
 });
 
-test("lessons.md is bounded by entries and by characters", () => {
+test("memory.md is bounded by entries and by characters", () => {
   const twenty = Array.from({ length: 20 }, (_, i) => `- 2026-09-0${(i % 9) + 1} (turns x): lesson ${i}`).join("\n");
-  assert.match(planEdit({ file: "lessons.md", edit: { op: "append", text: "- 2026-09-14 (turns y): one more" }, current: twenty }).error, /already has 20/);
+  assert.match(planEdit({ file: "memory.md", edit: { op: "append", text: "- 2026-09-14 (turns y): one more" }, current: twenty }).error, /already has 20/);
   const fat = `- 2026-09-01 (turns x): ${"x".repeat(5990)}`;
-  assert.match(planEdit({ file: "lessons.md", edit: { op: "append", text: "- 2026-09-14 (turns y): tip" }, current: fat }).error, /exceed/);
+  assert.match(planEdit({ file: "memory.md", edit: { op: "append", text: "- 2026-09-14 (turns y): tip" }, current: fat }).error, /exceed/);
 });
 
 // ------------------------------------------------------- the window
@@ -160,7 +166,7 @@ function fakeAsk(calls) {
 
 test("a review reads the window, records proposals with diffs, and moves the cursor", async (t) => {
   fresh();
-  const dir = agentDir(t, { "lessons.md": "# Lessons\n", "identity.md": "Plain and direct.\n" });
+  const dir = agentDir(t, { "memory.md": "# Memory\n", "identity.md": "Plain and direct.\n" });
   ledger.append(turn({ turnId: "aaaa0001" }));
   ledger.append(turn({ turnId: "bbbb0002" }));
   ledger.append(ledger.reactionEntry({ turnId: "bbbb0002", reaction: "down", userId: "7", note: "wrong" }));
@@ -169,7 +175,7 @@ test("a review reads the window, records proposals with diffs, and moves the cur
     trigger: "command",
     agentDir: dir,
     askFn: fakeAsk([
-      ["propose_change", { file: "lessons.md", rule: "windows", turn_ids: ["bbbb0002"], summary: "Say which window a summary covers.", edit: { op: "append", text: "- 2026-09-14 (turns bbbb0002): name the window in every summary" } }],
+      ["propose_change", { file: "memory.md", rule: "windows", turn_ids: ["bbbb0002"], summary: "Say which window a summary covers.", edit: { op: "append", text: "- 2026-09-14 (turns bbbb0002): name the window in every summary" } }],
       ["propose_change", { file: "identity.md", rule: "voice", turn_ids: ["aaaa0001", "bbbb0002"], summary: "Shorter.", edit: { op: "replace", find: "Plain and direct.", replace: "Plain, direct, short." } }],
       ["propose_change", { file: "src/prompt.js", rule: "x", turn_ids: ["aaaa0001"], summary: "no", edit: { op: "append", text: "- 2026-09-14 x" } }],
       ["report_mechanics", { rule: "WHO_IS_ASKING", turn_ids: ["bbbb0002"], summary: "asked for a tag it could look up" }],
@@ -179,11 +185,11 @@ test("a review reads the window, records proposals with diffs, and moves the cur
   assert.equal(outcome.turns, 2);
   assert.equal(outcome.flagged, 1);
   assert.equal(outcome.proposals.length, 2, "the src/ edit was refused");
-  assert.equal(outcome.proposals[0].file, "lessons.md");
+  assert.equal(outcome.proposals[0].file, "memory.md");
   assert.match(outcome.proposals[0].preview, /^\+ - 2026-09-14/);
   assert.equal(outcome.proposals[1].preview, "- Plain and direct.\n+ Plain, direct, short.");
   assert.equal(outcome.reports.length, 1);
-  assert.equal(fs.readFileSync(path.join(dir, "lessons.md"), "utf8"), "# Lessons\n", "nothing written without a click");
+  assert.equal(fs.readFileSync(path.join(dir, "memory.md"), "utf8"), "# Memory\n", "nothing written without a click");
 
   const review = findReview(outcome.reviewId);
   assert.equal(review.turnsRead, 2);
@@ -198,10 +204,10 @@ test("a review reads the window, records proposals with diffs, and moves the cur
 
 test("a dry run costs the call and writes nothing — here or upstream", async (t) => {
   fresh();
-  const dir = agentDir(t, { "lessons.md": "# Lessons\n" });
+  const dir = agentDir(t, { "memory.md": "# Memory\n" });
   ledger.append(turn({ turnId: "aaaa0001" }));
   let system;
-  const inner = fakeAsk([["propose_change", { file: "lessons.md", rule: "r", turn_ids: ["aaaa0001"], summary: "s", edit: { op: "append", text: "- 2026-09-14 (turns aaaa0001): x" } }]]);
+  const inner = fakeAsk([["propose_change", { file: "memory.md", rule: "r", turn_ids: ["aaaa0001"], summary: "s", edit: { op: "append", text: "- 2026-09-14 (turns aaaa0001): x" } }]]);
   const outcome = await runReview({ trigger: "cli", dryRun: true, agentDir: dir, askFn: async (args) => ((system = args.system), inner(args)) });
   assert.match(system, /REHEARSAL: do not call elixir_feedback/);
   assert.equal(outcome.proposals.length, 1);
@@ -211,9 +217,9 @@ test("a dry run costs the call and writes nothing — here or upstream", async (
 
 test("the proposal cap holds, and a refused proposal says why", async (t) => {
   fresh();
-  const dir = agentDir(t, { "lessons.md": "# Lessons\n" });
+  const dir = agentDir(t, { "memory.md": "# Memory\n" });
   ledger.append(turn({ turnId: "aaaa0001" }));
-  const calls = Array.from({ length: 5 }, (_, i) => ["propose_change", { file: "lessons.md", rule: "r", turn_ids: ["aaaa0001"], summary: `s${i}`, edit: { op: "append", text: `- 2026-09-14 (turns aaaa0001): lesson ${i}` } }]);
+  const calls = Array.from({ length: 5 }, (_, i) => ["propose_change", { file: "memory.md", rule: "r", turn_ids: ["aaaa0001"], summary: `s${i}`, edit: { op: "append", text: `- 2026-09-14 (turns aaaa0001): lesson ${i}` } }]);
   const askFn = fakeAsk(calls);
   let seen;
   const outcome = await runReview({ trigger: "command", agentDir: dir, askFn: async (args) => (seen = await askFn(args)) });
@@ -257,12 +263,12 @@ test("apply writes the file with a backup; undo restores it while untouched; a h
 
 test("the DM for a proposal carries the diff and the right buttons for its state", () => {
   const review = { reviewId: "r1", proposals: [] };
-  const proposal = { id: "p1", file: "lessons.md", rule: "windows", turnIds: ["a", "b"], summary: "Name the window.", preview: "+ - 2026-09-14 (turns a, b): name the window" };
+  const proposal = { id: "p1", file: "memory.md", rule: "windows", turnIds: ["a", "b"], summary: "Name the window.", preview: "+ - 2026-09-14 (turns a, b): name the window" };
   const pending = proposalMessage(review, proposal, { index: 1, total: 2 });
   assert.match(pending.content, /Proposal 1 of 2/);
   assert.match(pending.content, /```diff\n\+ - 2026-09-14/);
   assert.deepEqual(pending.buttons.map((b) => b.label), ["Apply", "Skip", "Show turns"]);
-  const applied = proposalMessage(review, proposal, { index: 1, total: 2, decision: { decision: "applied", by: "9", detail: { backup: "/x/.history/lessons.md.t" } } });
+  const applied = proposalMessage(review, proposal, { index: 1, total: 2, decision: { decision: "applied", by: "9", detail: { backup: "/x/.history/memory.md.t" } } });
   assert.match(applied.content, /✅ Applied by <@9>/);
   assert.deepEqual(applied.buttons.map((b) => b.label), ["Undo", "Show turns"]);
   const skipped = proposalMessage(review, proposal, { index: 1, total: 2, decision: { decision: "skipped", by: "9" } });
@@ -273,9 +279,9 @@ test("the DM for a proposal carries the diff and the right buttons for its state
 
 test("a button applies for an admin and refuses everyone else", async (t) => {
   fresh();
-  const dir = agentDir(t, { "lessons.md": "# Lessons\n" });
+  const dir = agentDir(t, { "memory.md": "# Memory\n" });
   ledger.append(turn({ turnId: "aaaa0001" }));
-  const outcome = await runReview({ trigger: "command", agentDir: dir, askFn: fakeAsk([["propose_change", { file: "lessons.md", rule: "r", turn_ids: ["aaaa0001"], summary: "s", edit: { op: "append", text: "- 2026-09-14 (turns aaaa0001): a lesson" } }]]) });
+  const outcome = await runReview({ trigger: "command", agentDir: dir, askFn: fakeAsk([["propose_change", { file: "memory.md", rule: "r", turn_ids: ["aaaa0001"], summary: "s", edit: { op: "append", text: "- 2026-09-14 (turns aaaa0001): a lesson" } }]]) });
   const fake = (userId, action) => {
     const replies = [];
     const updates = [];
@@ -294,7 +300,7 @@ test("a button applies for an admin and refuses everyone else", async (t) => {
   const stranger = fake("1", "apply");
   await handleButton(stranger.interaction, { isAdmin: (id) => id === "9" });
   assert.match(stranger.replies[0].content, /whoever runs this bot/);
-  assert.equal(fs.readFileSync(path.join(dir, "lessons.md"), "utf8"), "# Lessons\n");
+  assert.equal(fs.readFileSync(path.join(dir, "memory.md"), "utf8"), "# Memory\n");
 
   // The live apply resolves agentDir from config; point the proposal at ours
   // by writing to config's dir is not possible here, so exercise skip+show.
@@ -325,14 +331,23 @@ test("a correction from the asker is recognised; ordinary follow-ups are not", (
   assert.equal(looksLikeCorrection("thanks!"), false);
 });
 
-test("lessons.md rides the system prompt after the house rules, and a missing file is nothing", (t) => {
-  const dir = agentDir(t, { "lessons.md": "- 2026-09-14 (turns a): pass the segment to battles_meta_cards" });
+test("memory.md rides the system prompt after the house rules; expired lines drop out; a missing file is nothing", (t) => {
+  const dir = agentDir(t, {
+    "memory.md": [
+      "- 2026-09-14 (turns a): pass the segment to battles_meta_cards",
+      "- 2026-09-14 (from owner) until 2026-09-21: pushing for top 10 this week",
+      "- 2026-09-01 (from owner) until 2026-09-07: last week's push, now over",
+    ].join("\n"),
+  });
   const routine = parseRoutine("ask", "---\ntrigger: message\nchannel: ask\n---\nAnswer.");
-  const system = systemFor(routine, { identity: "Plain.", lessons: readLessons({ dir }) });
-  assert.ok(system.indexOf("HOUSE RULES") < system.indexOf("LESSONS LEARNED HERE"));
+  const memory = readMemory({ dir, today: "2026-09-15" });
+  const system = systemFor(routine, { identity: "Plain.", memory });
+  assert.ok(system.indexOf("HOUSE RULES") < system.indexOf("MEMORY"));
   assert.match(system, /pass the segment to battles_meta_cards/);
-  assert.equal(readLessons({ dir: path.join(dir, "nowhere") }), null);
-  assert.doesNotMatch(systemFor(routine, { identity: "Plain.", lessons: null }), /LESSONS LEARNED HERE/);
+  assert.match(system, /pushing for top 10 this week/);
+  assert.doesNotMatch(system, /last week's push/, "expired entries are not loaded");
+  assert.equal(readMemory({ dir: path.join(dir, "nowhere") }), null);
+  assert.doesNotMatch(systemFor(routine, { identity: "Plain.", memory: null }), /MEMORY/);
 });
 
 test("the review clock is a schedule routine in the operator's zone, off when the lane is off", () => {

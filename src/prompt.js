@@ -9,11 +9,13 @@
  *   2. IDENTITY (agent/identity.md). Voice, house rules, what the channels are
  *      for, what this agent will not do. The operator's file, and the one they
  *      should actually spend time on.
- *   2b. LESSONS (agent/lessons.md). What reviews of this bot's own answers
- *      concluded (src/review.js): dated entries citing the turns that taught
- *      them. The bot's memory, in a text file the operator can read and edit
- *      — never facts about the game, never a person, only how to do this job
- *      here. Bounded, because it rides the cached prefix of every turn.
+ *   2b. MEMORY (agent/memory.md). What the bot has been told or has learned
+ *      about doing this job here: entries the review proposed from its own
+ *      turns (src/review.js) and entries the operator gave it by DM
+ *      (src/dm.js), each dated, with its provenance, optionally with an
+ *      expiry. A text file the operator can read and edit — never facts
+ *      about the game, never a person. Bounded, because it rides the cached
+ *      prefix of every turn.
  *   3. THE ROUTINE (agent/routines/*.md). The task itself.
  *
  * NOTHING HERE NAMES A CLAN. It cannot: the agent key already knows which clan
@@ -146,18 +148,48 @@ export function readIdentity({ dir = config.agentDir } = {}) {
   }
 }
 
-/** How much of lessons.md reaches the prompt. Every character here is paid
+/** How much of memory.md reaches the prompt. Every character here is paid
  *  for on every turn; the review prunes, and this is the hard stop. */
-export const LESSONS_MAX_CHARS = 6000;
+export const MEMORY_MAX_CHARS = 6000;
 
-export function readLessons({ dir = config.agentDir } = {}) {
-  const file = path.join(dir, "lessons.md");
+/**
+ * One memory entry is one line:
+ *
+ *   - 2026-09-14 (turns a1b2c3d4, e5f6a7b8): pass the segment to battles_meta_cards
+ *   - 2026-09-14 (from owner): we call war days "boat days"
+ *   - 2026-09-14 (from owner) until 2026-09-21: the clan is pushing for top 10 this war week
+ *
+ * The date is when it was written; the parenthesis is where it came from —
+ * turns the review cited, or the operator by DM; `until` is an expiry, for
+ * context that is true for a while. The review may prune a turn-cited entry
+ * nothing needed in a month; it never prunes what the operator said.
+ */
+export const MEMORY_ENTRY = /^- (\d{4}-\d{2}-\d{2}) \((turns [^)]+|from owner)\)(?: until (\d{4}-\d{2}-\d{2}))?: (.+)$/;
+
+export function parseMemoryEntry(line) {
+  const m = MEMORY_ENTRY.exec(line.trim());
+  if (!m) return null;
+  return { date: m[1], source: m[2] === "from owner" ? "owner" : "turns", turns: m[2].startsWith("turns ") ? m[2].slice(6).split(/,\s*/) : [], until: m[3] ?? null, text: m[4] };
+}
+
+/** An expired entry is dropped at load, so "this week" stops being true on
+ *  schedule without anyone editing the file. */
+export function liveMemoryLines(text, today = new Date().toISOString().slice(0, 10)) {
+  return text.split("\n").filter((line) => {
+    const entry = parseMemoryEntry(line);
+    return !(entry?.until && entry.until < today);
+  });
+}
+
+export function readMemory({ dir = config.agentDir, today = undefined } = {}) {
+  const file = path.join(dir, "memory.md");
   try {
-    const text = fs.readFileSync(file, "utf8").trim();
+    const raw = fs.readFileSync(file, "utf8");
+    const text = liveMemoryLines(raw, today).join("\n").trim();
     if (!text) return null;
-    if (text.length > LESSONS_MAX_CHARS) {
-      log.warn("lessons_clipped", { file, chars: text.length, max: LESSONS_MAX_CHARS });
-      return text.slice(0, LESSONS_MAX_CHARS);
+    if (text.length > MEMORY_MAX_CHARS) {
+      log.warn("memory_clipped", { file, chars: text.length, max: MEMORY_MAX_CHARS });
+      return text.slice(0, MEMORY_MAX_CHARS);
     }
     return text;
   } catch {
@@ -165,10 +197,12 @@ export function readLessons({ dir = config.agentDir } = {}) {
   }
 }
 
-const LESSONS_HEADER = `LESSONS LEARNED HERE
+const MEMORY_HEADER = `MEMORY
 
-What earlier reviews of your own answers in this server concluded. Follow
-them like house rules. Each is dated and names the turns that taught it.`;
+What you have been told and what you have learned about doing this job in
+this server. Follow it like the house rules. Each line is dated and says
+where it came from: turns a review of your own answers cited, or the
+person who runs you, by DM. A line with "until" is true only until then.`;
 
 /**
  * The clan this key acts for, named from the SERVER's own principal block
@@ -198,7 +232,7 @@ clan_tag and it means this clan.`;
  */
 export function systemFor(
   routine,
-  { identity = readIdentity(), lessons = readLessons(), includePrompt = false, subject = subjectBlock(), entries = [], defaultChannelId = null } = {},
+  { identity = readIdentity(), memory = readMemory(), includePrompt = false, subject = subjectBlock(), entries = [], defaultChannelId = null } = {},
 ) {
   const withTool = entries.length > 0;
   // The posting rule frames the whole task, so it comes first when it applies.
@@ -210,7 +244,7 @@ export function systemFor(
   blocks.push(QUOTA);
   if (routine.maySkip) blocks.push(withTool ? SKIP_WITH_TOOL : SKIP);
   if (identity) blocks.push(`HOUSE RULES\n\n${identity}`);
-  if (lessons) blocks.push(`${LESSONS_HEADER}\n\n${lessons}`);
+  if (memory) blocks.push(`${MEMORY_HEADER}\n\n${memory}`);
   // A message routine's own prompt is a standing brief for the channel, so it
   // belongs in the system block where prompt caching keeps it: the per-message
   // user turn is the only thing that should change between calls.

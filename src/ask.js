@@ -28,6 +28,7 @@ import { track, isStopping } from "./inflight.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
 import * as ledger from "./ledger.js";
+import { notify } from "./notify.js";
 
 /**
  * ONE THREAD PER QUESTION.
@@ -260,6 +261,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
       reason: blocked.reason,
       user: message.author.id,
     });
+    await notify("budget", `a member's question went unanswered: the ask lane is ${blocked.reason} ($${blocked.spent?.toFixed(2) ?? "?"} of $${blocked.budget?.toFixed(2) ?? "?"} this month).`, { fingerprint: `budget:ask:${blocked.reason}`, every: 24 * 3600 * 1000 });
     return;
   }
 
@@ -336,6 +338,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
       );
       log.error("ask_failed", { routine: routine.key, error: result.error });
       record(result, { error: result.error });
+      await notify("answer failed", `a question in the ask channel got an error instead of an answer: ${String(result.error).slice(0, 300)}`, { fingerprint: `ask_failed:${String(result.error).slice(0, 60)}` });
       return;
     }
 
@@ -419,6 +422,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
       error: error.message,
       stack: error.stack?.slice(0, 400),
     });
+    await notify("ask lane crashed", `${error.message.slice(0, 300)} — the member was told it is logged.`, { fingerprint: `ask_crashed:${error.message.slice(0, 60)}` });
     await message
       .reply("I fell over answering that. It's logged.")
       .catch(() => {});

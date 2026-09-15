@@ -60,10 +60,10 @@ Two things look like exceptions and are not. The turn ledger
 (`src/ledger.js`) is an audit record: no member-facing turn reads it, and
 none ever may — an answer the model could see again is the local memory this
 rule forbids. Its one reader is the review lane, whose audience is the
-operator and whose output is a proposal. And `agent/lessons.md` is memory,
+operator and whose output is a proposal. And `agent/memory.md` is memory,
 deliberately: not facts (Elixir has those), not people (never), but how to
 do this job here — written only by the review, only with the operator's
-click (or `REVIEW_AUTO_LESSONS`), in a text file anyone can read and edit.
+click (or `REVIEW_AUTO_MEMORY`), in a text file anyone can read and edit.
 
 **No local fallback.** elixir-bot's MCP client falls back to local tables on
 failure; this one has nothing to fall back to and says so out loud. An outage
@@ -156,7 +156,7 @@ design is there. The short version:
   grades every turn against the bot's own rules (`MECHANICS` in
   `src/prompt.js` plus the operator's files) and against what humans did
   afterwards, and produces at most `REVIEW_MAX_PROPOSALS` (3) edits to
-  files under `agent/` — `lessons.md` (append one dated line), `identity.md`
+  files under `agent/` — `memory.md` (append one dated line), `identity.md`
   or a routine's brief (replace/remove, never the front matter). Each cites
   turns and is shown as a diff. A finding that is not an edit is a
   `report_mechanics` (code — the DM carries a pasteable issue) or an
@@ -179,14 +179,21 @@ design is there. The short version:
   backup only while the file is untouched since.
 - **Measure, then prune.** The review opens with the previous review's
   applied edits and whether the turns since show the improvement; an edit
-  that did not help gets a revert proposal. A `lessons.md` entry no turn
+  that did not help gets a revert proposal. A `memory.md` entry no turn
   needed in a month gets a remove proposal.
-- **`agent/lessons.md` is the bot's memory**, loaded after `identity.md`
-  (`readLessons`, `LESSONS_MAX_CHARS` 6000, 20 entries). How to do this job
-  here — which tool answers what, what this clan calls things — never a
-  game fact, never a person. `REVIEW_AUTO_LESSONS=true` lets the review
-  write it without a click (never `identity.md`, never a brief), still
-  reported by DM with Undo.
+- **`agent/memory.md` is the bot's memory**, loaded after `identity.md`
+  (`readMemory`, `MEMORY_MAX_CHARS` 6000, 20 entries). One line per entry,
+  `MEMORY_ENTRY` in `src/prompt.js`: `- YYYY-MM-DD (turns a, b): ...` from
+  the review, `- YYYY-MM-DD (from owner): ...` from the operator by DM,
+  optionally ` until YYYY-MM-DD` before the colon for context that is true
+  for a while — expired lines are dropped at load. How to do this job here
+  — which tool answers what, what this clan calls things, what the
+  operator wants kept in mind — never a game fact, never a person. The
+  review may prune a turn-cited entry nothing needed in a month; it never
+  removes or rewords an owner entry (`planEdit` refuses unless
+  `edit.by === "owner"`, which only the DM lane sets).
+  `REVIEW_AUTO_MEMORY=true` lets the review write it without a click (never
+  `identity.md`, never a brief), still reported by DM with Undo.
 - **Its own lane.** `review` beside `routines` and `ask` in `src/budget.js`,
   `REVIEW_MODEL` (default `claude-opus-5`), `REVIEW_EFFORT`, `REVIEW_AT` in
   the operator's timezone as a pseudo-routine on the same run ledger
@@ -197,6 +204,41 @@ design is there. The short version:
   question, edit anything outside `agent/`, edit a routine's front matter,
   read the ledger into a member-facing turn. The `EDITABLE` pattern and
   `planEdit` are the fence; the tests pin them.
+
+## The DM is the operator's console — since 2026-09-14
+
+Channels are for members; the direct message is for whoever runs the bot,
+and it is the one place the bot talks ABOUT itself. Three things live there:
+
+- **Notices** (`src/notify.js`). Everything operator-facing that used to be
+  only a log line is also a DM: routine files that failed to load, no
+  routines enabled, Elixir unreachable at boot, an unpriced model, unusable
+  channels, a lane at its budget (daily), a routine or the ask lane
+  failing, a feed routine crashing, the review failing, and Elixir's
+  maintainer answering a filing (still posted in the channel too). No
+  model, no cost; one line, deduplicated by fingerprint for an hour;
+  `notice_unsent` in the log when there is no client yet or no
+  `ADMIN_USER_IDS`. A notice must never fail a turn — `notify` swallows.
+- **Review proposals** (above).
+- **The conversation** (`src/dm.js`, `handleDm`): admin-only, a stranger
+  gets one polite line a day. Deterministic commands first — `why <turn
+  id>` or a pasted message link (the transcript; `full` for bodies),
+  `try <routine>` (the dry run shown to the operator only, a draft held in
+  memory for two hours), `post it` (sends the draft to the channels the
+  routine chose, ledgered as a routine turn with `viaDm`), `memory`,
+  `budget`, `help`. Anything else is a model turn: the ask-lane prompt plus
+  `DM_BRIEF`, with `propose_change` (an edit to `memory.md`/`identity.md`/a
+  brief, forced `(from owner)` provenance and `edit.by = "owner"`) and
+  `lookup_turn`. A proposal rides the review machinery — a `review` record
+  with `trigger: "dm"` — so Apply/Skip/Undo and `.history/` are the same
+  code. Charged to the `review` lane; ledgered as lane `dm`.
+- **What the DM never does:** post to a member channel. There is no
+  `post_message` tool in the lane; `post it` sends only a rehearsal the
+  operator has already read. The DM brief also refuses to remember game
+  facts (Elixir's) or anything about a person beyond the role Elixir
+  shows (a hold in Elixir Clan, not a prompt line).
+- Needs the `DirectMessages` intent and `Partials.Channel`; without them a
+  DM never arrives and nothing says so.
 
 ## The turn ledger — since 2026-09-14
 

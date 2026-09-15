@@ -183,7 +183,7 @@ under `agent/`, each a diff with Apply / Skip buttons. Apply writes the file
 prompts hot-load. The next review opens by checking whether the last one's
 edits actually helped.
 
-Accepted edits are the bot's memory. `agent/lessons.md` collects how to do
+Accepted edits are the bot's memory. `agent/memory.md` collects how to do
 this job here — which tool answers what, what your clan calls things; the
 house rules and a routine's brief change only when a rule itself was wrong.
 It never learns facts about the game (Elixir has those) and never anything
@@ -193,6 +193,34 @@ It runs on its own model and its own budget (`REVIEW_MODEL`,
 `REVIEW_MONTHLY_BUDGET_USD`), so it can never cost a member an answer.
 `/review` runs it now; `npm run review` shows what it would propose without
 writing or sending anything.
+
+## Talking to it directly
+
+DM the bot from the account in `ADMIN_USER_IDS` and it is your console —
+nobody else sees it, and anyone else who DMs it gets one polite line:
+
+- **Tell it something.** "We call war days boat days." "This week we're
+  pushing for top 10." It replies with the exact line it would add to
+  `agent/memory.md` and an Apply button; on tap it is live. Context that
+  is only true for a while carries an `until` date and drops out on its
+  own. Ask it to forget and it proposes the removal.
+- **Ask why.** `why d98fe553`, or paste a link to one of its messages: the
+  transcript — what it was asked, what it thought, what every tool
+  returned. Tell it what it should have done and it proposes the change.
+- **Try before posting.** `try notable-movers` runs the routine and shows
+  you the post without sending it; `post it` sends it.
+- **Ask it anything** about the record, on your own behalf, without
+  cluttering the ask channel. `memory` shows what it knows; `budget` the
+  month's spend.
+- **It tells you when something is wrong**: a routine file that failed to
+  load, a lane at its budget, a channel it cannot post in, an answer that
+  errored, Elixir's maintainer replying to something it filed. These used
+  to be log lines.
+
+It will not remember facts about the game (Elixir has those) or anything
+about a person, and it cannot post to a channel from the DM — only send a
+rehearsal you have already read. DM turns are charged to the review lane's
+budget.
 
 In Discord, an admin (`ADMIN_USER_IDS`) has slash commands: **`/run`** with
 autocomplete over your routine names, **`/routines`**, and **`/budget`**

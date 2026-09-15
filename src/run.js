@@ -24,6 +24,7 @@ import { track, isStopping } from "./inflight.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
 import * as ledger from "./ledger.js";
+import { notify } from "./notify.js";
 
 /**
  * THE POST TOOL. A scheduled or event turn posts by calling `post_message`
@@ -143,6 +144,7 @@ async function runRoutineNow(
       spent: blocked.spent?.toFixed(2),
       budget: blocked.budget?.toFixed(2),
     });
+    if (!dryRun) await notify("budget", `${routine.key} did not run: the ${lane} lane is at $${blocked.spent?.toFixed(2) ?? "?"} of $${blocked.budget?.toFixed(2) ?? "?"} this month (${blocked.reason}). It resets on the 1st.`, { fingerprint: `budget:${lane}:${blocked.reason}`, every: 24 * 3600 * 1000 });
     return { ok: false, error: `budget:${blocked.reason}` };
   }
 
@@ -192,6 +194,7 @@ async function runRoutineNow(
   if (!result.ok) {
     log.error("routine_failed", { routine: routine.key, error: result.error });
     record({ error: result.error });
+    if (!dryRun) await notify("routine failed", `${routine.key}: ${String(result.error).slice(0, 300)}`, { fingerprint: `routine_failed:${routine.key}` });
     return { ok: false, error: result.error };
   }
 
@@ -230,6 +233,7 @@ async function runRoutineNow(
         chars: text.length,
       });
       record({ text, posts: [], error: "no_destination" });
+      await notify("routine had nowhere to post", `${routine.key} wrote ${text.length} characters but called no post tool and names no channel; the turn was paid for and nothing was posted.`, { fingerprint: `no_destination:${routine.key}` });
       return { ok: false, error: "no_destination", text, result };
     }
     const messages = await post(channel, textPost, routine.maxChars);
