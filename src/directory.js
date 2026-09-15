@@ -36,6 +36,12 @@
 import { PermissionFlagsBits } from "discord.js";
 import { log } from "./log.js";
 
+/** Entries the runner may send to. Read-only entries remain available to the
+ * room and operator tools, while ask entries only receive member messages. */
+export function postable(entries = []) {
+  return entries.filter((entry) => entry.role !== "ask" && entry.role !== "read");
+}
+
 /** One directory entry. `role` is "ask" for a channel a message routine
  *  listens in — the model must not post routine output there. */
 export function classify({

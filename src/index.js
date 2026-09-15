@@ -211,16 +211,16 @@ client.once(Events.ClientReady, async (ready) => {
     resolve: (id) => client.channels.fetch(id).catch(() => null),
   });
   const entries = directory.directory();
-  const postable = entries.filter((e) => e.role !== "ask");
-  log[postable.length ? "info" : "error"]("directory", {
+  const writable = directory.postable(entries);
+  log[writable.length ? "info" : "error"]("directory", {
     postable:
-      postable.map((e) => `#${e.name}${e.visibility === "restricted" ? "(restricted)" : ""}`).join(",") || "NONE",
+      writable.map((e) => `#${e.name}${e.visibility === "restricted" ? "(restricted)" : ""}`).join(",") || "NONE",
     ask:
       entries
         .filter((e) => e.role === "ask")
         .map((e) => `#${e.name}`)
         .join(",") || undefined,
-    hint: postable.length ? undefined : "grant the bot's role Send Messages explicitly in each channel it may post in",
+    hint: writable.length ? undefined : "grant the bot's role Send Messages explicitly in each channel it may post in",
   });
 
   // Every model in play has to have a price, or the budgets below are decoration.
@@ -338,7 +338,7 @@ async function postHello({ handshake, routines }) {
     log.info("hello_skipped", { lastAt: last });
     return;
   }
-  const target = directory.directory().find((e) => e.role !== "ask");
+  const target = directory.postable(directory.directory())[0];
   if (!target) return;
   const channel = await directory.resolveById(target.id);
   if (!channel) return;

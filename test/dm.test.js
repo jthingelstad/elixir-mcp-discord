@@ -372,6 +372,7 @@ test("a bot with nothing enabled introduces itself: where it may post, what it c
   notify.configure({ client: { users: { fetch: async (id) => ({ send: async (m) => sent.push([id, m.content]) }) } } });
   directory.configure({
     list: () => [
+      { id: "1", name: "elixir", role: "read" },
       { id: "77", name: "news", role: "post" },
       { id: "2", name: "ask-elixir", role: "ask" },
     ],
@@ -386,6 +387,7 @@ test("a bot with nothing enabled introduces itself: where it may post, what it c
     /connected to \*\*POAP KINGS Discord\*\* for \*\*POAP KINGS\*\* \(47 members\), and nothing runs yet/,
   );
   assert.match(text, /I may post in #news; questions are answered in #ask-elixir/);
+  assert.doesNotMatch(text, /#elixir/);
   assert.match(text, /• \*\*ask\*\* — Answers members' questions/);
   assert.match(text, /• \*\*war-deck-check\*\* — /);
   assert.match(text, /Say \*\*the usual\*\*/);

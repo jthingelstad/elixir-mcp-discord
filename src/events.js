@@ -25,7 +25,7 @@ import { callTool } from "./mcp.js";
 import { config } from "./config.js";
 import { runRoutine } from "./run.js";
 import { newFeedbackResponses } from "./feedback.js";
-import { directory, resolveById } from "./directory.js";
+import { directory, postable, resolveById } from "./directory.js";
 import { log } from "./log.js";
 import { notify } from "./notify.js";
 import * as state from "./state.js";
@@ -257,7 +257,7 @@ export function startEventLoop(routinesFn, resolveChannel) {
     const feedbackName = config.feedbackChannel || routines.find((r) => r.channel)?.channel || null;
     const feedbackChannel = feedbackName
       ? await resolveChannel(feedbackName)
-      : await resolveById(directory().find((e) => e.role !== "ask")?.id);
+      : await resolveById(postable(directory())[0]?.id);
 
     // The feed polls run first: their envelopes say whether the maintainer
     // has answered anything, so the feedback read below is a decision rather

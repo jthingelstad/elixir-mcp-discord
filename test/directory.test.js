@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PermissionFlagsBits as P } from "discord.js";
-import { classify, explicitGrant, explicitViewGrant, fromRest, render } from "../src/directory.js";
+import { classify, explicitGrant, explicitViewGrant, fromRest, postable, render } from "../src/directory.js";
 import { permissionsIn } from "../src/discord-rest.js";
 
 const str = (b) => b.toString();
@@ -127,4 +127,16 @@ test("an explicit View grant without Send is a read-only entry; inherited View i
   assert.equal(explicitViewGrant([{ id: "everyone", type: 0, allow: str(P.ViewChannel), deny: "0" }], ids), false);
   assert.match(render([read]), /CHANNELS YOU MAY POST IN \(OR READ\)/);
   assert.match(render([read]), /READ ONLY: you may read it, never post in it/);
+});
+
+test("only writable directory entries are postable", () => {
+  const entries = [
+    { id: "read", name: "elixir", role: "read" },
+    { id: "ask", name: "ask-elixir", role: "ask" },
+    { id: "news", name: "news", role: null },
+  ];
+  assert.deepEqual(
+    postable(entries).map((entry) => entry.id),
+    ["news"],
+  );
 });

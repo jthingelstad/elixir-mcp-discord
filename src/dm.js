@@ -42,7 +42,7 @@ import { ask, spendBlock } from "./claude.js";
 import { systemFor, nowLine, readMemory, parseMemoryEntry, MEMORY_MAX_CHARS } from "./prompt.js";
 import { loadRoutines } from "./routines.js";
 import { runRoutine, studyTool } from "./run.js";
-import { directory, resolveById } from "./directory.js";
+import { directory, postable, resolveById } from "./directory.js";
 import { post, chunk } from "./post.js";
 import { renderTrace } from "./trace.js";
 import { renderTurn } from "./turns.js";
@@ -1046,7 +1046,7 @@ export async function handleDm(message, options = {}) {
  */
 export async function introduce({ guildName, subject, examples = null } = {}) {
   const entries = directory();
-  const postable = entries.filter((e) => e.role !== "ask").map((e) => `#${e.name}`);
+  const writable = postable(entries).map((entry) => `#${entry.name}`);
   const askId = config.channels.get("ask");
   const askName = entries.find((e) => e.id === askId)?.name;
   const shipped =
@@ -1056,7 +1056,7 @@ export async function introduce({ guildName, subject, examples = null } = {}) {
     );
   const lines = [
     `I'm connected to **${guildName ?? "the server"}**${subject?.name ? ` for **${subject.name}**${subject.members ? ` (${subject.members} members)` : ""}` : ""}, and nothing runs yet.`,
-    `I may post in ${postable.length ? postable.join(", ") : "no channel yet — grant my role Send Messages where I should post"}${askName ? `; questions are answered in #${askName}` : ""}. Times are ${config.timezone}.`,
+    `I may post in ${writable.length ? writable.join(", ") : "no channel yet — grant my role Send Messages where I should post"}${askName ? `; questions are answered in #${askName}` : ""}. Times are ${config.timezone}.`,
     "",
     "What I can run:",
     ...shipped.map((e) => `• **${e.key}** — ${e.routine.description}`),
