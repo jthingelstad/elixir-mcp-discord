@@ -1,0 +1,46 @@
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor declared in package.json engines, and a current release.
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      # The same gate as `npm run verify` locally, step by step so a red run
+      # says which one: formatting, lint, dead code, then the tests. No
+      # secrets, no network: scripts/setup-tests.js supplies dummy config so
+      # the suite runs on a bare clone.
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run knip
+      - run: npm test
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Runtime dependencies only, high and above: a dev-tool advisory is not
+      # a reason to block a prompt fix.
+      - run: npm run audit

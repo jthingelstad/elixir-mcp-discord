@@ -41,6 +41,47 @@ files that use a new field. `activeRoutines` now logs `routine_invalid` on
 change and `no_routines_load` when nothing loads; the ask lane logs
 `message_unclaimed` when a bound channel speaks and no message routine exists.
 
+## Working on this repo — the gate and the loop
+
+This is how code changes here, whoever or whatever is making them. It is
+the current shape of agentic work on this project and supersedes anything
+older a session might remember.
+
+- **The gate is `npm run verify`** — prettier (120 columns; prose and
+  `agent/` untouched), oxlint (correctness rules, the same set as
+  `elixir-mcp` minus React), knip (dead files, exports, dependencies), then
+  the tests. Run it before every commit; CI (`.github/workflows/verify.yml`)
+  runs the same four steps on Node 22 and 24 and a separate `npm run audit`.
+  A red step names itself. `npm run format` fixes formatting; `oxlint
+  --fix` fixes what it can.
+- **Commit directly to `main`, small and often**, one change per commit
+  with a message that says why (the commit history is the design record
+  alongside this file). No feature branches, no PRs for your own work;
+  Dependabot's PRs are the exception. Push after each commit; there is no
+  checkout lease here — one checkout, one actor at a time.
+- **A `src/` change is live only after each instance restarts**
+  (`launchctl kickstart -k gui/$(id -u)/com.poapkings.elixir-mcp-discord.<name>`,
+  one at a time, reading each boot line for `build=<version>+<sha>`). A
+  change under `agent/` in the checkout changes no live bot. `config.json`
+  is live. Verify from the boot lines and the next natural turn in the
+  ledger; never run a routine early, ask the bot a question, or post as
+  acceptance.
+- **A release is a tag**: bump `package.json`, `git tag v<version>`, push
+  the tag; `release.yml` verifies, checks the tag matches, and publishes
+  notes from the commits. The boot hello names the build.
+- **Docs are part of the change.** A behaviour that moved gets its `since
+  <date>` line here and its sentence in `README.md` in the same commit; a
+  new knob goes in `config.example.json` (or `.env.example` if the bot may
+  not change it). This file is the decision ledger — dated, with the
+  reason — so read what changed since your last visit before assuming.
+- **Product changes are proposals first.** Anything that changes what the
+  bot says to members, what it remembers, or what it may touch is a
+  decision for Jamie, framed as one concrete yes/no with the evidence; a
+  bug, a test, a doc, a refactor that keeps every test green is not.
+- **Never:** a tool list or schema in this repo, a clan tag anywhere, local
+  game data or a fallback, a member-facing turn that reads the ledger, a
+  web fetch, a secret outside `.env`, an instance directory pushed anywhere.
+
 ## The rules that are the whole point
 
 **No clan in this repo. None.** No tag in `.env`, no tag in a prompt, no tag in

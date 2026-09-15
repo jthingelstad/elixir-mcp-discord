@@ -1,0 +1,40 @@
+name: release
+
+# A tag is a release: `git tag v0.3.0 && git push --tags` publishes the
+# notes from the commits since the previous tag. There is no artifact — an
+# operator installs from a checkout — so the release is the changelog and
+# the pin: `git checkout v0.3.0` is a known build, and the boot hello names
+# it (build=<version>+<sha>).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run verify
+      - name: Check the tag matches package.json
+        run: |
+          v="v$(node -p "require('./package.json').version")"
+          test "$v" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} but package.json says $v"; exit 1; }
+      - name: Release notes from the commits since the previous tag
+        run: |
+          prev=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          range=${prev:+$prev..}${GITHUB_REF_NAME}
+          { echo "## ${GITHUB_REF_NAME}"; echo; git log --format='- %s' "$range" | grep -v '^- Format the tree'; } > notes.md
+          cat notes.md
+      - run: gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}

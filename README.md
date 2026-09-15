@@ -504,18 +504,35 @@ Each instance's prompts are its own — that is how a clan decides how its bot
 engages — so `agent/` is copied, not shared. A code change is a restart per
 instance; a prompt change is never either.
 
-## Tests
+## Tests and the gate
 
 ```bash
-npm test
+npm run verify      # format:check + lint + knip + test — what CI runs
+npm test            # just the tests
+npm run format      # prettier --write
 ```
 
-No network, no spend: the model call and Discord are both injectable. They
-cover routine parsing (every mistake a hand-edited file can make), the schedule
-arithmetic including a DST boundary, the runner's post/skip/split behaviour,
-prompt assembly, and the ask path end to end. That last one exists because a
-refactor once deleted `LiveMessage` and every static check passed — a missing
-symbol is a runtime `ReferenceError`, and members found out instead.
+`verify` is the gate before every commit and what the `verify` workflow runs
+on every push and pull request, on Node 22 and 24, step by step so a red run
+says which one. Formatting is prettier at 120 columns (prose and the example
+prompts are left alone); lint is oxlint with correctness rules; knip finds
+files, exports and dependencies nothing uses; `npm run audit` checks runtime
+dependencies for high-severity advisories in a separate job. Dependabot
+opens a grouped PR for dev tooling weekly.
+
+No network, no spend in the tests: the model call and Discord are both
+injectable. They cover routine parsing (every mistake a hand-edited file can
+make), the schedule arithmetic including a DST boundary, the runner's
+post/skip/split behaviour, prompt assembly, the ask path end to end, the
+ledger, the review lane's proposals and buttons, the DM console, settings,
+and the instance repository. The ask-path test exists because a refactor
+once deleted `LiveMessage` and every static check passed — a missing symbol
+is a runtime `ReferenceError`, and members found out instead.
+
+A tag is a release: `npm version minor && git push --follow-tags` runs
+`verify`, checks the tag matches `package.json`, and publishes the commits
+since the previous tag as the notes. `git checkout v0.3.0` is a known
+build, and the boot hello names it.
 
 ## Running it as a service
 
