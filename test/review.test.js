@@ -419,3 +419,61 @@ test("a 👎 the sweep pins on this bot becomes a finding, not a filing", async 
   const records = ledger.readRecords({ since: today() });
   assert.deepEqual(records.map((r) => r.kind), ["reaction", "finding"]);
 });
+
+// ------------------------------------------- the operator's routine ops
+
+const MOVERS = "---\ntrigger: schedule\nat: 01:00\nchannel: news\n---\nName three movers.\n";
+
+test("set_fields rewrites the front matter, is checked by the routine parser, and is the operator's alone", () => {
+  const ok = planEdit({ file: "routines/movers.md", edit: { op: "set_fields", by: "owner", fields: { at: "07:30", days: "mon,thu", enabled: "false" } }, current: MOVERS });
+  assert.equal(ok.ok, true);
+  assert.match(ok.next, /^---\ntrigger: schedule\nat: 07:30\nchannel: news\ndays: mon,thu\nenabled: false\n---\nName three movers\.\n$/);
+  assert.equal(ok.preview, "- at: 01:00\n+ at: 07:30\n+ days: mon,thu\n+ enabled: false");
+  assert.match(planEdit({ file: "routines/movers.md", edit: { op: "set_fields", by: "owner", fields: { at: "25:00" } }, current: MOVERS }).error, /not a real time/);
+  assert.match(planEdit({ file: "routines/movers.md", edit: { op: "set_fields", by: "owner", fields: { catchup: "2" } }, current: MOVERS }).error, /not a routine field/);
+  assert.match(planEdit({ file: "routines/movers.md", edit: { op: "set_fields", by: "owner", fields: { at: "" } }, current: MOVERS }).error, /at must be HH:MM/, "removing a required field is refused by the parser");
+  assert.match(planEdit({ file: "routines/movers.md", edit: { op: "set_fields", fields: { at: "07:30" } }, current: MOVERS }).error, /operator's/, "the review cannot reschedule");
+  assert.match(planEdit({ file: "memory.md", edit: { op: "set_fields", by: "owner", fields: { at: "07:30" } }, current: "" }).error, /for routines/);
+});
+
+test("create makes a routine that parses, and refuses one that would not", () => {
+  const ok = planEdit({ file: "routines/war-recap.md", edit: { op: "create", by: "owner", fields: { trigger: "schedule", at: "20:00", days: "fri", channel: "war", may_skip: "true" }, text: "Recap the war week." }, current: null });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.created, true);
+  assert.match(ok.next, /^---\ntrigger: schedule\nat: 20:00\ndays: fri\nchannel: war\nmay_skip: true\n---\nRecap the war week\.\n$/);
+  assert.match(ok.preview, /^\+ ---\n\+ trigger: schedule/);
+  assert.match(planEdit({ file: "routines/war-recap.md", edit: { op: "create", by: "owner", fields: { trigger: "schedule" }, text: "x" }, current: null }).error, /at must be HH:MM/);
+  assert.match(planEdit({ file: "routines/movers.md", edit: { op: "create", by: "owner", fields: { trigger: "schedule", at: "01:00" }, text: "x" }, current: MOVERS }).error, /already exists/);
+});
+
+test("apply of a create writes the file and seeds its period; undo removes it; delete keeps a backup and undo restores", async (t) => {
+  fresh();
+  const dir = agentDir(t, { "routines/movers.md": MOVERS });
+  ledger.append(turn({ turnId: "aaaa0001" }));
+  const outcome = await runReview({
+    trigger: "command",
+    agentDir: dir,
+    askFn: fakeAsk([
+      ["propose_change", { file: "routines/war-recap.md", rule: "new", turn_ids: ["aaaa0001"], summary: "A Friday recap.", edit: { op: "create", by: "owner", fields: { trigger: "schedule", at: "00:01", days: "sun,mon,tue,wed,thu,fri,sat", channel: "war" }, text: "Recap the war week." } }],
+      ["propose_change", { file: "routines/movers.md", rule: "gone", turn_ids: ["aaaa0001"], summary: "Drop movers.", edit: { op: "delete", by: "owner" } }],
+    ]),
+  });
+  const review = findReview(outcome.reviewId);
+  const [create, del] = review.proposals;
+
+  const made = applyProposal({ review, proposal: create, by: "9", agentDir: dir });
+  assert.equal(made.ok, true);
+  assert.match(fs.readFileSync(path.join(dir, "routines/war-recap.md"), "utf8"), /Recap the war week/);
+  assert.ok(state.get("runs")?.["war-recap"], "the new routine's current period is marked done, so it does not fire on save");
+  const undoneCreate = undoProposal({ review: findReview(outcome.reviewId), proposal: create, by: "9", agentDir: dir });
+  assert.equal(undoneCreate.ok, true);
+  assert.equal(fs.existsSync(path.join(dir, "routines/war-recap.md")), false, "undoing a create removes the file");
+
+  const gone = applyProposal({ review: findReview(outcome.reviewId), proposal: del, by: "9", agentDir: dir });
+  assert.equal(gone.ok, true);
+  assert.equal(fs.existsSync(path.join(dir, "routines/movers.md")), false);
+  assert.equal(fs.readFileSync(gone.backup, "utf8"), MOVERS);
+  const restored = undoProposal({ review: findReview(outcome.reviewId), proposal: del, by: "9", agentDir: dir });
+  assert.equal(restored.ok, true);
+  assert.equal(fs.readFileSync(path.join(dir, "routines/movers.md"), "utf8"), MOVERS);
+});

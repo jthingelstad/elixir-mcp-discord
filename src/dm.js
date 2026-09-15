@@ -14,6 +14,9 @@
  *                          shown to you only; "post it" sends it
  *   ask as yourself        anything about the record, answered on your behalf,
  *                          without cluttering the ask channel
+ *   run the calendar       "routines"; "move the movers post to 7:30", "add a
+ *                          Friday war recap in #war" — a proposal on the
+ *                          routine's file, parser-checked, live on Apply
  *   see what it knows      "memory" — the current memory.md, with expiry
  *   see the money          "budget"
  *
@@ -40,7 +43,8 @@ import { directory, resolveById } from "./directory.js";
 import { post, chunk } from "./post.js";
 import { renderTrace } from "./trace.js";
 import { renderTurn } from "./turns.js";
-import { budgetReply } from "./commands.js";
+import { budgetReply, routinesReply } from "./commands.js";
+import { FIELDS } from "./routines.js";
 import { planEdit, proposalMessage, toComponents, readAgentFiles } from "./review.js";
 import { isConversational } from "./ask.js";
 import { turnRecord } from "./run.js";
@@ -74,6 +78,24 @@ into your reply — the diff is sent separately.
 
 ASK YOU TO FORGET: propose removing that line from memory.md. Ask "memory"
 to see the current lines if you need the exact text.
+
+MANAGE THE ROUTINES — what runs, when, where, and what it says. Call
+list_routines first; it returns every routine with its fields and its
+brief. Then propose_change on routines/<key>.md:
+- set_fields to change when it runs (at: HH:MM in the operator's zone,
+  days: mon,thu), where it posts (channel), which model, whether it is on
+  (enabled: false), whether it may skip, how much it recalls.
+- replace / remove to change the brief's wording (quote it exactly).
+- create for a new routine: fields (trigger: schedule needs at:; events
+  needs kinds: or sections:; message needs channel:) and text, the brief,
+  written in the same style as the existing ones — plain, one job, says
+  where to post and when to post nothing. Ask what it should do, where and
+  when if they did not say; one question, then propose.
+- delete to remove one (a copy is kept).
+Every proposal is checked the way the bot loads the file; a refusal tells
+you what the parser said — fix it or tell them. Nothing changes until they
+press Apply; after that it is live on the next tick, no restart. They can
+say "try <key>" to rehearse it.
 
 ASK WHY YOU SAID SOMETHING. Call lookup_turn with the turn id they gave (the
 footer under every answer shows it). Say what the trace shows, plainly —
@@ -285,19 +307,25 @@ async function showMemory(message) {
 function proposeTool({ files, proposals, by }) {
   return {
     name: "propose_change",
-    description: "Propose ONE edit to memory.md, identity.md or routines/<key>.md, in the operator's words. Checked against the file as it is now; a refusal says why. The operator gets it as a diff with an Apply button.",
+    description:
+      "Propose ONE edit to memory.md, identity.md or routines/<key>.md, in the operator's words. Checked against the file as it is now (a routine must parse); a refusal says why. The operator gets it as a diff with an Apply button.",
     input_schema: {
       type: "object",
       properties: {
-        file: { type: "string" },
+        file: { type: "string", description: "memory.md, identity.md, or routines/<key>.md (key: lowercase letters, digits, hyphens)" },
         summary: { type: "string", description: "One line for the operator: what this remembers or changes." },
         edit: {
           type: "object",
           properties: {
-            op: { type: "string", enum: ["append", "replace", "remove"] },
-            text: { type: "string", description: "append: '- YYYY-MM-DD (from owner)[ until YYYY-MM-DD]: their words'" },
-            find: { type: "string" },
+            op: { type: "string", enum: ["append", "replace", "remove", "set_fields", "create", "delete"] },
+            text: { type: "string", description: "append: '- YYYY-MM-DD (from owner)[ until YYYY-MM-DD]: their words'. create: the routine's brief." },
+            find: { type: "string", description: "replace/remove: exact text occurring once" },
             replace: { type: "string" },
+            fields: {
+              type: "object",
+              description: `set_fields/create: front matter as strings. Fields: ${[...FIELDS].join(", ")}. An empty string removes a field.`,
+              additionalProperties: { type: "string" },
+            },
           },
           required: ["op"],
           additionalProperties: false,
@@ -311,12 +339,47 @@ function proposeTool({ files, proposals, by }) {
       if (file === "memory.md" && edit?.op === "append" && !/\(from owner\)/.test(String(edit.text ?? ""))) {
         return { ok: false, code: "provenance", error: 'a memory entry from this conversation is "- YYYY-MM-DD (from owner): ..."' };
       }
-      const current = proposals.filter((p) => p.file === file).at(-1)?.next ?? files[file] ?? "";
+      const current = proposals.filter((p) => p.file === file).at(-1)?.next ?? files[file] ?? null;
       const plan = planEdit({ file, edit: { ...edit, by }, current });
       if (!plan.ok) return { ok: false, code: "refused", error: plan.error };
       const proposal = { id: `p${proposals.length + 1}`, class: "prompt", file, rule: "from the operator", turnIds: [], summary: String(summary ?? "").slice(0, 300), edit: { ...edit, by }, preview: plan.preview.slice(0, 1500), next: plan.next };
       proposals.push(proposal);
       return { ok: true, body: { proposal_id: proposal.id, diff: proposal.preview } };
+    },
+  };
+}
+
+function routinesTool() {
+  return {
+    name: "list_routines",
+    description: "Every routine this bot runs: key, trigger, when, where it posts, model, whether it is enabled, its description and its brief. Read this before proposing a change to one.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    async handler() {
+      const { routines, errors } = loadRoutines();
+      return {
+        ok: true,
+        body: {
+          timezone: config.timezone,
+          routines: routines.map((r) => ({
+            key: r.key,
+            file: `routines/${r.key}.md`,
+            trigger: r.trigger,
+            enabled: !r.disabled,
+            channel: r.channel,
+            at: r.at ? `${String(r.at.hour).padStart(2, "0")}:${String(r.at.minute).padStart(2, "0")}` : undefined,
+            days: r.days?.map((d) => ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][d]),
+            kinds: r.kinds ?? undefined,
+            sections: r.sections ?? undefined,
+            may_skip: r.maySkip,
+            recall: r.recall,
+            model: r.model,
+            effort: r.effort,
+            description: r.description,
+            brief: r.prompt,
+          })),
+          failed_to_load: errors,
+        },
+      };
     },
   };
 }
@@ -358,7 +421,7 @@ async function converse(message, options = {}) {
     maxTokens: routine.maxTokens,
     routineKey: "dm",
     lane: "review",
-    localTools: [proposeTool({ files, proposals, by: "owner" }), lookupTool()],
+    localTools: [proposeTool({ files, proposals, by: "owner" }), routinesTool(), lookupTool()],
     maxRounds: 8,
   });
 
@@ -434,12 +497,14 @@ export async function handleDm(message, options = {}) {
   if (/^post(\s+it)?\s*[.!]?$/i.test(text)) return postDraft(message, options);
   if (/^memory\s*[?]?$/i.test(text)) return showMemory(message);
   if (/^(budget|spend)\s*[?]?$/i.test(text)) return send(message, budgetReply());
+  if (/^routines\s*[?]?$/i.test(text)) return send(message, routinesReply());
   if (/^(help|\?)$/i.test(text)) {
     return send(
       message,
       [
         "Tell me something to remember, ask me why I said something (`why <turn id>` or paste a message link), or ask me anything about the record.",
         "`try <routine>` — rehearse a post here; `post it` — send it",
+        "`routines` — what runs and when; or just tell me what to change, add or remove",
         "`memory` — what I have been told and learned · `budget` — this month's spend",
       ].join("\n"),
     );

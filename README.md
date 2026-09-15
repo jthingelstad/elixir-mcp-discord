@@ -211,6 +211,11 @@ nobody else sees it, and anyone else who DMs it gets one polite line:
 - **Ask why.** `why d98fe553`, or paste a link to one of its messages: the
   transcript — what it was asked, what it thought, what every tool
   returned. Tell it what it should have done and it proposes the change.
+- **Run the calendar.** `routines` lists what runs and when. "Move the
+  movers post to 7:30", "turn off the rival scout", "add a Friday war
+  recap in #war that skips quiet weeks", "make the meta report shorter" —
+  each becomes a proposal on the routine's file, checked the way the bot
+  loads it, live on Apply with no restart.
 - **Try before posting.** `try notable-movers` runs the routine and shows
   you the post without sending it; `post it` sends it.
 - **Ask it anything** about the record, on your own behalf, without

@@ -48,6 +48,7 @@ import { MECHANICS, MEMORY_MAX_CHARS, MEMORY_ENTRY, parseMemoryEntry } from "./p
 import { renderTurn } from "./turns.js";
 import { dueRoutines, periodKey, lastOccurrence } from "./schedule.js";
 import { chunk } from "./post.js";
+import { splitFrontMatter, parseRoutine, FIELDS } from "./routines.js";
 import * as budget from "./budget.js";
 import * as ledger from "./ledger.js";
 import { log } from "./log.js";
@@ -97,6 +98,44 @@ function bodyStart(text) {
 
 const memoryLines = (text) => (text || "").split("\n").filter((l) => parseMemoryEntry(l));
 
+/** A routine file with its front matter fields set (a value of "" or null
+ *  removes the key). Comments in the front matter do not survive; the
+ *  fields do, and the parser is the judge of the result. */
+export function withFields(text, fields, body = null) {
+  const parsed = splitFrontMatter(text || "");
+  const merged = { ...(parsed.fields || {}) };
+  for (const [k, v] of Object.entries(fields || {})) {
+    const key = String(k).toLowerCase();
+    if (v === null || v === undefined || String(v).trim() === "") delete merged[key];
+    else merged[key] = String(v).trim();
+  }
+  const fm = Object.entries(merged).map(([k, v]) => `${k}: ${v}`).join("\n");
+  return `---\n${fm}\n---\n${(body ?? parsed.body).trim()}\n`;
+}
+
+/** Must parse as a routine, or the proposal is refused with the parser's words. */
+function checkRoutine(file, next) {
+  const key = file.replace(/^routines\//, "").replace(/\.md$/, "");
+  try {
+    parseRoutine(key, next);
+    return null;
+  } catch (error) {
+    return String(error.message).replace(/^[^:]+: /, "");
+  }
+}
+
+function fieldDiff(before, after) {
+  const a = splitFrontMatter(before || "").fields || {};
+  const b = splitFrontMatter(after || "").fields || {};
+  const lines = [];
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (a[k] === b[k]) continue;
+    if (a[k] !== undefined) lines.push(`- ${k}: ${a[k]}`);
+    if (b[k] !== undefined) lines.push(`+ ${k}: ${b[k]}`);
+  }
+  return lines.join("\n");
+}
+
 /**
  * Check an edit against the file as it is NOW, and produce the file as it
  * would be. Pure: nothing is written. `{ ok, next, preview }` or
@@ -116,6 +155,40 @@ export function planEdit({ file, edit, current }) {
     const next = `${text.trim() ? `${text.replace(/\s*$/, "")}\n` : ""}${entry}\n`;
     if (next.length > MEMORY_MAX_CHARS) return { ok: false, error: `memory.md would exceed ${MEMORY_MAX_CHARS} characters; prune first` };
     return { ok: true, next, preview: `+ ${entry}` };
+  }
+  // THE OPERATOR'S OPS. Schedules, channels, models, whole routines: the
+  // review never touches these (it grades answers, it does not run the
+  // calendar), the operator does, by DM, and the parser refuses anything
+  // the bot could not load.
+  const owner = edit?.by === "owner";
+  if (op === "set_fields" || op === "create" || op === "delete") {
+    if (!owner) return { ok: false, error: `${op} is the operator's; the review edits only the text of a brief` };
+    if (!file.startsWith("routines/")) return { ok: false, error: `${op} is for routines/<key>.md` };
+  }
+  if (op === "set_fields") {
+    if (current === null || current === undefined) return { ok: false, error: `${file} does not exist; use create` };
+    if (!edit.fields || typeof edit.fields !== "object" || Object.keys(edit.fields).length === 0) return { ok: false, error: "fields is empty" };
+    for (const k of Object.keys(edit.fields)) if (!FIELDS.has(String(k).toLowerCase())) return { ok: false, error: `"${k}" is not a routine field; the fields are ${[...FIELDS].join(", ")}` };
+    const next = withFields(text, edit.fields);
+    const bad = checkRoutine(file, next);
+    if (bad) return { ok: false, error: bad };
+    const preview = fieldDiff(text, next);
+    if (!preview) return { ok: false, error: "nothing would change" };
+    return { ok: true, next, preview };
+  }
+  if (op === "create") {
+    if (current !== null && current !== undefined) return { ok: false, error: `${file} already exists; use set_fields or replace` };
+    if (!edit.fields || typeof edit.fields !== "object") return { ok: false, error: "create needs fields (at least trigger) and text (the brief)" };
+    for (const k of Object.keys(edit.fields)) if (!FIELDS.has(String(k).toLowerCase())) return { ok: false, error: `"${k}" is not a routine field; the fields are ${[...FIELDS].join(", ")}` };
+    if (!String(edit.text ?? "").trim()) return { ok: false, error: "the brief (text) is empty" };
+    const next = withFields("", edit.fields, String(edit.text));
+    const bad = checkRoutine(file, next);
+    if (bad) return { ok: false, error: bad };
+    return { ok: true, next, preview: next.split("\n").map((l) => `+ ${l}`).join("\n"), created: true };
+  }
+  if (op === "delete") {
+    if (current === null || current === undefined) return { ok: false, error: `${file} does not exist` };
+    return { ok: true, next: null, preview: text.split("\n").map((l) => `- ${l}`).join("\n"), deleted: true };
   }
   if (op === "replace" || op === "remove") {
     const find = String(edit.find ?? "");
@@ -138,10 +211,11 @@ export function planEdit({ file, edit, current }) {
     ].join("\n");
     return { ok: true, next, preview };
   }
-  return { ok: false, error: `unknown op "${op}"; use append, replace or remove` };
+  return { ok: false, error: `unknown op "${op}"; use append, replace, remove, set_fields, create or delete` };
 }
 
-/** Write a planned edit, keeping the prior version. Returns the backup path. */
+/** Write a planned edit, keeping the prior version. `next === null` deletes.
+ *  Returns the backup path. */
 function writeWithHistory({ dir, file, next }) {
   const target = path.join(dir, file);
   const backups = path.join(dir, HISTORY_DIR);
@@ -150,6 +224,10 @@ function writeWithHistory({ dir, file, next }) {
   const backup = path.join(backups, `${file.replace(/\//g, "__")}.${stamp}`);
   if (fs.existsSync(target)) fs.copyFileSync(target, backup);
   else fs.writeFileSync(backup, "");
+  if (next === null) {
+    fs.rmSync(target, { force: true });
+    return backup;
+  }
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, next);
   return backup;
@@ -330,7 +408,7 @@ function proposeTool({ files, proposals, max }) {
       if (ids.length === 0) return { ok: false, code: "uncited", error: "cite the turn ids that taught this" };
       // The plan runs against the file plus any earlier proposal to the same
       // file this review, so two edits to memory.md do not both claim slot 20.
-      const current = proposals.filter((p) => p.file === file).at(-1)?.next ?? files[file] ?? "";
+      const current = proposals.filter((p) => p.file === file).at(-1)?.next ?? files[file] ?? null;
       const plan = planEdit({ file, edit, current });
       if (!plan.ok) return { ok: false, code: "refused", error: plan.error };
       const proposal = {
@@ -517,7 +595,19 @@ export function applyProposal({ review, proposal, by, agentDir = config.agentDir
     return { ok: false, error: plan.error };
   }
   const backup = writeWithHistory({ dir: agentDir, file: proposal.file, next: plan.next });
-  const detail = { backup, afterSha: ledger.sha(plan.next) };
+  const detail = { backup, afterSha: plan.next === null ? null : ledger.sha(plan.next), created: plan.created || undefined, deleted: plan.deleted || undefined };
+  // A routine whose clock moved must not fire the moment it is saved: the
+  // new period is marked done, as a fresh install's would be. Same for a
+  // new routine whose time is already past today.
+  if (proposal.file.startsWith("routines/") && plan.next !== null && (plan.created || proposal.edit?.fields?.at !== undefined || proposal.edit?.fields?.days !== undefined)) {
+    try {
+      const key = proposal.file.replace(/^routines\//, "").replace(/\.md$/, "");
+      const parsed = parseRoutine(key, plan.next);
+      if (parsed.trigger === "schedule") state.markRun(key, periodKey(lastOccurrence(parsed)));
+    } catch {
+      /* the plan already parsed it; nothing to seed otherwise */
+    }
+  }
   ledger.append(ledger.decisionEntry({ reviewId: review.reviewId, proposalId: proposal.id, decision: by === "auto" ? "auto" : "applied", by, detail }));
   log.info("review_applied", { reviewId: review.reviewId, proposal: proposal.id, file: proposal.file, by, backup });
   return { ok: true, file: proposal.file, backup };
@@ -535,9 +625,11 @@ export function undoProposal({ review, proposal, by, agentDir = config.agentDir 
   } catch {
     current = "";
   }
-  if (ledger.sha(current) !== decision.detail?.afterSha) return { ok: false, error: `${proposal.file} has changed since this was applied; undo by hand from ${decision.detail?.backup}` };
+  const exists = fs.existsSync(target);
+  if (decision.detail?.deleted ? exists : ledger.sha(current) !== decision.detail?.afterSha) return { ok: false, error: `${proposal.file} has changed since this was applied; undo by hand from ${decision.detail?.backup}` };
   const before = fs.readFileSync(decision.detail.backup, "utf8");
-  writeWithHistory({ dir: agentDir, file: proposal.file, next: before });
+  // Undoing a create removes the file; undoing anything else restores it.
+  writeWithHistory({ dir: agentDir, file: proposal.file, next: decision.detail?.created ? null : before });
   ledger.append(ledger.decisionEntry({ reviewId: review.reviewId, proposalId: proposal.id, decision: "reverted", by }));
   log.info("review_reverted", { reviewId: review.reviewId, proposal: proposal.id, file: proposal.file, by });
   return { ok: true };

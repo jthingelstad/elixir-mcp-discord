@@ -201,9 +201,10 @@ design is there. The short version:
   the ledger). `/review` runs it on demand; `npm run review` is the dry
   run: real call, nothing persisted, nobody DMed.
 - **What it may never do:** post to a member channel, react, ask the bot a
-  question, edit anything outside `agent/`, edit a routine's front matter,
-  read the ledger into a member-facing turn. The `EDITABLE` pattern and
-  `planEdit` are the fence; the tests pin them.
+  question, edit anything outside `agent/`, edit a routine's front matter
+  (the operator can, by DM — below), read the ledger into a member-facing
+  turn. The `EDITABLE` pattern and `planEdit` are the fence; the tests pin
+  them.
 
 ## The DM is the operator's console — since 2026-09-14
 
@@ -232,6 +233,19 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
   `lookup_turn`. A proposal rides the review machinery — a `review` record
   with `trigger: "dm"` — so Apply/Skip/Undo and `.history/` are the same
   code. Charged to the `review` lane; ledgered as lane `dm`.
+- **The operator runs the calendar from the DM.** `list_routines` (a
+  tool) and `routines` (a command) show what runs; `propose_change` has
+  three operator-only ops on `routines/<key>.md` — `set_fields` (front
+  matter: `at`, `days`, `channel`, `model`, `enabled`, `may_skip`, ...;
+  `""` removes a key), `create` (fields + the brief) and `delete` — beside
+  `replace`/`remove` for the brief's text. `planEdit` refuses them unless
+  `edit.by === "owner"`, and every routine result must pass `parseRoutine`
+  or the proposal is refused with the parser's words, so a file the bot
+  could not load never reaches a button. Apply of a rescheduled or new
+  routine marks its current period done (`markRun`) so it does not fire
+  the moment it is saved; undo of a create deletes, undo of a delete
+  restores from `.history/`. Front-matter comments do not survive
+  `withFields`; the fields do.
 - **A long paste is an attachment.** Over 2,000 characters Discord sends
   `message.txt` instead of text, and the first pasted FAQ arrived as an
   empty message. `attachedText` reads text attachments (text/* or

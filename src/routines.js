@@ -27,12 +27,12 @@ import path from "node:path";
 import { config } from "./config.js";
 import { log } from "./log.js";
 
-const TRIGGERS = new Set(["message", "events", "schedule"]);
+export const TRIGGERS = new Set(["message", "events", "schedule"]);
 
 /** Every key a routine may declare. An unknown one is an error rather than an
  *  ignored line, because `catchup_hours` for `catch_up_hours` would otherwise
  *  read as a working config that silently never catches up. */
-const FIELDS = new Set([
+export const FIELDS = new Set([
   "trigger",
   "channel",
   // One line for a human choosing routines: setup's picker and /routines
