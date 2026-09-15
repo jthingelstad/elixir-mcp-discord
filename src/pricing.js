@@ -64,9 +64,7 @@ export function priceBook({ dir = config.agentDir, reload = false } = {}) {
     // itself. Skipped rather than validated.
     if (model.startsWith("_")) continue;
     if (typeof rate?.input !== "number" || typeof rate?.output !== "number") {
-      throw new Error(
-        `${file}: "${model}" needs numeric input and output prices per million tokens.`,
-      );
+      throw new Error(`${file}: "${model}" needs numeric input and output prices per million tokens.`);
     }
     book[model] = complete(rate);
   }

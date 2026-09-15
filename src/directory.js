@@ -65,7 +65,9 @@ export function classify({
  *  bot's own role and @everyone. `roleName(id)` maps an id to a name. */
 export function viewersOf(overwrites, { everyoneId, botRoleId, roleName }) {
   return (overwrites ?? [])
-    .filter((o) => Number(o.type) === 0 && o.id !== everyoneId && o.id !== botRoleId && (BigInt(o.allow ?? 0) & VIEW) !== 0n)
+    .filter(
+      (o) => Number(o.type) === 0 && o.id !== everyoneId && o.id !== botRoleId && (BigInt(o.allow ?? 0) & VIEW) !== 0n,
+    )
     .map((o) => roleName(o.id))
     .filter(Boolean);
 }
@@ -109,8 +111,12 @@ export function fromGateway(guild, botUser, { bound = new Set(), askIds = new Se
       explicitSend: explicitGrant(overwrites, { botId: botUser.id, botRoleId }),
       canSend: perms.has(VIEW) && perms.has(SEND),
       canThread: perms.has(THREADS),
-      everyoneCanView: everyone ? channel.permissionsFor(everyone)?.has(VIEW) ?? false : true,
-      visibleTo: viewersOf(overwrites, { everyoneId: guild.id, botRoleId, roleName: (id) => guild.roles.cache.get(id)?.name }),
+      everyoneCanView: everyone ? (channel.permissionsFor(everyone)?.has(VIEW) ?? false) : true,
+      visibleTo: viewersOf(overwrites, {
+        everyoneId: guild.id,
+        botRoleId,
+        roleName: (id) => guild.roles.cache.get(id)?.name,
+      }),
       bound: bound.has(channel.id),
       role: askIds.has(channel.id) ? "ask" : null,
     });
@@ -140,7 +146,11 @@ export function fromRest(inspected, permissionsIn, { bound = new Set(), askIds =
       canSend: perms.has(VIEW) && perms.has(SEND),
       canThread: perms.has(THREADS),
       everyoneCanView,
-      visibleTo: viewersOf(raw.permission_overwrites, { everyoneId: inspected.guild.id, botRoleId, roleName: (id) => inspected.roles.find((r) => r.id === id)?.name }),
+      visibleTo: viewersOf(raw.permission_overwrites, {
+        everyoneId: inspected.guild.id,
+        botRoleId,
+        roleName: (id) => inspected.roles.find((r) => r.id === id)?.name,
+      }),
       bound: bound.has(raw.id),
       role: askIds.has(raw.id) ? "ask" : null,
     });
@@ -155,7 +165,10 @@ export function render(entries, { defaultId = null } = {}) {
   const lines = entries.map((e) => {
     const marks = [];
     if (e.role === "ask") marks.push("ASK CHANNEL: members ask questions here; never post routine output here");
-    if (e.visibility === "restricted") marks.push(e.visibleTo?.length ? `visible to: ${e.visibleTo.join(", ")}` : "restricted: not every member can see it");
+    if (e.visibility === "restricted")
+      marks.push(
+        e.visibleTo?.length ? `visible to: ${e.visibleTo.join(", ")}` : "restricted: not every member can see it",
+      );
     if (e.id === defaultId) marks.push("DEFAULT for this routine");
     const tail = [e.topic, marks.length ? `[${marks.join("; ")}]` : null].filter(Boolean).join(" ");
     return `#${e.name} (channel_id ${e.id})${tail ? ` — ${tail}` : ""}`;

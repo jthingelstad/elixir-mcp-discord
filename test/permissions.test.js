@@ -8,11 +8,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PermissionsBitField, PermissionFlagsBits } from "discord.js";
 import { config } from "../src/config.js";
-import {
-  requirementsFor,
-  inspectChannel,
-  checkChannelPermissions,
-} from "../src/permissions.js";
+import { requirementsFor, inspectChannel, checkChannelPermissions } from "../src/permissions.js";
 import * as state from "../src/state.js";
 
 // scripts/setup-tests.js sets DISCORD_GUILD_ID=1.
@@ -88,10 +84,7 @@ test("inspectChannel names the exact permissions missing, and the guild mismatch
     inspectChannel({ name: "ask", needs, channel: fakeChannel({ thread: true }), botId: "b", guildId: GUILD }).reason,
     "not_a_text_channel",
   );
-  assert.equal(
-    inspectChannel({ name: "ask", needs, channel: null, botId: "b", guildId: GUILD }).reason,
-    "unresolved",
-  );
+  assert.equal(inspectChannel({ name: "ask", needs, channel: null, botId: "b", guildId: GUILD }).reason, "unresolved");
 });
 
 test("the check says so in a channel that works, once per distinct problem set", async () => {
@@ -136,7 +129,9 @@ test("a COMMAND_PREFIX renames every command and is stripped on the way back in"
   config.commandPrefix = "pk";
   try {
     assert.deepEqual(
-      commandDefinitions().map((d) => d.name).sort(),
+      commandDefinitions()
+        .map((d) => d.name)
+        .sort(),
       ["pk-budget", "pk-routines", "pk-run"],
     );
   } finally {

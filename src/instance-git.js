@@ -80,8 +80,10 @@ export async function initInstanceRepo({ dir = instanceDir } = {}) {
   // Anything tracked that the ignore file now covers leaves the index.
   await git(dir, ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", "agent/.history", ".history"]);
   const staged = await git(dir, ["diff", "--cached", "--name-only"]);
-  if (staged) await git(dir, ["commit", "-q", "-m", "Instance configuration as of " + new Date().toISOString().slice(0, 10)]);
+  if (staged)
+    await git(dir, ["commit", "-q", "-m", "Instance configuration as of " + new Date().toISOString().slice(0, 10)]);
   const tracked = await git(dir, ["ls-files"]);
-  if (/(^|\n)\.env(\n|$)/.test(tracked) || /(^|\n)state\//.test(tracked)) throw new Error("the instance repository tracks .env or state/; fix .gitignore before continuing");
+  if (/(^|\n)\.env(\n|$)/.test(tracked) || /(^|\n)state\//.test(tracked))
+    throw new Error("the instance repository tracks .env or state/; fix .gitignore before continuing");
   return { sha: await git(dir, ["rev-parse", "--short", "HEAD"]), tracked: tracked.split("\n").filter(Boolean).length };
 }

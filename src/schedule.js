@@ -44,10 +44,7 @@ function wallParts(instant, timezone) {
 
 function offsetMs(instant, timezone) {
   const wall = wallParts(instant, timezone);
-  return (
-    Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second) -
-    instant.getTime()
-  );
+  return Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second) - instant.getTime();
 }
 
 /** The instant at which a given wall-clock time occurs in a zone. */

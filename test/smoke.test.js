@@ -95,19 +95,9 @@ test("answers a question, replacing the placeholder with the answer", async () =
   await handleAsk(message, ROUTINE, { askFn: async () => RESULT });
 
   assert.ok(posted.length >= 2, "expected an answer and a trace");
-  assert.equal(
-    posted[0].text,
-    RESULT.text,
-    "placeholder should become the answer",
-  );
-  assert.ok(
-    posted[0].edits.length > 0,
-    "the answer arrives via edit, not a new message",
-  );
-  assert.ok(
-    posted[1].text.includes("abcd1234"),
-    "trace should carry the turn id",
-  );
+  assert.equal(posted[0].text, RESULT.text, "placeholder should become the answer");
+  assert.ok(posted[0].edits.length > 0, "the answer arrives via edit, not a new message");
+  assert.ok(posted[1].text.includes("abcd1234"), "trace should carry the turn id");
 });
 
 test("a failed turn reports the failure and does not crash", async () => {
@@ -121,10 +111,7 @@ test("a failed turn reports the failure and does not crash", async () => {
       trace: [],
     }),
   });
-  assert.ok(
-    posted[0].text.includes("boom"),
-    "the real error should reach the channel",
-  );
+  assert.ok(posted[0].text.includes("boom"), "the real error should reach the channel");
 });
 
 test("streaming progress reaches the live message", async () => {
@@ -143,11 +130,7 @@ test("streaming progress reaches the live message", async () => {
     live.edits.some((edit) => edit.includes("war_current")),
     "the tool name should appear in the live message while the turn runs",
   );
-  assert.equal(
-    live.text,
-    RESULT.text,
-    "and the live message ends as the answer",
-  );
+  assert.equal(live.text, RESULT.text, "and the live message ends as the answer");
 });
 
 test("the trace carries the diagnostics that make an answer debuggable", () => {
@@ -232,7 +215,10 @@ test("an answer with figures and no tool call is caveated under the reply", asyn
   await handleAsk(message, ROUTINE, {
     askFn: async () => ({ ...RESULT, text: "Same as above: 55-38, 59.1%.", called: [], trace: [] }),
   });
-  assert.ok(posted.some((p) => p.text.includes("No tool was called")), "the caveat must be visible");
+  assert.ok(
+    posted.some((p) => p.text.includes("No tool was called")),
+    "the caveat must be visible",
+  );
 });
 
 test("the trace names the request id of a failed call and of the last envelope", () => {
@@ -241,7 +227,13 @@ test("the trace names the request id of a failed call and of the last envelope",
     envelopes: [{ tool: "players_search", as_of: "2026-09-08T00:54:03.893Z", request_id: "dc5ec8de-b919-4934" }],
     trace: [
       ...RESULT.trace,
-      { kind: "error", name: "battles_query", code: "bad_request", detail: "inverted window", requestId: "7272147a-206a" },
+      {
+        kind: "error",
+        name: "battles_query",
+        code: "bad_request",
+        detail: "inverted window",
+        requestId: "7272147a-206a",
+      },
     ],
   });
   assert.ok(trace.includes("req `dc5ec8de`"), "envelope request id");
@@ -301,7 +293,10 @@ test("a new question opens a thread named after it and is answered there", async
   let seen = null;
   await handleAsk(message, ROUTINE, { askFn: async (args) => ((seen = args), RESULT) });
   assert.equal(threadObj.name, "what are the top meta decks this week?");
-  assert.ok(posted.every((p) => p.where === "thread"), "nothing lands in the channel itself");
+  assert.ok(
+    posted.every((p) => p.where === "thread"),
+    "nothing lands in the channel itself",
+  );
   assert.equal(posted[0].text, RESULT.text);
   assert.equal(seen.messages.length, 1, "a new question carries no history");
 });
@@ -316,7 +311,14 @@ test("a follow-up in the thread sees the starter and the thread only", async () 
   let seen = null;
   await handleAsk(message, ROUTINE, { askFn: async (args) => ((seen = args), RESULT) });
   // The current turn is content blocks (a picture may come first); history is text.
-  const contents = seen.messages.map((m) => (Array.isArray(m.content) ? m.content.filter((b) => b.type === "text").map((b) => b.text).join("") : m.content));
+  const contents = seen.messages.map((m) =>
+    Array.isArray(m.content)
+      ? m.content
+          .filter((b) => b.type === "text")
+          .map((b) => b.text)
+          .join("")
+      : m.content,
+  );
   assert.match(contents[0], /how am I playing\?/, "the starter opens the history");
   assert.equal(contents[1], "55-38 this month.");
   assert.match(contents[2], /and last month\?/);
@@ -344,9 +346,33 @@ test("every message a turn produced points back at the turn", async () => {
 test("a member's screenshot rides the turn as an image block, before the words, and is noted in the ledger", async () => {
   const { message } = fakeMessage("is this deck any good?");
   message.attachments = new Map([
-    ["a", { name: "deck.png", contentType: "image/png", size: 200_000, url: "https://cdn.discordapp.com/attachments/1/2/deck.png" }],
-    ["b", { name: "notes.txt", contentType: "text/plain", size: 100, url: "https://cdn.discordapp.com/attachments/1/2/notes.txt" }],
-    ["c", { name: "huge.png", contentType: "image/png", size: 50_000_000, url: "https://cdn.discordapp.com/attachments/1/2/huge.png" }],
+    [
+      "a",
+      {
+        name: "deck.png",
+        contentType: "image/png",
+        size: 200_000,
+        url: "https://cdn.discordapp.com/attachments/1/2/deck.png",
+      },
+    ],
+    [
+      "b",
+      {
+        name: "notes.txt",
+        contentType: "text/plain",
+        size: 100,
+        url: "https://cdn.discordapp.com/attachments/1/2/notes.txt",
+      },
+    ],
+    [
+      "c",
+      {
+        name: "huge.png",
+        contentType: "image/png",
+        size: 50_000_000,
+        url: "https://cdn.discordapp.com/attachments/1/2/huge.png",
+      },
+    ],
   ]);
   let seen;
   await handleAsk(message, ROUTINE, { askFn: async (args) => ((seen = args), RESULT) });

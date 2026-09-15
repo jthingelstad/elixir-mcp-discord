@@ -44,8 +44,14 @@ test("a daily routine fires once per local day across a DST boundary", () => {
   const early = { key: "e", trigger: "schedule", at: { hour: 1, minute: 0 }, catchUpHours: 4 };
   // US clocks jump forward at 02:00 on 2026-03-08, so 01:00 is CST that day and
   // CDT the next: 23 hours apart in real time, one day apart on the wall clock.
-  assert.equal(instantOf({ year: 2026, month: 3, day: 8, hour: 1, minute: 0 }, CHICAGO).toISOString(), "2026-03-08T07:00:00.000Z");
-  assert.equal(instantOf({ year: 2026, month: 3, day: 9, hour: 1, minute: 0 }, CHICAGO).toISOString(), "2026-03-09T06:00:00.000Z");
+  assert.equal(
+    instantOf({ year: 2026, month: 3, day: 8, hour: 1, minute: 0 }, CHICAGO).toISOString(),
+    "2026-03-08T07:00:00.000Z",
+  );
+  assert.equal(
+    instantOf({ year: 2026, month: 3, day: 9, hour: 1, minute: 0 }, CHICAGO).toISOString(),
+    "2026-03-09T06:00:00.000Z",
+  );
 
   const ledger = {};
   let fires = 0;
@@ -76,7 +82,11 @@ test("a routine is due once, then never again for that period", () => {
 });
 
 test("a missed run fires late, but only inside its catch-up window", () => {
-  assert.equal(dueRoutines([daily], { now: at("2026-09-08T16:00:00Z"), timezone: "UTC" }).length, 1, "3.5h late still counts");
+  assert.equal(
+    dueRoutines([daily], { now: at("2026-09-08T16:00:00Z"), timezone: "UTC" }).length,
+    1,
+    "3.5h late still counts",
+  );
   assert.equal(
     dueRoutines([daily], { now: at("2026-09-08T17:00:00Z"), timezone: "UTC" }).length,
     0,
@@ -96,5 +106,8 @@ test("seeding marks every schedule routine's current period", () => {
     timezone: "UTC",
   });
   assert.deepEqual(seeded, { d: "2026-09-08T12:30", w: "2026-09-07T12:00" });
-  assert.equal(dueRoutines([daily, weekly], { now: at("2026-09-08T13:00:00Z"), ledger: seeded, timezone: "UTC" }).length, 0);
+  assert.equal(
+    dueRoutines([daily, weekly], { now: at("2026-09-08T13:00:00Z"), ledger: seeded, timezone: "UTC" }).length,
+    0,
+  );
 });

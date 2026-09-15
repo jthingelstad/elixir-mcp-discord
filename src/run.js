@@ -58,13 +58,25 @@ function postTool({ routine, entries, dryRun, posts, resolve = resolveById }) {
     async handler({ channel_id, content }) {
       const entry = entries.find((e) => e.id === String(channel_id));
       if (!entry) {
-        return { ok: false, code: "unknown_channel", error: `channel_id ${channel_id} is not in the directory; use one listed under CHANNELS YOU MAY POST IN` };
+        return {
+          ok: false,
+          code: "unknown_channel",
+          error: `channel_id ${channel_id} is not in the directory; use one listed under CHANNELS YOU MAY POST IN`,
+        };
       }
       if (entry.role === "ask") {
-        return { ok: false, code: "ask_channel", error: `#${entry.name} is where members ask questions; routine output does not go there` };
+        return {
+          ok: false,
+          code: "ask_channel",
+          error: `#${entry.name} is where members ask questions; routine output does not go there`,
+        };
       }
       if (posts.length >= config.maxPostsPerTurn) {
-        return { ok: false, code: "post_cap", error: `this turn has already posted ${posts.length} times; that is the cap` };
+        return {
+          ok: false,
+          code: "post_cap",
+          error: `this turn has already posted ${posts.length} times; that is the cap`,
+        };
       }
       const text = String(content ?? "").trim();
       if (!text) return { ok: false, code: "empty", error: "content is empty" };
@@ -78,7 +90,10 @@ function postTool({ routine, entries, dryRun, posts, resolve = resolveById }) {
       }
       record.messages = await post(channel, text, routine.maxChars);
       record.channel = channel;
-      return { ok: true, body: { posted: true, channel: `#${entry.name}`, message_id: record.messages.at(-1)?.id ?? null } };
+      return {
+        ok: true,
+        body: { posted: true, channel: `#${entry.name}`, message_id: record.messages.at(-1)?.id ?? null },
+      };
     },
   };
 }
@@ -114,9 +129,11 @@ export function roomTool({ entries, resolve = resolveById, now = () => Date.now(
     ...ROOM_TOOL,
     async handler({ channel_id, limit }) {
       const entry = entries.find((e) => e.id === String(channel_id));
-      if (!entry) return { ok: false, code: "unknown_channel", error: `channel_id ${channel_id} is not in the directory` };
+      if (!entry)
+        return { ok: false, code: "unknown_channel", error: `channel_id ${channel_id} is not in the directory` };
       const channel = await resolve(entry.id);
-      if (!channel?.messages?.fetch) return { ok: false, code: "unresolvable", error: `#${entry.name} could not be read` };
+      if (!channel?.messages?.fetch)
+        return { ok: false, code: "unresolvable", error: `#${entry.name} could not be read` };
       let fetched;
       try {
         fetched = await channel.messages.fetch({ limit: Math.min(30, limit || 15) });
@@ -127,8 +144,21 @@ export function roomTool({ entries, resolve = resolveById, now = () => Date.now(
       const messages = [...fetched.values()]
         .filter((m) => (m.createdTimestamp ?? 0) >= since && (m.cleanContent || "").trim())
         .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
-        .map((m) => ({ at: new Date(m.createdTimestamp).toISOString(), who: m.author?.bot ? `${m.author.username} (bot)` : m.member?.displayName || m.author?.username || "someone", text: String(m.cleanContent).slice(0, 300) }));
-      return { ok: true, body: { channel: `#${entry.name}`, messages, note: messages.length ? "What the room already knows. Add to it or stay quiet; do not restate it." : "Quiet for two hours." } };
+        .map((m) => ({
+          at: new Date(m.createdTimestamp).toISOString(),
+          who: m.author?.bot ? `${m.author.username} (bot)` : m.member?.displayName || m.author?.username || "someone",
+          text: String(m.cleanContent).slice(0, 300),
+        }));
+      return {
+        ok: true,
+        body: {
+          channel: `#${entry.name}`,
+          messages,
+          note: messages.length
+            ? "What the room already knows. Add to it or stay quiet; do not restate it."
+            : "Quiet for two hours.",
+        },
+      };
     },
   };
 }
@@ -137,12 +167,10 @@ export function roomTool({ entries, resolve = resolveById, now = () => Date.now(
  *  to attach a footer must never undo the post. */
 async function footnote(last, content, what) {
   if (!last || !content) return null;
-  return last
-    .reply({ content, allowedMentions: { repliedUser: false } })
-    .catch((error) => {
-      log.warn(`${what}_post_failed`, { error: error.message });
-      return null;
-    });
+  return last.reply({ content, allowedMentions: { repliedUser: false } }).catch((error) => {
+    log.warn(`${what}_post_failed`, { error: error.message });
+    return null;
+  });
 }
 
 /** What a reaction sweep needs to know about a turn, kept small. */
@@ -157,7 +185,11 @@ export function turnRecord({ routine, lane, question, text, result, channelId })
     question: String(question || "").slice(0, 700),
     answer: String(text || "").slice(0, 1200),
     called: result.called || [],
-    errors: (result.errors || []).map((e) => ({ name: e.name, code: e.code, detail: String(e.detail || "").slice(0, 200) })),
+    errors: (result.errors || []).map((e) => ({
+      name: e.name,
+      code: e.code,
+      detail: String(e.detail || "").slice(0, 200),
+    })),
     requestIds: [...new Set(requestIds)].slice(0, 12),
     channelId: channelId || null,
     at: new Date().toISOString(),
@@ -182,7 +214,16 @@ export async function runRoutine(routine, options = {}) {
 
 async function runRoutineNow(
   routine,
-  { channel = null, events = null, dryRun = false, askFn = ask, entries = directory(), resolve = resolveById, overrides = {}, lane = laneFor(routine) } = {},
+  {
+    channel = null,
+    events = null,
+    dryRun = false,
+    askFn = ask,
+    entries = directory(),
+    resolve = resolveById,
+    overrides = {},
+    lane = laneFor(routine),
+  } = {},
 ) {
   const blocked = spendBlock(lane);
   if (blocked) {
@@ -195,7 +236,12 @@ async function runRoutineNow(
       spent: blocked.spent?.toFixed(2),
       budget: blocked.budget?.toFixed(2),
     });
-    if (!dryRun) await notify("budget", `${routine.key} did not run: the ${lane} lane is at $${blocked.spent?.toFixed(2) ?? "?"} of $${blocked.budget?.toFixed(2) ?? "?"} this month (${blocked.reason}). It resets on the 1st.`, { fingerprint: `budget:${lane}:${blocked.reason}`, every: 24 * 3600 * 1000 });
+    if (!dryRun)
+      await notify(
+        "budget",
+        `${routine.key} did not run: the ${lane} lane is at $${blocked.spent?.toFixed(2) ?? "?"} of $${blocked.budget?.toFixed(2) ?? "?"} this month (${blocked.reason}). It resets on the 1st.`,
+        { fingerprint: `budget:${lane}:${blocked.reason}`, every: 24 * 3600 * 1000 },
+      );
     return { ok: false, error: `budget:${blocked.reason}` };
   }
 
@@ -226,28 +272,40 @@ async function runRoutineNow(
         result,
         system,
         contractVersion: state.get("contractVersion"),
-        input: { kind: routine.trigger, brief: routine.prompt, events: events ?? undefined, recent, defaultChannelId: channel?.id ?? null },
+        input: {
+          kind: routine.trigger,
+          brief: routine.prompt,
+          events: events ?? undefined,
+          recent,
+          defaultChannelId: channel?.id ?? null,
+        },
         output,
       }),
     );
   };
   const result = await askFn({
     system,
-    messages: [
-      { role: "user", content: userMessageFor(routine, { events, recent, withTool }) },
-    ],
+    messages: [{ role: "user", content: userMessageFor(routine, { events, recent, withTool }) }],
     maxTokens: routine.maxTokens,
     model: routine.model,
     effort: routine.effort,
     routineKey: routine.key,
     lane,
-    localTools: withTool ? [postTool({ routine, entries: directoryEntries, dryRun: dryRun || false, posts, resolve }), roomTool({ entries: directoryEntries, resolve })] : [],
+    localTools: withTool
+      ? [
+          postTool({ routine, entries: directoryEntries, dryRun: dryRun || false, posts, resolve }),
+          roomTool({ entries: directoryEntries, resolve }),
+        ]
+      : [],
   });
 
   if (!result.ok) {
     log.error("routine_failed", { routine: routine.key, error: result.error });
     record({ error: result.error });
-    if (!dryRun) await notify("routine failed", `${routine.key}: ${String(result.error).slice(0, 300)}`, { fingerprint: `routine_failed:${routine.key}` });
+    if (!dryRun)
+      await notify("routine failed", `${routine.key}: ${String(result.error).slice(0, 300)}`, {
+        fingerprint: `routine_failed:${routine.key}`,
+      });
     return { ok: false, error: result.error };
   }
 
@@ -263,7 +321,13 @@ async function runRoutineNow(
   const textPost = posts.length === 0 && !skipped && text ? text : null;
 
   if (dryRun) {
-    return { ok: true, skipped, text, posts: posts.map(({ channelName, text: t }) => ({ channel: `#${channelName}`, text: t })), result };
+    return {
+      ok: true,
+      skipped,
+      text,
+      posts: posts.map(({ channelName, text: t }) => ({ channel: `#${channelName}`, text: t })),
+      result,
+    };
   }
 
   if (skipped) {
@@ -282,11 +346,17 @@ async function runRoutineNow(
       log.error("post_without_destination", {
         routine: routine.key,
         turnId: result.turnId,
-        hint: withTool ? "the model replied in prose instead of calling post_message and the routine names no channel:" : "the routine names no channel: and there is no directory",
+        hint: withTool
+          ? "the model replied in prose instead of calling post_message and the routine names no channel:"
+          : "the routine names no channel: and there is no directory",
         chars: text.length,
       });
       record({ text, posts: [], error: "no_destination" });
-      await notify("routine had nowhere to post", `${routine.key} wrote ${text.length} characters but called no post tool and names no channel; the turn was paid for and nothing was posted.`, { fingerprint: `no_destination:${routine.key}` });
+      await notify(
+        "routine had nowhere to post",
+        `${routine.key} wrote ${text.length} characters but called no post tool and names no channel; the turn was paid for and nothing was posted.`,
+        { fingerprint: `no_destination:${routine.key}` },
+      );
       return { ok: false, error: "no_destination", text, result };
     }
     const messages = await post(channel, textPost, routine.maxChars);
@@ -298,7 +368,10 @@ async function runRoutineNow(
   const sent = posts.flatMap((p) => p.messages);
   const last = sent.at(-1) ?? null;
   for (const p of posts) {
-    state.rememberPost(routine.key, posts.length > 1 || p.channelId !== channel?.id ? `[#${p.channelName}] ${p.text}` : p.text);
+    state.rememberPost(
+      routine.key,
+      posts.length > 1 || p.channelId !== channel?.id ? `[#${p.channelName}] ${p.text}` : p.text,
+    );
   }
   const notes = [];
   const footers = [];
@@ -314,7 +387,11 @@ async function runRoutineNow(
     await attach(errorFooter(result), "error_footer");
   }
   const posted = posts.map((p) => p.text).join("\n\n");
-  const ungrounded = looksUngrounded({ text: posted, called: result.called.filter((n) => n !== POST_TOOL.name), events });
+  const ungrounded = looksUngrounded({
+    text: posted,
+    called: result.called.filter((n) => n !== POST_TOOL.name),
+    events,
+  });
   if (ungrounded) {
     log.warn("routine_ungrounded", { routine: routine.key, turnId: result.turnId });
     await attach(UNGROUNDED_FOOTER, "ungrounded_footer");
@@ -323,7 +400,14 @@ async function runRoutineNow(
   // on any of them — the post, its footer — finds the same record.
   state.rememberTurn(
     result.turnId,
-    turnRecord({ routine, lane, question: routine.prompt, text: posted, result, channelId: posts.at(-1)?.channelId ?? null }),
+    turnRecord({
+      routine,
+      lane,
+      question: routine.prompt,
+      text: posted,
+      result,
+      channelId: posts.at(-1)?.channelId ?? null,
+    }),
     [...sent, ...notes].map((m) => m?.id),
   );
 
@@ -350,7 +434,12 @@ async function runRoutineNow(
   });
   record({
     text: posted,
-    posts: posts.map((p) => ({ channelId: p.channelId, channelName: p.channelName, messageIds: p.messages.map((m) => m?.id).filter(Boolean), text: p.text })),
+    posts: posts.map((p) => ({
+      channelId: p.channelId,
+      channelName: p.channelName,
+      messageIds: p.messages.map((m) => m?.id).filter(Boolean),
+      text: p.text,
+    })),
     skipped: false,
     footers,
     ungrounded,
@@ -380,5 +469,11 @@ async function runRoutineNow(
     }
   }
 
-  return { ok: true, skipped: false, text: posted, posts: posts.map(({ channelName, text: t }) => ({ channel: `#${channelName}`, text: t })), result };
+  return {
+    ok: true,
+    skipped: false,
+    text: posted,
+    posts: posts.map(({ channelName, text: t }) => ({ channel: `#${channelName}`, text: t })),
+    result,
+  };
 }

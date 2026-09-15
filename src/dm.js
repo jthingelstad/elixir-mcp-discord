@@ -214,7 +214,8 @@ function findTurn(turnId) {
 }
 
 async function send(message, text) {
-  for (const part of chunk(text || "(nothing)", 1900)) await message.channel.send({ content: part, allowedMentions: { parse: [] } });
+  for (const part of chunk(text || "(nothing)", 1900))
+    await message.channel.send({ content: part, allowedMentions: { parse: [] } });
 }
 
 async function dmHistory(channel, beforeId) {
@@ -223,7 +224,12 @@ async function dmHistory(channel, beforeId) {
     const history = [];
     for (const m of [...fetched.values()].reverse()) {
       if (!isConversational(m)) continue;
-      history.push({ role: m.author.bot ? "assistant" : "user", content: m.author.bot ? m.cleanContent.trim() : `${m.author.username} (discord:${m.author.id}): ${m.cleanContent.trim()}` });
+      history.push({
+        role: m.author.bot ? "assistant" : "user",
+        content: m.author.bot
+          ? m.cleanContent.trim()
+          : `${m.author.username} (discord:${m.author.id}): ${m.cleanContent.trim()}`,
+      });
     }
     while (history.length && history[0].role !== "user") history.shift();
     return history.slice(-HISTORY_TURNS);
@@ -238,14 +244,24 @@ async function why(message, text) {
   const turnId = turnIdIn(text);
   const turn = findTurn(turnId);
   if (!turn) {
-    await send(message, turnId ? `I have no turn \`${turnId}\` in the last 60 days of the ledger.` : "Give me a turn id (the footer under an answer shows it) or paste a link to the message.");
+    await send(
+      message,
+      turnId
+        ? `I have no turn \`${turnId}\` in the last 60 days of the ledger.`
+        : "Give me a turn id (the footer under an answer shows it) or paste a link to the message.",
+    );
     return;
   }
   const full = /\bfull\b/i.test(text);
   const rendered = renderTurn(turn, { full });
   const parts = chunk(rendered, 1900);
-  for (const part of parts.slice(0, full ? 8 : 4)) await message.channel.send({ content: part, allowedMentions: { parse: [] } });
-  if (parts.length > (full ? 8 : 4)) await send(message, `-# ${parts.length - (full ? 8 : 4)} more part(s) not shown; \`npm run turns -- --turn ${turnId}\` has it all.`);
+  for (const part of parts.slice(0, full ? 8 : 4))
+    await message.channel.send({ content: part, allowedMentions: { parse: [] } });
+  if (parts.length > (full ? 8 : 4))
+    await send(
+      message,
+      `-# ${parts.length - (full ? 8 : 4)} more part(s) not shown; \`npm run turns -- --turn ${turnId}\` has it all.`,
+    );
   log.info("dm_why", { user: message.author.id, turnId });
 }
 
@@ -260,7 +276,12 @@ async function retract(message, text, { deleteFn = null } = {}) {
   const turnId = turnIdIn(text);
   const turn = findTurn(turnId);
   if (!turn) {
-    await send(message, turnId ? `I have no turn \`${turnId}\` in the last 60 days.` : "Say `retract <turn id>` (the footer under a post shows it), and optionally why after a dash.");
+    await send(
+      message,
+      turnId
+        ? `I have no turn \`${turnId}\` in the last 60 days.`
+        : "Say `retract <turn id>` (the footer under a post shows it), and optionally why after a dash.",
+    );
     return;
   }
   if (turn.lane === "dm") {
@@ -274,7 +295,8 @@ async function retract(message, text, { deleteFn = null } = {}) {
   for (const p of turn.output?.posts || []) for (const id of p.messageIds || []) places.set(id, p.channelId);
   for (const id of turn.output?.messageIds || []) places.set(id, turn.input?.threadId ?? turn.input?.channelId ?? null);
   const messageTurns = state.get("messageTurns") || {};
-  for (const [id, tid] of Object.entries(messageTurns)) if (tid === turn.turnId && !places.has(id)) places.set(id, [...places.values()][0] ?? null);
+  for (const [id, tid] of Object.entries(messageTurns))
+    if (tid === turn.turnId && !places.has(id)) places.set(id, [...places.values()][0] ?? null);
   let deleted = 0;
   const failed = [];
   for (const [id, channelId] of places) {
@@ -292,7 +314,10 @@ async function retract(message, text, { deleteFn = null } = {}) {
   }
   ledger.append(ledger.retractionEntry({ turnId: turn.turnId, by: message.author.id, deleted, reason }));
   log.info("dm_retracted", { user: message.author.id, turnId: turn.turnId, deleted, failed: failed.length, reason });
-  await send(message, `Retracted \`${turn.turnId}\` (${turn.routine}): deleted ${deleted} message${deleted === 1 ? "" : "s"}${failed.length ? `; could not delete ${failed.join(", ")}` : ""}.${reason ? ` Noted why: "${reason}".` : ""} The review will see it as the strongest signal there is${reason ? "" : " — say `retract <id> — why` next time and it learns faster"}.`);
+  await send(
+    message,
+    `Retracted \`${turn.turnId}\` (${turn.routine}): deleted ${deleted} message${deleted === 1 ? "" : "s"}${failed.length ? `; could not delete ${failed.join(", ")}` : ""}.${reason ? ` Noted why: "${reason}".` : ""} The review will see it as the strongest signal there is${reason ? "" : " — say `retract <id> — why` next time and it learns faster"}.`,
+  );
 }
 
 /** Drafts from "try", per operator, in memory only: a draft outlives nothing. */
@@ -301,7 +326,14 @@ const drafts = new Map();
 async function tryRoutine(message, key, { runFn = runRoutine } = {}) {
   const routine = loadRoutines().routines.find((r) => r.key === key);
   if (!routine) {
-    await send(message, `No routine called \`${key}\`. The ones I have: ${loadRoutines().routines.map((r) => `\`${r.key}\``).join(", ") || "none"}.`);
+    await send(
+      message,
+      `No routine called \`${key}\`. The ones I have: ${
+        loadRoutines()
+          .routines.map((r) => `\`${r.key}\``)
+          .join(", ") || "none"
+      }.`,
+    );
     return;
   }
   if (routine.trigger === "message") {
@@ -309,7 +341,9 @@ async function tryRoutine(message, key, { runFn = runRoutine } = {}) {
     return;
   }
   const entries = directory();
-  const defaultId = routine.channel ? config.channels.get(routine.channel) ?? entries.find((e) => e.name === routine.channel)?.id ?? null : null;
+  const defaultId = routine.channel
+    ? (config.channels.get(routine.channel) ?? entries.find((e) => e.name === routine.channel)?.id ?? null)
+    : null;
   const channel = defaultId ? await resolveById(defaultId) : null;
   await send(message, `-# running \`${key}\` as a rehearsal — nothing is posted…`);
   const run = await runFn(routine, { channel, dryRun: true, entries });
@@ -327,7 +361,10 @@ async function tryRoutine(message, key, { runFn = runRoutine } = {}) {
   await send(message, shown);
   const trace = renderTrace(run.result, { label: key });
   if (trace) await send(message, trace);
-  await send(message, `-# $${run.result.usd.toFixed(4)} · say **post it** to send this to ${run.posts.map((p) => p.channel).join(", ")}, or try again after editing the routine.`);
+  await send(
+    message,
+    `-# $${run.result.usd.toFixed(4)} · say **post it** to send this to ${run.posts.map((p) => p.channel).join(", ")}, or try again after editing the routine.`,
+  );
   log.info("dm_try", { user: message.author.id, routine: key, posts: run.posts.length });
 }
 
@@ -353,13 +390,29 @@ async function postDraft(message, { postFn = post } = {}) {
       continue;
     }
     const messages = await postFn(channel, p.text, routine.maxChars);
-    posted.push({ channelId: entry.id, channelName: entry.name, messageIds: messages.map((m) => m?.id).filter(Boolean), text: p.text });
+    posted.push({
+      channelId: entry.id,
+      channelName: entry.name,
+      messageIds: messages.map((m) => m?.id).filter(Boolean),
+      text: p.text,
+    });
     state.rememberPost(routine.key, run.posts.length > 1 ? `[${p.channel}] ${p.text}` : p.text);
   }
   drafts.delete(message.author.id);
   if (posted.length) {
     const text = posted.map((p) => p.text).join("\n\n");
-    state.rememberTurn(run.result.turnId, turnRecord({ routine, lane: "routines", question: routine.prompt, text, result: run.result, channelId: posted.at(-1).channelId }), posted.flatMap((p) => p.messageIds));
+    state.rememberTurn(
+      run.result.turnId,
+      turnRecord({
+        routine,
+        lane: "routines",
+        question: routine.prompt,
+        text,
+        result: run.result,
+        channelId: posted.at(-1).channelId,
+      }),
+      posted.flatMap((p) => p.messageIds),
+    );
     ledger.append(
       ledger.turnEntry({
         routine,
@@ -372,7 +425,10 @@ async function postDraft(message, { postFn = post } = {}) {
       }),
     );
   }
-  await send(message, posted.length ? `Posted to ${posted.map((p) => `#${p.channelName}`).join(", ")}.` : "Nothing was posted.");
+  await send(
+    message,
+    posted.length ? `Posted to ${posted.map((p) => `#${p.channelName}`).join(", ")}.` : "Nothing was posted.",
+  );
   log.info("dm_posted_draft", { user: message.author.id, routine: routine.key, posts: posted.length });
 }
 
@@ -392,9 +448,16 @@ async function showFeedback(message) {
     const id = item.feedback_id ?? item.id;
     const response = item.response ?? item.maintainer_response;
     const when = String(item.created_at ?? item.filed_at ?? "").slice(0, 10);
-    return `**#${id}** ${when} · ${item.category ?? ""} · ${item.status ?? (response ? "answered" : "open")}\n> ${String(item.message ?? "").slice(0, 240).replace(/\n/g, " ")}${response ? `\n↳ ${String(response).slice(0, 300).replace(/\n/g, " ")}` : ""}`;
+    return `**#${id}** ${when} · ${item.category ?? ""} · ${item.status ?? (response ? "answered" : "open")}\n> ${String(
+      item.message ?? "",
+    )
+      .slice(0, 240)
+      .replace(/\n/g, " ")}${response ? `\n↳ ${String(response).slice(0, 300).replace(/\n/g, " ")}` : ""}`;
   });
-  await send(message, `**Feedback** (${items.length} filed; newest ${Math.min(12, items.length)} shown)\n\n${lines.join("\n\n")}`);
+  await send(
+    message,
+    `**Feedback** (${items.length} filed; newest ${Math.min(12, items.length)} shown)\n\n${lines.join("\n\n")}`,
+  );
 }
 
 async function showMemory(message) {
@@ -409,9 +472,15 @@ async function showMemory(message) {
     .split("\n")
     .map((l) => parseMemoryEntry(l))
     .filter(Boolean)
-    .map((e) => `${e.until && e.until < today ? "~~" : ""}${e.date} · ${e.source === "owner" ? "you" : `turns ${e.turns.join(", ")}`}${e.until ? ` · until ${e.until}` : ""} — ${e.text}${e.until && e.until < today ? "~~ (expired)" : ""}`);
+    .map(
+      (e) =>
+        `${e.until && e.until < today ? "~~" : ""}${e.date} · ${e.source === "owner" ? "you" : `turns ${e.turns.join(", ")}`}${e.until ? ` · until ${e.until}` : ""} — ${e.text}${e.until && e.until < today ? "~~ (expired)" : ""}`,
+    );
   const live = readMemory();
-  await send(message, `**Memory** (${live ? live.length : 0} of ${MEMORY_MAX_CHARS} characters in the prompt)\n${lines.map((l) => `- ${l}`).join("\n")}`);
+  await send(
+    message,
+    `**Memory** (${live ? live.length : 0} of ${MEMORY_MAX_CHARS} characters in the prompt)\n${lines.map((l) => `- ${l}`).join("\n")}`,
+  );
 }
 
 // ---------------------------------------------------------- the model
@@ -424,18 +493,33 @@ function proposeTool({ files, proposals, by, operatorId = null }) {
     input_schema: {
       type: "object",
       properties: {
-        file: { type: "string", description: "memory.md, identity.md, routines/<key>.md (key: lowercase letters, digits, hyphens), or config.json for settings" },
+        file: {
+          type: "string",
+          description:
+            "memory.md, identity.md, routines/<key>.md (key: lowercase letters, digits, hyphens), or config.json for settings",
+        },
         summary: { type: "string", description: "One line for the operator: what this remembers or changes." },
         edit: {
           type: "object",
           properties: {
-            op: { type: "string", enum: ["append", "replace", "remove", "set_fields", "create", "delete", "set_config"] },
-            text: { type: "string", description: "append to memory.md: '- YYYY-MM-DD (from owner)[ until YYYY-MM-DD]: their words'; append elsewhere: the text. create: the routine's brief." },
+            op: {
+              type: "string",
+              enum: ["append", "replace", "remove", "set_fields", "create", "delete", "set_config"],
+            },
+            text: {
+              type: "string",
+              description:
+                "append to memory.md: '- YYYY-MM-DD (from owner)[ until YYYY-MM-DD]: their words'; append elsewhere: the text. create: the routine's brief.",
+            },
             find: { type: "string", description: "replace/remove: exact text occurring once" },
             replace: { type: "string" },
             fields: {
               type: "object",
-              description: `set_fields/create: front matter as strings — ${[...FIELDS].join(", ")}; an empty string removes a field. set_config: settings — ${Object.entries(SETTINGS).map(([k, v]) => `${k} (${v.about})`).join("; ")}; CHANNEL_<NAME> (a #name or id the bot is granted in); empty string unsets.`,
+              description: `set_fields/create: front matter as strings — ${[...FIELDS].join(", ")}; an empty string removes a field. set_config: settings — ${Object.entries(
+                SETTINGS,
+              )
+                .map(([k, v]) => `${k} (${v.about})`)
+                .join("; ")}; CHANNEL_<NAME> (a #name or id the bot is granted in); empty string unsets.`,
               additionalProperties: { type: "string" },
             },
           },
@@ -447,14 +531,31 @@ function proposeTool({ files, proposals, by, operatorId = null }) {
       additionalProperties: false,
     },
     async handler({ file, summary, edit }) {
-      if (proposals.length >= MAX_PROPOSALS) return { ok: false, code: "cap", error: `${MAX_PROPOSALS} proposals is enough for one message` };
+      if (proposals.length >= MAX_PROPOSALS)
+        return { ok: false, code: "cap", error: `${MAX_PROPOSALS} proposals is enough for one message` };
       if (file === "memory.md" && edit?.op === "append" && !/\(from owner\)/.test(String(edit.text ?? ""))) {
-        return { ok: false, code: "provenance", error: 'a memory entry from this conversation is "- YYYY-MM-DD (from owner): ..."' };
+        return {
+          ok: false,
+          code: "provenance",
+          error: 'a memory entry from this conversation is "- YYYY-MM-DD (from owner): ..."',
+        };
       }
-      const current = proposals.filter((p) => p.file === file).at(-1)?.next ?? (file === "config.json" ? readConfigText() : files[file] ?? null);
+      const current =
+        proposals.filter((p) => p.file === file).at(-1)?.next ??
+        (file === "config.json" ? readConfigText() : (files[file] ?? null));
       const plan = planEdit({ file, edit: { ...edit, by }, current, by: operatorId });
       if (!plan.ok) return { ok: false, code: "refused", error: plan.error };
-      const proposal = { id: `p${proposals.length + 1}`, class: file === "config.json" ? "settings" : "prompt", file, rule: file === "config.json" ? "settings" : "from the operator", turnIds: [], summary: String(summary ?? "").slice(0, 300), edit: { ...edit, by }, preview: plan.preview.slice(0, 1500), next: plan.next };
+      const proposal = {
+        id: `p${proposals.length + 1}`,
+        class: file === "config.json" ? "settings" : "prompt",
+        file,
+        rule: file === "config.json" ? "settings" : "from the operator",
+        turnIds: [],
+        summary: String(summary ?? "").slice(0, 300),
+        edit: { ...edit, by },
+        preview: plan.preview.slice(0, 1500),
+        next: plan.next,
+      };
       proposals.push(proposal);
       return { ok: true, body: { proposal_id: proposal.id, diff: proposal.preview } };
     },
@@ -464,7 +565,8 @@ function proposeTool({ files, proposals, by, operatorId = null }) {
 function routinesTool() {
   return {
     name: "list_routines",
-    description: "Every routine this bot runs: key, trigger, when, where it posts, model, whether it is enabled, its description and its brief. Read this before proposing a change to one.",
+    description:
+      "Every routine this bot runs: key, trigger, when, where it posts, model, whether it is enabled, its description and its brief. Read this before proposing a change to one.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
     async handler() {
       const { routines, errors } = loadRoutines();
@@ -499,7 +601,8 @@ function routinesTool() {
 function examplesTool() {
   return {
     name: "list_example_routines",
-    description: "The routines this bot ships as examples — each with its fields and its full brief — to offer when setting up, and to start from when writing a new one.",
+    description:
+      "The routines this bot ships as examples — each with its fields and its full brief — to offer when setting up, and to start from when writing a new one.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
     async handler() {
       const entries = catalog({ exampleDir: path.join(repoRoot, "agent"), instanceDir: config.agentDir });
@@ -508,7 +611,13 @@ function examplesTool() {
         body: {
           examples: entries
             .filter((e) => e.example && e.routine)
-            .map((e) => ({ key: e.key, installed: e.installed, description: e.routine.description, fields: splitFrontMatter(e.text).fields, brief: e.routine.prompt })),
+            .map((e) => ({
+              key: e.key,
+              installed: e.installed,
+              description: e.routine.description,
+              fields: splitFrontMatter(e.text).fields,
+              brief: e.routine.prompt,
+            })),
           the_usual: ["ask", "clan-feed", "notable-movers", "war-deck-check"],
         },
       };
@@ -519,15 +628,28 @@ function examplesTool() {
 function channelsTool() {
   return {
     name: "list_channels",
-    description: "Where this bot may post (its directory: channels where its role is explicitly granted), with topics and who can see them, and which channel is bound as the ask channel.",
+    description:
+      "Where this bot may post (its directory: channels where its role is explicitly granted), with topics and who can see them, and which channel is bound as the ask channel.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
     async handler() {
       const entries = directory();
       return {
         ok: true,
         body: {
-          channels: entries.map((e) => ({ name: e.name, id: e.id, role: e.role, topic: e.topic ?? null, visibility: e.visibility ?? null, visible_to: e.visibleTo ?? null })),
-          bound: Object.fromEntries([...config.channels].map(([name, id]) => [name, entries.find((e) => e.id === id)?.name ? `#${entries.find((e) => e.id === id).name}` : id])),
+          channels: entries.map((e) => ({
+            name: e.name,
+            id: e.id,
+            role: e.role,
+            topic: e.topic ?? null,
+            visibility: e.visibility ?? null,
+            visible_to: e.visibleTo ?? null,
+          })),
+          bound: Object.fromEntries(
+            [...config.channels].map(([name, id]) => [
+              name,
+              entries.find((e) => e.id === id)?.name ? `#${entries.find((e) => e.id === id).name}` : id,
+            ]),
+          ),
           timezone: config.timezone,
         },
       };
@@ -540,7 +662,9 @@ export function statusReport() {
   const today = new Date().toISOString().slice(0, 10);
   const turns = ledger.readTurns({ since: new Date(Date.now() - 7 * DAY_MS).toISOString().slice(0, 10) });
   const lastBy = {};
-  for (const t of turns) if (!lastBy[t.lane] || t.at > lastBy[t.lane].at) lastBy[t.lane] = { at: t.at, routine: t.routine, turnId: t.turnId };
+  for (const t of turns)
+    if (!lastBy[t.lane] || t.at > lastBy[t.lane].at)
+      lastBy[t.lane] = { at: t.at, routine: t.routine, turnId: t.turnId };
   const cursors = state.get("cursors") || {};
   const reviews = ledger.readReviews({ since: new Date(Date.now() - 90 * DAY_MS).toISOString().slice(0, 10) });
   const last = reviews.filter((r) => r.trigger !== "dm").at(-1) ?? null;
@@ -549,15 +673,44 @@ export function statusReport() {
     instance: ledger.instanceName(),
     build: buildId(),
     uptime_minutes: Math.round(process.uptime() / 60),
-    elixir: { contract: state.get("contractVersion"), server: state.get("serverVersion"), subject: state.get("principal")?.subject ?? null },
-    budgets: budget.status().map((b) => ({ lane: b.lane, spent_usd: Number(b.spent.toFixed(2)), budget_usd: b.budget, state: b.state })),
+    elixir: {
+      contract: state.get("contractVersion"),
+      server: state.get("serverVersion"),
+      subject: state.get("principal")?.subject ?? null,
+    },
+    budgets: budget
+      .status()
+      .map((b) => ({ lane: b.lane, spent_usd: Number(b.spent.toFixed(2)), budget_usd: b.budget, state: b.state })),
     today_usd: Number(state.todaySpend().toFixed(2)),
     turns_last_7_days: turns.length,
     turns_today: turns.filter((t) => t.at.startsWith(today)).length,
     last_turn_by_lane: lastBy,
-    feed_cursors: Object.fromEntries(Object.entries(cursors).map(([k, v]) => [k, typeof v === "string" ? `${Math.round((Date.now() - Date.parse(v)) / 60000)} min ago` : String(v)])),
-    routines: { enabled: routines.filter((r) => !r.disabled).map((r) => r.key), disabled: routines.filter((r) => r.disabled).map((r) => r.key), failed_to_load: errors.map((e) => e.key) },
-    review: { enabled: config.review.enabled, at: `${config.review.at.days ? config.review.at.days.map((d) => ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][d]).join(",") : "daily"} ${String(config.review.at.hour).padStart(2, "0")}:${String(config.review.at.minute).padStart(2, "0")} ${config.timezone}`, model: config.review.model, reviewed_through: state.get("reviewedThrough"), last: last ? { reviewId: last.reviewId, at: last.at, turnsRead: last.turnsRead, proposals: last.proposals.length, decisions: last.decisions.map((d) => `${d.proposalId}:${d.decision}`) } : null },
+    feed_cursors: Object.fromEntries(
+      Object.entries(cursors).map(([k, v]) => [
+        k,
+        typeof v === "string" ? `${Math.round((Date.now() - Date.parse(v)) / 60000)} min ago` : String(v),
+      ]),
+    ),
+    routines: {
+      enabled: routines.filter((r) => !r.disabled).map((r) => r.key),
+      disabled: routines.filter((r) => r.disabled).map((r) => r.key),
+      failed_to_load: errors.map((e) => e.key),
+    },
+    review: {
+      enabled: config.review.enabled,
+      at: `${config.review.at.days ? config.review.at.days.map((d) => ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][d]).join(",") : "daily"} ${String(config.review.at.hour).padStart(2, "0")}:${String(config.review.at.minute).padStart(2, "0")} ${config.timezone}`,
+      model: config.review.model,
+      reviewed_through: state.get("reviewedThrough"),
+      last: last
+        ? {
+            reviewId: last.reviewId,
+            at: last.at,
+            turnsRead: last.turnsRead,
+            proposals: last.proposals.length,
+            decisions: last.decisions.map((d) => `${d.proposalId}:${d.decision}`),
+          }
+        : null,
+    },
     service_managed: serviceManaged(),
     timezone: config.timezone,
   };
@@ -566,7 +719,8 @@ export function statusReport() {
 function statusTool() {
   return {
     name: "status",
-    description: "How this bot is doing right now: build, Elixir contract, budgets per lane and today's spend, turns this week, the last turn per lane, feed cursor age, which routines are on, the review's clock and last run.",
+    description:
+      "How this bot is doing right now: build, Elixir contract, budgets per lane and today's spend, turns this week, the last turn per lane, feed cursor age, which routines are on, the review's clock and last run.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
     async handler() {
       return { ok: true, body: statusReport() };
@@ -577,7 +731,8 @@ function statusTool() {
 export function searchTool() {
   return {
     name: "search_turns",
-    description: "Find your own earlier turns: a text query over what was asked, what you answered, the tools you called and the routine, with lane/routine/date filters. Returns compact rows with turn ids; lookup_turn shows one in full.",
+    description:
+      "Find your own earlier turns: a text query over what was asked, what you answered, the tools you called and the routine, with lane/routine/date filters. Returns compact rows with turn ids; lookup_turn shows one in full.",
     input_schema: {
       type: "object",
       properties: {
@@ -591,7 +746,14 @@ export function searchTool() {
       additionalProperties: false,
     },
     async handler({ query, since, until, lane, routine, limit }) {
-      const rows = ledger.searchTurns({ query, since: since || new Date(Date.now() - 14 * DAY_MS).toISOString().slice(0, 10), until: until || null, lane: lane || null, routine: routine || null, limit: limit || 20 });
+      const rows = ledger.searchTurns({
+        query,
+        since: since || new Date(Date.now() - 14 * DAY_MS).toISOString().slice(0, 10),
+        until: until || null,
+        lane: lane || null,
+        routine: routine || null,
+        limit: limit || 20,
+      });
       return { ok: true, body: { matches: rows.length, turns: rows } };
     },
   };
@@ -600,10 +762,17 @@ export function searchTool() {
 function estimateTool() {
   return {
     name: "estimate_cost",
-    description: "Roughly what a routine costs per month from its fields (schedule: days and at; events: about daily), at ~$0.10 a post, plus what the current set costs. A starting point, not a forecast.",
+    description:
+      "Roughly what a routine costs per month from its fields (schedule: days and at; events: about daily), at ~$0.10 a post, plus what the current set costs. A starting point, not a forecast.",
     input_schema: {
       type: "object",
-      properties: { fields: { type: "object", description: "front matter for the routine to estimate (trigger, at, days, ...)", additionalProperties: { type: "string" } } },
+      properties: {
+        fields: {
+          type: "object",
+          description: "front matter for the routine to estimate (trigger, at, days, ...)",
+          additionalProperties: { type: "string" },
+        },
+      },
       additionalProperties: false,
     },
     async handler({ fields }) {
@@ -612,14 +781,34 @@ function estimateTool() {
       let proposed = null;
       if (fields && Object.keys(fields).length) {
         try {
-          const text = `---\n${Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join("\n")}\n---\nestimate`;
+          const text = `---\n${Object.entries(fields)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join("\n")}\n---\nestimate`;
           const [line] = estimateMonthly([parseRoutine("estimate", text)]).lines;
-          proposed = line ? { posts_per_month: line.runs, usd_per_month: Number(line.usd.toFixed(2)) } : { posts_per_month: 0, usd_per_month: 0, note: "a message routine costs by the question, not the calendar" };
+          proposed = line
+            ? { posts_per_month: line.runs, usd_per_month: Number(line.usd.toFixed(2)) }
+            : {
+                posts_per_month: 0,
+                usd_per_month: 0,
+                note: "a message routine costs by the question, not the calendar",
+              };
         } catch (error) {
           return { ok: false, code: "bad_fields", error: error.message };
         }
       }
-      return { ok: true, body: { proposed, current_set: { posts_per_month: current.runs, usd_per_month: Number(current.usd.toFixed(2)), per_post_usd: current.perPostUsd, lines: current.lines }, budget_routines_usd: config.monthlyBudgetUsd } };
+      return {
+        ok: true,
+        body: {
+          proposed,
+          current_set: {
+            posts_per_month: current.runs,
+            usd_per_month: Number(current.usd.toFixed(2)),
+            per_post_usd: current.perPostUsd,
+            lines: current.lines,
+          },
+          budget_routines_usd: config.monthlyBudgetUsd,
+        },
+      };
     },
   };
 }
@@ -627,8 +816,14 @@ function estimateTool() {
 function lookupTool() {
   return {
     name: "lookup_turn",
-    description: "The transcript of one of your own earlier turns, by its 8-character id: what you were asked, your thoughts, every tool call with its result, what you answered.",
-    input_schema: { type: "object", properties: { turn_id: { type: "string" } }, required: ["turn_id"], additionalProperties: false },
+    description:
+      "The transcript of one of your own earlier turns, by its 8-character id: what you were asked, your thoughts, every tool call with its result, what you answered.",
+    input_schema: {
+      type: "object",
+      properties: { turn_id: { type: "string" } },
+      required: ["turn_id"],
+      additionalProperties: false,
+    },
     async handler({ turn_id }) {
       const turn = findTurn(String(turn_id ?? "").toLowerCase());
       if (!turn) return { ok: false, code: "not_found", error: `no turn ${turn_id} in the last 60 days` };
@@ -641,7 +836,10 @@ async function converse(message, options = {}) {
   const { askFn = ask } = options;
   const blocked = spendBlock("review");
   if (blocked) {
-    await send(message, `The review lane's budget is ${blocked.reason} for the month ($${blocked.spent?.toFixed(2) ?? "?"} of $${blocked.budget?.toFixed(2) ?? "?"}), and DM turns are charged there. \`why\`, \`try\`, \`memory\` and \`budget\` still work.`);
+    await send(
+      message,
+      `The review lane's budget is ${blocked.reason} for the month ($${blocked.spent?.toFixed(2) ?? "?"} of $${blocked.budget?.toFixed(2) ?? "?"}), and DM turns are charged there. \`why\`, \`try\`, \`memory\` and \`budget\` still work.`,
+    );
     return;
   }
   const routine = dmRoutine();
@@ -655,24 +853,44 @@ async function converse(message, options = {}) {
 
   const result = await askFn({
     system,
-    messages: [...history, { role: "user", content: `${message.author.username} (discord:${message.author.id}): ${question}\n\n${nowLine()}` }],
+    messages: [
+      ...history,
+      {
+        role: "user",
+        content: `${message.author.username} (discord:${message.author.id}): ${question}\n\n${nowLine()}`,
+      },
+    ],
     model: routine.model,
     effort: routine.effort,
     maxTokens: routine.maxTokens,
     routineKey: "dm",
     lane: "review",
-    localTools: [proposeTool({ files, proposals, by: "owner", operatorId: message.author.id }), routinesTool(), examplesTool(), channelsTool(), lookupTool(), searchTool(), statusTool(), estimateTool(), deckLinkTool()],
+    localTools: [
+      proposeTool({ files, proposals, by: "owner", operatorId: message.author.id }),
+      routinesTool(),
+      examplesTool(),
+      channelsTool(),
+      lookupTool(),
+      searchTool(),
+      statusTool(),
+      estimateTool(),
+      deckLinkTool(),
+    ],
     maxRounds: 8,
   });
 
   if (!result.ok) {
-    if (placeholder) await placeholder.edit(`Something broke talking to the model: \`${result.error}\`.`).catch(() => {});
+    if (placeholder)
+      await placeholder.edit(`Something broke talking to the model: \`${result.error}\`.`).catch(() => {});
     log.error("dm_failed", { user: message.author.id, error: result.error });
     return;
   }
-  const answer = (result.text || "").trim() || (proposals.length ? "Here is what I would remember:" : "I got nothing back for that.");
+  const answer =
+    (result.text || "").trim() ||
+    (proposals.length ? "Here is what I would remember:" : "I got nothing back for that.");
   const parts = chunk(answer, 1900);
-  if (placeholder) await placeholder.edit({ content: parts[0], allowedMentions: { parse: [] } }).catch(() => send(message, parts[0]));
+  if (placeholder)
+    await placeholder.edit({ content: parts[0], allowedMentions: { parse: [] } }).catch(() => send(message, parts[0]));
   else await send(message, parts[0]);
   for (const part of parts.slice(1)) await send(message, part);
 
@@ -704,11 +922,35 @@ async function converse(message, options = {}) {
       result,
       system,
       contractVersion: state.get("contractVersion"),
-      input: { kind: "message", asker: { id: message.author.id, name: message.author.username }, channelId: message.channel.id, threadId: null, messageId: message.id, question, history, dm: true },
-      output: { text: answer, messageIds: [placeholder?.id].filter(Boolean), footers: [], ungrounded: false, friction: null, proposals: proposals.map((p) => p.id) },
+      input: {
+        kind: "message",
+        asker: { id: message.author.id, name: message.author.username },
+        channelId: message.channel.id,
+        threadId: null,
+        messageId: message.id,
+        question,
+        history,
+        dm: true,
+      },
+      output: {
+        text: answer,
+        messageIds: [placeholder?.id].filter(Boolean),
+        footers: [],
+        ungrounded: false,
+        friction: null,
+        proposals: proposals.map((p) => p.id),
+      },
     }),
   );
-  log.info("dm_answered", { user: message.author.id, turnId: result.turnId, tools: result.called.length, toolNames: result.called.join(","), proposals: proposals.length, usd: result.usd.toFixed(4), ms: result.ms });
+  log.info("dm_answered", {
+    user: message.author.id,
+    turnId: result.turnId,
+    tools: result.called.length,
+    toolNames: result.called.join(","),
+    proposals: proposals.length,
+    usd: result.usd.toFixed(4),
+    ms: result.ms,
+  });
 }
 
 // --------------------------------------------------------------- entry
@@ -722,7 +964,9 @@ export async function handleDm(message, options = {}) {
     if (!refused[userId] || Date.now() - Date.parse(refused[userId]) > REFUSAL_EVERY) {
       const askChannel = loadRoutines().routines.find((r) => r.trigger === "message" && !r.disabled);
       const where = askChannel ? ` Ask in the server's #${askChannel.channel} channel instead.` : "";
-      await message.channel.send({ content: `I only take direct messages from whoever runs me.${where}`, allowedMentions: { parse: [] } }).catch(() => {});
+      await message.channel
+        .send({ content: `I only take direct messages from whoever runs me.${where}`, allowedMentions: { parse: [] } })
+        .catch(() => {});
       state.set({ dmRefused: { ...refused, [userId]: new Date().toISOString() } });
     }
     log.info("dm_refused", { user: userId });
@@ -739,9 +983,14 @@ export async function handleDm(message, options = {}) {
   if (/^memory\s*[?]?$/i.test(text)) return showMemory(message);
   if (/^(budget|spend)\s*[?]?$/i.test(text)) return send(message, budgetReply());
   if (/^routines\s*[?]?$/i.test(text)) return send(message, routinesReply());
-  if (/^status\s*[?]?$/i.test(text)) return send(message, `**Status**\n\`\`\`json\n${JSON.stringify(statusReport(), null, 1).slice(0, 1800)}\n\`\`\``);
+  if (/^status\s*[?]?$/i.test(text))
+    return send(message, `**Status**\n\`\`\`json\n${JSON.stringify(statusReport(), null, 1).slice(0, 1800)}\n\`\`\``);
   if (/^feedback\s*[?]?$/i.test(text)) return showFeedback(message);
-  if (/^settings\s*[?]?$/i.test(text)) return send(message, `**Settings** (live on Apply; the ones marked restart ${serviceManaged() ? "restart me automatically" : "need you to restart me"})\n\`\`\`\n${describeSettings()}\n\`\`\``);
+  if (/^settings\s*[?]?$/i.test(text))
+    return send(
+      message,
+      `**Settings** (live on Apply; the ones marked restart ${serviceManaged() ? "restart me automatically" : "need you to restart me"})\n\`\`\`\n${describeSettings()}\n\`\`\``,
+    );
   if (/^(help|\?)$/i.test(text)) {
     return send(
       message,
@@ -771,7 +1020,11 @@ export async function introduce({ guildName, subject, examples = null } = {}) {
   const postable = entries.filter((e) => e.role !== "ask").map((e) => `#${e.name}`);
   const askId = config.channels.get("ask");
   const askName = entries.find((e) => e.id === askId)?.name;
-  const shipped = examples ?? catalog({ exampleDir: path.join(repoRoot, "agent"), instanceDir: config.agentDir }).filter((e) => e.example && e.routine);
+  const shipped =
+    examples ??
+    catalog({ exampleDir: path.join(repoRoot, "agent"), instanceDir: config.agentDir }).filter(
+      (e) => e.example && e.routine,
+    );
   const lines = [
     `I'm connected to **${guildName ?? "the server"}**${subject?.name ? ` for **${subject.name}**${subject.members ? ` (${subject.members} members)` : ""}` : ""}, and nothing runs yet.`,
     `I may post in ${postable.length ? postable.join(", ") : "no channel yet — grant my role Send Messages where I should post"}${askName ? `; questions are answered in #${askName}` : ""}. Times are ${config.timezone}.`,
@@ -779,7 +1032,7 @@ export async function introduce({ guildName, subject, examples = null } = {}) {
     "What I can run:",
     ...shipped.map((e) => `• **${e.key}** — ${e.routine.description}`),
     "",
-    'Say **the usual** for ask, clan-feed, notable-movers and war-deck-check, or tell me which you want and when. Each comes back as a proposal with an Apply button. Then tell me about the clan — what you call things, what to keep in mind.',
+    "Say **the usual** for ask, clan-feed, notable-movers and war-deck-check, or tell me which you want and when. Each comes back as a proposal with an Apply button. Then tell me about the clan — what you call things, what to keep in mind.",
   ];
   return notify("welcome", lines.join("\n"), { fingerprint: "introduce", every: 24 * 3600 * 1000 });
 }

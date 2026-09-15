@@ -107,7 +107,7 @@ export function renderTrace(result, { label = "How I got there" } = {}) {
       try {
         // A post's content is already in the channel above the footer.
         args = JSON.stringify(
-          step.name === "post_message" ? { channel_id: step.input?.channel_id } : step.input ?? {},
+          step.name === "post_message" ? { channel_id: step.input?.channel_id } : (step.input ?? {}),
         );
       } catch {
         /* keep the placeholder */

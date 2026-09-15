@@ -119,7 +119,11 @@ export const CLASSIFY_RULES = `Decide who owns the fix, and reply with ONE line 
 
 /** Parse a sweep's one-line verdict. */
 export function parseVerdict(text) {
-  const line = (text || "").trim().split("\n").find((l) => l.trim()) || "";
+  const line =
+    (text || "")
+      .trim()
+      .split("\n")
+      .find((l) => l.trim()) || "";
   const match = /^\s*(ELIXIR|PROMPT|MECHANICS|NONE)\s*:?\s*(.*)$/i.exec(line);
   if (!match) return { cls: null, note: line.slice(0, 200) };
   const cls = match[1].toLowerCase();
@@ -157,7 +161,21 @@ const EXPECTED_ERROR_CODES = new Set(["no_subject", "quota_exceeded"]);
 
 /** This runner's own tools. Their refusals (a channel not in the directory,
  *  the post cap) are this consumer's behaviour, never hub friction to file. */
-const LOCAL_TOOLS = new Set(["post_message", "recent_channel_messages", "tell_operator", "deck_link", "propose_change", "lookup_turn", "search_turns", "status", "estimate_cost", "list_routines", "list_example_routines", "list_channels", "report_mechanics"]);
+const LOCAL_TOOLS = new Set([
+  "post_message",
+  "recent_channel_messages",
+  "tell_operator",
+  "deck_link",
+  "propose_change",
+  "lookup_turn",
+  "search_turns",
+  "status",
+  "estimate_cost",
+  "list_routines",
+  "list_example_routines",
+  "list_channels",
+  "report_mechanics",
+]);
 
 /** The errors worth a reader's or the maintainer's attention. */
 export function unexpectedErrors(errors) {
@@ -236,13 +254,7 @@ export function detectFriction({ text, called, errors }) {
  * model decides there is nothing worth filing — that is a normal outcome and
  * not an error.
  */
-export async function sweepFriction({
-  question,
-  answer,
-  friction,
-  lane = "routines",
-  turnId = null,
-}) {
+export async function sweepFriction({ question, answer, friction, lane = "routines", turnId = null }) {
   const system = `You are reviewing one exchange between a Clash Royale clan member and an
 agent whose only data source is the Elixir MCP server. Your job is to decide
 whether the agent hit real friction, and whose fault it was.

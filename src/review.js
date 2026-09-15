@@ -52,11 +52,28 @@ import * as ledger from "./ledger.js";
 import { log } from "./log.js";
 import { notify } from "./notify.js";
 import * as state from "./state.js";
-import { readAgentFiles, planEdit, applyProposal, undoProposal, tryProposal, skipProposal, findReview, lastDecision } from "./proposals.js";
+import {
+  readAgentFiles,
+  planEdit,
+  applyProposal,
+  undoProposal,
+  tryProposal,
+  skipProposal,
+  findReview,
+  lastDecision,
+} from "./proposals.js";
 
 // The editing machinery lives in src/proposals.js; re-exported so the DM
 // lane and the tests have one import for "a proposal".
-export { readAgentFiles, planEdit, applyProposal, undoProposal, tryProposal, findReview, lastDecision } from "./proposals.js";
+export {
+  readAgentFiles,
+  planEdit,
+  applyProposal,
+  undoProposal,
+  tryProposal,
+  findReview,
+  lastDecision,
+} from "./proposals.js";
 
 export const REPO_ISSUES = "https://github.com/jthingelstad/elixir-mcp-discord/issues";
 
@@ -78,21 +95,26 @@ export function windowFor(now = new Date()) {
 export const isFlagged = (t) =>
   Boolean(
     t.retractions?.length ||
-      t.reactions?.length ||
-      t.interventions?.length ||
-      t.findings?.length ||
-      t.output?.ungrounded ||
-      t.output?.error ||
-      t.errors?.length ||
-      t.truncated ||
-      t.output?.friction,
+    t.reactions?.length ||
+    t.interventions?.length ||
+    t.findings?.length ||
+    t.output?.ungrounded ||
+    t.output?.error ||
+    t.errors?.length ||
+    t.truncated ||
+    t.output?.friction,
   );
 
 function afterwards(t) {
   const lines = [];
-  for (const r of t.retractions || []) lines.push(`THE OPERATOR RETRACTED THIS POST (deleted ${r.deleted} message(s))${r.reason ? `: "${r.reason}"` : ""} — the strongest signal there is; find the rule that let it happen`);
-  for (const r of t.reactions || []) lines.push(`${r.reaction === "up" ? "👍" : "👎"}${r.note ? ` — "${r.note}"` : ""}`);
-  for (const i of t.interventions || []) lines.push(`${i.by === "other_member" ? "ANOTHER MEMBER stepped in" : "THE ASKER pushed back"}: "${i.text}"`);
+  for (const r of t.retractions || [])
+    lines.push(
+      `THE OPERATOR RETRACTED THIS POST (deleted ${r.deleted} message(s))${r.reason ? `: "${r.reason}"` : ""} — the strongest signal there is; find the rule that let it happen`,
+    );
+  for (const r of t.reactions || [])
+    lines.push(`${r.reaction === "up" ? "👍" : "👎"}${r.note ? ` — "${r.note}"` : ""}`);
+  for (const i of t.interventions || [])
+    lines.push(`${i.by === "other_member" ? "ANOTHER MEMBER stepped in" : "THE ASKER pushed back"}: "${i.text}"`);
   for (const f of t.findings || []) lines.push(`sweep verdict (${f.class}): ${f.note}`);
   for (const f of t.filed || []) lines.push(`filed with Elixir: ${f.summary}`);
   return lines.length ? `\nHUMAN AND SWEEP SIGNALS:\n${lines.map((l) => `- ${l}`).join("\n")}\n` : "";
@@ -127,7 +149,9 @@ function describePrevious(previous) {
   const lines = [`Review ${previous.reviewId} at ${previous.at.slice(0, 16)}Z read ${previous.turnsRead} turns.`];
   for (const p of previous.proposals || []) {
     const decision = previous.decisions.filter((d) => d.proposalId === p.id).at(-1)?.decision ?? "no decision";
-    lines.push(`- ${p.id} · ${p.file} · ${decision.toUpperCase()} · ${p.summary}${decision === "applied" || decision === "auto" ? `\n  edit: ${p.preview.replace(/\n/g, "\n  ")}` : ""}`);
+    lines.push(
+      `- ${p.id} · ${p.file} · ${decision.toUpperCase()} · ${p.summary}${decision === "applied" || decision === "auto" ? `\n  edit: ${p.preview.replace(/\n/g, "\n  ")}` : ""}`,
+    );
   }
   if ((previous.proposals || []).length === 0) lines.push("- it proposed nothing");
   return lines.join("\n");
@@ -220,15 +244,26 @@ function proposeTool({ files, proposals, max }) {
       type: "object",
       properties: {
         file: { type: "string", description: "memory.md, identity.md, or routines/<key>.md" },
-        rule: { type: "string", description: "The rule this is about, in a few words (e.g. 'first-contact identity', 'notable-movers brief')." },
-        turn_ids: { type: "array", items: { type: "string" }, description: "The turns that taught this. At least two, or one with a human signal." },
+        rule: {
+          type: "string",
+          description:
+            "The rule this is about, in a few words (e.g. 'first-contact identity', 'notable-movers brief').",
+        },
+        turn_ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "The turns that taught this. At least two, or one with a human signal.",
+        },
         summary: { type: "string", description: "What changes and why, for the operator, under 200 characters." },
         edit: {
           type: "object",
           properties: {
             op: { type: "string", enum: ["append", "replace", "remove"] },
             text: { type: "string", description: "append: the one-line memory entry, '- YYYY-MM-DD (turns ...): ...'" },
-            find: { type: "string", description: "replace/remove: the exact text to change, quoted from the file, occurring once" },
+            find: {
+              type: "string",
+              description: "replace/remove: the exact text to change, quoted from the file, occurring once",
+            },
             replace: { type: "string", description: "replace: the new text" },
           },
           required: ["op"],
@@ -239,7 +274,8 @@ function proposeTool({ files, proposals, max }) {
       additionalProperties: false,
     },
     async handler({ file, rule, turn_ids, summary, edit }) {
-      if (proposals.length >= max) return { ok: false, code: "cap", error: `that is already ${max} proposals, the cap for one review` };
+      if (proposals.length >= max)
+        return { ok: false, code: "cap", error: `that is already ${max} proposals, the cap for one review` };
       const ids = (turn_ids || []).map(String).filter(Boolean);
       if (ids.length === 0) return { ok: false, code: "uncited", error: "cite the turn ids that taught this" };
       // The plan runs against the file plus any earlier proposal to the same
@@ -269,7 +305,8 @@ function proposeTool({ files, proposals, max }) {
 function searchTurnsTool() {
   return {
     name: "search_turns",
-    description: "Find earlier turns by text, lane, routine and date — beyond this window — with turn ids. Use it to measure a previous edit: the turns after it that touched the rule.",
+    description:
+      "Find earlier turns by text, lane, routine and date — beyond this window — with turn ids. Use it to measure a previous edit: the turns after it that touched the rule.",
     input_schema: {
       type: "object",
       properties: {
@@ -283,7 +320,14 @@ function searchTurnsTool() {
       additionalProperties: false,
     },
     async handler({ query, since, until, lane, routine, limit }) {
-      const rows = ledger.searchTurns({ query, since: since || new Date(Date.now() - 30 * DAY_MS).toISOString().slice(0, 10), until: until || null, lane: lane || null, routine: routine || null, limit: limit || 20 });
+      const rows = ledger.searchTurns({
+        query,
+        since: since || new Date(Date.now() - 30 * DAY_MS).toISOString().slice(0, 10),
+        until: until || null,
+        lane: lane || null,
+        routine: routine || null,
+        limit: limit || 20,
+      });
       return { ok: true, body: { matches: rows.length, turns: rows } };
     },
   };
@@ -292,20 +336,32 @@ function searchTurnsTool() {
 function reportTool({ reports }) {
   return {
     name: "report_mechanics",
-    description: "Report a defect in the bot's CODE-level rules or runner behaviour — something no file under agent/ can fix. The operator gets it as a pasteable issue.",
+    description:
+      "Report a defect in the bot's CODE-level rules or runner behaviour — something no file under agent/ can fix. The operator gets it as a pasteable issue.",
     input_schema: {
       type: "object",
       properties: {
-        rule: { type: "string", description: "Which mechanics block or behaviour (e.g. WHO_IS_ASKING, the trace footer, SKIP handling)." },
+        rule: {
+          type: "string",
+          description: "Which mechanics block or behaviour (e.g. WHO_IS_ASKING, the trace footer, SKIP handling).",
+        },
         turn_ids: { type: "array", items: { type: "string" } },
-        summary: { type: "string", description: "What went wrong and what should change, under 400 characters. No member names, ids or tags." },
+        summary: {
+          type: "string",
+          description: "What went wrong and what should change, under 400 characters. No member names, ids or tags.",
+        },
       },
       required: ["rule", "turn_ids", "summary"],
       additionalProperties: false,
     },
     async handler({ rule, turn_ids, summary }) {
-      if (reports.length >= MAX_MECHANICS_REPORTS) return { ok: false, code: "cap", error: "enough mechanics reports for one review" };
-      reports.push({ rule: String(rule ?? "").slice(0, 80), turnIds: (turn_ids || []).map(String).slice(0, 12), summary: String(summary ?? "").slice(0, 400) });
+      if (reports.length >= MAX_MECHANICS_REPORTS)
+        return { ok: false, code: "cap", error: "enough mechanics reports for one review" };
+      reports.push({
+        rule: String(rule ?? "").slice(0, 80),
+        turnIds: (turn_ids || []).map(String).slice(0, 12),
+        summary: String(summary ?? "").slice(0, 400),
+      });
       return { ok: true, body: { reported: true } };
     },
   };
@@ -333,16 +389,29 @@ function userMessage({ window, previous, files, rendered, memoryCap }) {
  * record, applies memory entries unattended if configured, and returns everything the
  * caller needs to deliver it. `dryRun` reads and calls but persists nothing.
  */
-export async function runReview({ trigger = "schedule", dryRun = false, askFn = ask, now = new Date(), agentDir = config.agentDir } = {}) {
+export async function runReview({
+  trigger = "schedule",
+  dryRun = false,
+  askFn = ask,
+  now = new Date(),
+  agentDir = config.agentDir,
+} = {}) {
   const lane = "review";
   const blocked = spendBlock(lane);
   if (blocked) {
-    log.warn("review_over_budget", { reason: blocked.reason, spent: blocked.spent?.toFixed(2), budget: blocked.budget?.toFixed(2) });
+    log.warn("review_over_budget", {
+      reason: blocked.reason,
+      spent: blocked.spent?.toFixed(2),
+      budget: blocked.budget?.toFixed(2),
+    });
     return { ok: false, error: `budget:${blocked.reason}` };
   }
   const window = windowFor(now);
-  const turns = ledger.readTurns({ since: window.since.slice(0, 10) }).filter((t) => t.at > window.since && t.at <= window.until);
-  const previous = ledger.readReviews({ since: new Date(now.getTime() - 90 * DAY_MS).toISOString().slice(0, 10) }).at(-1) ?? null;
+  const turns = ledger
+    .readTurns({ since: window.since.slice(0, 10) })
+    .filter((t) => t.at > window.since && t.at <= window.until);
+  const previous =
+    ledger.readReviews({ since: new Date(now.getTime() - 90 * DAY_MS).toISOString().slice(0, 10) }).at(-1) ?? null;
   const files = readAgentFiles({ dir: agentDir });
   const rendered = renderWindow(turns);
   const proposals = [];
@@ -362,13 +431,19 @@ export async function runReview({ trigger = "schedule", dryRun = false, askFn = 
     : SYSTEM;
   const result = await askFn({
     system,
-    messages: [{ role: "user", content: userMessage({ window, previous, files, rendered, memoryCap: MEMORY_MAX_CHARS }) }],
+    messages: [
+      { role: "user", content: userMessage({ window, previous, files, rendered, memoryCap: MEMORY_MAX_CHARS }) },
+    ],
     model: config.review.model,
     effort: config.review.effort,
     maxTokens: 16000,
     routineKey: "review",
     lane,
-    localTools: [proposeTool({ files, proposals, max: config.review.maxProposals }), reportTool({ reports }), searchTurnsTool()],
+    localTools: [
+      proposeTool({ files, proposals, max: config.review.maxProposals }),
+      reportTool({ reports }),
+      searchTurnsTool(),
+    ],
     maxRounds: 12,
   });
   if (!result.ok) {
@@ -378,7 +453,9 @@ export async function runReview({ trigger = "schedule", dryRun = false, askFn = 
   }
 
   const report = (result.text || "").trim();
-  const filed = (result.trace || []).filter((s) => s.kind === "tool" && s.name.includes("elixir_feedback")).map((s) => String(s.input?.message ?? "").slice(0, 200));
+  const filed = (result.trace || [])
+    .filter((s) => s.kind === "tool" && s.name.includes("elixir_feedback"))
+    .map((s) => String(s.input?.message ?? "").slice(0, 200));
   const record = ledger.reviewEntry({
     reviewId,
     trigger,
@@ -423,7 +500,21 @@ export async function runReview({ trigger = "schedule", dryRun = false, askFn = 
     truncated: result.truncated || undefined,
     dryRun: dryRun || undefined,
   });
-  return { ok: true, reviewId, window, turns: turns.length, flagged: rendered.flagged, proposals: record.proposals, reports, filed, report, usd: result.usd, autoApplied: applied, truncated: result.truncated, record };
+  return {
+    ok: true,
+    reviewId,
+    window,
+    turns: turns.length,
+    flagged: rendered.flagged,
+    proposals: record.proposals,
+    reports,
+    filed,
+    report,
+    usd: result.usd,
+    autoApplied: applied,
+    truncated: result.truncated,
+    record,
+  };
 }
 
 // ------------------------------------------------------------- delivery
@@ -456,7 +547,13 @@ export function parseButtonId(customId) {
 /** Message + buttons for one proposal, as discord.js message options. */
 export function proposalMessage(review, proposal, { index, total, decision = null, components = true }) {
   const status = decision
-    ? { applied: "✅ Applied", auto: "✅ Applied automatically (memory)", skipped: "⏭ Skipped", reverted: "↩️ Reverted", refused: "⚠️ Could not apply" }[decision.decision] ?? decision.decision
+    ? ({
+        applied: "✅ Applied",
+        auto: "✅ Applied automatically (memory)",
+        skipped: "⏭ Skipped",
+        reverted: "↩️ Reverted",
+        refused: "⚠️ Could not apply",
+      }[decision.decision] ?? decision.decision)
     : null;
   const content = [
     `**Proposal ${index} of ${total}** · \`${proposal.file}\` · ${proposal.rule}`,
@@ -465,7 +562,9 @@ export function proposalMessage(review, proposal, { index, total, decision = nul
     "```diff",
     proposal.preview,
     "```",
-    status ? `${status}${decision?.by && decision.by !== "auto" ? ` by <@${decision.by}>` : ""}${decision?.detail?.restart === "automatic" ? " · restarting to apply, back in under a minute" : decision?.detail?.restart === "needed" ? " · **restart the bot to apply**" : decision?.detail?.settings ? " · live now" : ""}${decision?.detail?.backup ? `\n-# backup: ${path.basename(decision.detail.backup)}` : ""}${decision?.decision === "refused" ? `\n-# ${decision.detail}` : ""}` : null,
+    status
+      ? `${status}${decision?.by && decision.by !== "auto" ? ` by <@${decision.by}>` : ""}${decision?.detail?.restart === "automatic" ? " · restarting to apply, back in under a minute" : decision?.detail?.restart === "needed" ? " · **restart the bot to apply**" : decision?.detail?.settings ? " · live now" : ""}${decision?.detail?.backup ? `\n-# backup: ${path.basename(decision.detail.backup)}` : ""}${decision?.decision === "refused" ? `\n-# ${decision.detail}` : ""}`
+      : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -475,11 +574,13 @@ export function proposalMessage(review, proposal, { index, total, decision = nul
     const done = decision && ["skipped", "reverted"].includes(decision.decision);
     if (!decision) {
       buttons.push({ id: buttonId(review.reviewId, proposal.id, "apply"), label: "Apply", style: "success" });
-      if (proposal.file !== "config.json" && proposal.edit?.op !== "delete") buttons.push({ id: buttonId(review.reviewId, proposal.id, "try"), label: "Try it", style: "primary" });
+      if (proposal.file !== "config.json" && proposal.edit?.op !== "delete")
+        buttons.push({ id: buttonId(review.reviewId, proposal.id, "try"), label: "Try it", style: "primary" });
       buttons.push({ id: buttonId(review.reviewId, proposal.id, "skip"), label: "Skip", style: "secondary" });
     }
     if (applied) buttons.push({ id: buttonId(review.reviewId, proposal.id, "undo"), label: "Undo", style: "danger" });
-    if (!done) buttons.push({ id: buttonId(review.reviewId, proposal.id, "show"), label: "Show turns", style: "secondary" });
+    if (!done)
+      buttons.push({ id: buttonId(review.reviewId, proposal.id, "show"), label: "Show turns", style: "secondary" });
   }
   return { content: content.slice(0, 2000), buttons };
 }
@@ -517,20 +618,33 @@ export async function deliver({ client, review, outcome }) {
     try {
       user = await client.users.fetch(id);
       await user.send({ content: header, allowedMentions: { parse: [] } });
-      for (const part of chunk(review.report || "_(no report)_", 1900)) await user.send({ content: part, allowedMentions: { parse: [] } });
+      for (const part of chunk(review.report || "_(no report)_", 1900))
+        await user.send({ content: part, allowedMentions: { parse: [] } });
       for (const [i, p] of review.proposals.entries()) {
         const decision = lastDecision(review, p.id);
-        const { content, buttons } = proposalMessage(review, p, { index: i + 1, total: review.proposals.length, decision });
+        const { content, buttons } = proposalMessage(review, p, {
+          index: i + 1,
+          total: review.proposals.length,
+          decision,
+        });
         await user.send({ content, components: toComponents(buttons), allowedMentions: { parse: [] } });
       }
       const issue = mechanicsIssue(review);
       if (issue) {
-        await user.send({ content: `**Mechanics** — this is the bot's code, not your files. Paste into ${REPO_ISSUES}:`, allowedMentions: { parse: [] } });
-        for (const part of chunk(issue, 1900)) await user.send({ content: `\`\`\`\n${part}\n\`\`\``, allowedMentions: { parse: [] } });
+        await user.send({
+          content: `**Mechanics** — this is the bot's code, not your files. Paste into ${REPO_ISSUES}:`,
+          allowedMentions: { parse: [] },
+        });
+        for (const part of chunk(issue, 1900))
+          await user.send({ content: `\`\`\`\n${part}\n\`\`\``, allowedMentions: { parse: [] } });
       }
       reached += 1;
     } catch (error) {
-      log.warn("review_dm_failed", { user: id, error: error.message, hint: "the admin may have DMs from server members off" });
+      log.warn("review_dm_failed", {
+        user: id,
+        error: error.message,
+        hint: "the admin may have DMs from server members off",
+      });
     }
   }
   log.info("review_delivered", { reviewId: review.reviewId, admins: reached });
@@ -555,28 +669,50 @@ export async function handleButton(interaction, { isAdmin }) {
   const index = review.proposals.indexOf(proposal) + 1;
   const refresh = async () => {
     const fresh = findReview(parsed.reviewId);
-    const { content, buttons } = proposalMessage(fresh, proposal, { index, total: fresh.proposals.length, decision: lastDecision(fresh, proposal.id) });
+    const { content, buttons } = proposalMessage(fresh, proposal, {
+      index,
+      total: fresh.proposals.length,
+      decision: lastDecision(fresh, proposal.id),
+    });
     await interaction.update({ content, components: toComponents(buttons) });
   };
 
   if (parsed.action === "show") {
-    const turns = ledger.readTurns({ since: review.window.since.slice(0, 10), until: review.window.until.slice(0, 10) }).filter((t) => proposal.turnIds.includes(t.turnId)).slice(0, 3);
-    const text = turns.map((t) => renderTurn(t, { full: false })).join("\n\n---\n\n") || "_(those turns are no longer in the ledger window)_";
+    const turns = ledger
+      .readTurns({ since: review.window.since.slice(0, 10), until: review.window.until.slice(0, 10) })
+      .filter((t) => proposal.turnIds.includes(t.turnId))
+      .slice(0, 3);
+    const text =
+      turns.map((t) => renderTurn(t, { full: false })).join("\n\n---\n\n") ||
+      "_(those turns are no longer in the ledger window)_";
     await interaction.reply({ content: chunk(text, 1900)[0], allowedMentions: { parse: [] } });
-    for (const part of chunk(text, 1900).slice(1, 4)) await interaction.followUp({ content: part, allowedMentions: { parse: [] } });
+    for (const part of chunk(text, 1900).slice(1, 4))
+      await interaction.followUp({ content: part, allowedMentions: { parse: [] } });
     return { action: "show" };
   }
   if (parsed.action === "try") {
-    await interaction.reply({ content: `-# rehearsing with ${proposal.id} applied — nothing is posted or written…`, allowedMentions: { parse: [] } });
+    await interaction.reply({
+      content: `-# rehearsing with ${proposal.id} applied — nothing is posted or written…`,
+      allowedMentions: { parse: [] },
+    });
     const outcome = await tryProposal({ review, proposal });
     if (!outcome.ok) {
       await interaction.followUp({ content: `Could not rehearse: ${outcome.error}`, allowedMentions: { parse: [] } });
       return { action: "try", ...outcome };
     }
-    const shown = outcome.skipped || outcome.posts.length === 0 ? `\`${outcome.routine}\` would post nothing${outcome.text && !outcome.skipped ? `:\n\n${outcome.text}` : " (SKIP)"}.` : outcome.posts.map((p) => `**${p.channel}**\n${p.text}`).join("\n\n");
-    for (const part of chunk(shown, 1900)) await interaction.followUp({ content: part, allowedMentions: { parse: [] } });
-    if (outcome.trace) for (const part of chunk(outcome.trace, 1900).slice(0, 2)) await interaction.followUp({ content: part, allowedMentions: { parse: [] } });
-    await interaction.followUp({ content: `-# $${outcome.usd.toFixed(4)} · that is what \`${outcome.routine}\` would say with ${proposal.id} applied. Apply above if it is right.`, allowedMentions: { parse: [] } });
+    const shown =
+      outcome.skipped || outcome.posts.length === 0
+        ? `\`${outcome.routine}\` would post nothing${outcome.text && !outcome.skipped ? `:\n\n${outcome.text}` : " (SKIP)"}.`
+        : outcome.posts.map((p) => `**${p.channel}**\n${p.text}`).join("\n\n");
+    for (const part of chunk(shown, 1900))
+      await interaction.followUp({ content: part, allowedMentions: { parse: [] } });
+    if (outcome.trace)
+      for (const part of chunk(outcome.trace, 1900).slice(0, 2))
+        await interaction.followUp({ content: part, allowedMentions: { parse: [] } });
+    await interaction.followUp({
+      content: `-# $${outcome.usd.toFixed(4)} · that is what \`${outcome.routine}\` would say with ${proposal.id} applied. Apply above if it is right.`,
+      allowedMentions: { parse: [] },
+    });
     return { action: "try", ok: true, routine: outcome.routine };
   }
   const existing = lastDecision(review, proposal.id);
@@ -610,7 +746,14 @@ export async function handleButton(interaction, { isAdmin }) {
 
 /** The review as a pseudo-routine for src/schedule.js. */
 export function reviewRoutine() {
-  return { key: "__review", trigger: "schedule", at: { hour: config.review.at.hour, minute: config.review.at.minute }, days: config.review.at.days, catchUpHours: 12, disabled: !config.review.enabled };
+  return {
+    key: "__review",
+    trigger: "schedule",
+    at: { hour: config.review.at.hour, minute: config.review.at.minute },
+    days: config.review.at.days,
+    catchUpHours: 12,
+    disabled: !config.review.enabled,
+  };
 }
 
 export async function tick({ client, now = new Date() }) {
@@ -623,7 +766,8 @@ export async function tick({ client, now = new Date() }) {
     return { ok: false, error: error.message };
   });
   // Re-read from the ledger so auto-applied memory entries carry their decisions.
-  if (outcome.ok && !outcome.empty) await deliver({ client, review: findReview(outcome.reviewId) ?? outcome.record, outcome });
+  if (outcome.ok && !outcome.empty)
+    await deliver({ client, review: findReview(outcome.reviewId) ?? outcome.record, outcome });
   return true;
 }
 
@@ -632,7 +776,9 @@ export function startReview(client) {
   // config.json, and reviewRoutine() reads it on every tick.
   const routine = reviewRoutine();
   if (!config.review.enabled) {
-    log.info("review_off", { hint: "REVIEW=on in config.json turns it on live; the /review command appears after a restart" });
+    log.info("review_off", {
+      hint: "REVIEW=on in config.json turns it on live; the /review command appears after a restart",
+    });
     const run = () => tick({ client }).catch((error) => log.error("review_tick_failed", { error: error.message }));
     return setInterval(run, 60_000);
   }

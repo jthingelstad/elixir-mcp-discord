@@ -73,7 +73,7 @@ test("a 👎 the sweep declines is released so a reply can be added", async () =
   state.rememberTurn("t3", TURN, ["m4"]);
   const { posted, reaction } = fakeReaction("👎", "m4");
   let sweeps = 0;
-  const opts = { sweepFn: async () => (sweeps += 1, null) };
+  const opts = { sweepFn: async () => ((sweeps += 1), null) };
   const first = await handleReaction(reaction, reader, opts);
   assert.equal(first.filed, false);
   assert.match(posted[0], /Reply to this message/);
@@ -86,7 +86,7 @@ test("reactions from bots, on unknown messages, or with other emoji are ignored"
   fs.rmSync(process.env.STATE_PATH, { force: true });
   state.rememberTurn("t4", TURN, ["m5"]);
   let touched = 0;
-  const opts = { sweepFn: async () => (touched += 1, "x"), praiseFn: async () => (touched += 1, true) };
+  const opts = { sweepFn: async () => ((touched += 1), "x"), praiseFn: async () => ((touched += 1), true) };
   assert.equal(await handleReaction(fakeReaction("👍", "m5").reaction, { id: "1", bot: true }, opts), null);
   assert.equal(await handleReaction(fakeReaction("👍", "nope").reaction, reader, opts), null);
   assert.equal(await handleReaction(fakeReaction("🔥", "m5").reaction, reader, opts), null);

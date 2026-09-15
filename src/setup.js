@@ -46,14 +46,7 @@ import { inspectDiscord, permissionsIn, channelLike, inviteUrl, memberOf } from 
 import { fromRest } from "./directory.js";
 import { channelEnvName } from "./config.js";
 import { renderSecrets, renderConfig, parseConfig } from "./env-file.js";
-import {
-  catalog,
-  installRoutines,
-  disabledAfter,
-  rewriteAt,
-  estimateMonthly,
-  describeWhen,
-} from "./setup-catalog.js";
+import { catalog, installRoutines, disabledAfter, rewriteAt, estimateMonthly, describeWhen } from "./setup-catalog.js";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const exampleDir = path.join(repoRoot, "agent");
@@ -137,9 +130,7 @@ function readSecret(prompt) {
 
 async function ask(question, { fallback = "", secret = false } = {}) {
   if (!interactive) return fallback;
-  const hint = secret
-    ? fallback ? " [Enter keeps the current one]" : ""
-    : fallback ? ` [${fallback}]` : "";
+  const hint = secret ? (fallback ? " [Enter keeps the current one]" : "") : fallback ? ` [${fallback}]` : "";
   const prompt = `${question}${hint}: `;
   if (secret) {
     const typed = (await readSecret(prompt)).trim();
@@ -176,7 +167,9 @@ const isTimezone = (tz) => {
   }
 };
 const numberIn = (label, min) => (value) =>
-  Number.isFinite(Number(value)) && Number(value) >= min ? null : `${label} must be a number${min ? ` ≥ ${min}` : ""}, got "${value}"`;
+  Number.isFinite(Number(value)) && Number(value) >= min
+    ? null
+    : `${label} must be a number${min ? ` ≥ ${min}` : ""}, got "${value}"`;
 
 async function yesNo(question, fallback = false) {
   const answer = (await ask(question, { fallback: fallback ? "y" : "n" })).toLowerCase();
@@ -237,21 +230,27 @@ if (!checkOnly) {
   // memory.md too: the review lane writes it, and the example's header tells
   // the model (and the operator) what the file is for. Missing is legal.
   for (const file of ["identity.md", "models.json", "memory.md"]) {
-    if (!fs.existsSync(path.join(agentDir, file))) fs.copyFileSync(path.join(exampleDir, file), path.join(agentDir, file));
+    if (!fs.existsSync(path.join(agentDir, file)))
+      fs.copyFileSync(path.join(exampleDir, file), path.join(agentDir, file));
   }
 }
 for (const file of ["identity.md", "models.json"]) {
-  if (!fs.existsSync(path.join(agentDir, file))) fail({ detail: `${agentDir} has no ${file}`, fix: `cp ${path.join(exampleDir, file)} ${agentDir}/` });
+  if (!fs.existsSync(path.join(agentDir, file)))
+    fail({ detail: `${agentDir} has no ${file}`, fix: `cp ${path.join(exampleDir, file)} ${agentDir}/` });
 }
 ok(`agent directory ${agentDir}`);
 
 const configFile = path.join(instanceDir, "config.json");
 const env = fs.existsSync(envFile) ? dotenv.parse(fs.readFileSync(envFile, "utf8")) : {};
-const cfg = fs.existsSync(configFile) ? parseConfig(fs.readFileSync(configFile, "utf8")) ?? {} : {};
+const cfg = fs.existsSync(configFile) ? (parseConfig(fs.readFileSync(configFile, "utf8")) ?? {}) : {};
 // .env holds the secrets, config.json everything else; a pre-config.json
 // .env still loads (the bot migrates it on its first boot, and so does the
 // write below: setup always writes the two files in their new shape).
-note(fs.existsSync(envFile) || fs.existsSync(configFile) ? `existing .env and config.json loaded; Enter keeps each current value` : `no .env or config.json yet; both will be written at the end`);
+note(
+  fs.existsSync(envFile) || fs.existsSync(configFile)
+    ? `existing .env and config.json loaded; Enter keeps each current value`
+    : `no .env or config.json yet; both will be written at the end`,
+);
 
 const values = { ...env, ...cfg };
 const unresolved = [];
@@ -280,27 +279,33 @@ const elixirOk = await untilOk(async () => {
     return [{ detail: "the Elixir MCP URL and key are both required" }];
   }
   if (!/\/a\/[0-9a-f]+\/mcp$/i.test(values.ELIXIR_MCP_URL)) {
-    return [{
-      detail: `${values.ELIXIR_MCP_URL} is not an agent door`,
-      fix: "an agent's URL ends in /a/<id>/mcp; the personal /mcp would answer as you, not the clan",
-    }];
+    return [
+      {
+        detail: `${values.ELIXIR_MCP_URL} is not an agent door`,
+        fix: "an agent's URL ends in /a/<id>/mcp; the personal /mcp would answer as you, not the clan",
+      },
+    ];
   }
   const handshake = await initialize({ url: values.ELIXIR_MCP_URL, token: values.ELIXIR_MCP_TOKEN });
   if (!handshake.ok) {
-    return [{
-      detail: `initialize failed: ${handshake.error}`,
-      fix: handshake.error.includes("401")
-        ? "the key was refused at this door; check the key matches this agent's URL, or revoke and mint a new one"
-        : "check the URL, then that the host is reachable from here",
-    }];
+    return [
+      {
+        detail: `initialize failed: ${handshake.error}`,
+        fix: handshake.error.includes("401")
+          ? "the key was refused at this door; check the key matches this agent's URL, or revoke and mint a new one"
+          : "check the URL, then that the host is reachable from here",
+      },
+    ];
   }
   const principal = handshake.principal;
   ok(`connected · ${handshake.version} · ${describePrincipal(principal)}`);
   if (principal && principal.kind !== "agent") {
-    return [{
-      detail: `this is a ${principal.kind} key, not an agent`,
-      fix: "the bot must be its own principal; create an agent and use its key",
-    }];
+    return [
+      {
+        detail: `this is a ${principal.kind} key, not an agent`,
+        fix: "the bot must be its own principal; create an agent and use its key",
+      },
+    ];
   }
   if (principal?.kind === "agent" && !principal.subject) {
     return [{ detail: "this agent has no clan", fix: "an agent acts for a clan; set one on the agent in Elixir" }];
@@ -326,23 +331,42 @@ const claudeOk = await untilOk(async () => {
     ok(`key accepted · ${model.display_name} (${model.id})`);
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
-      return [{ detail: "Claude rejected the key", fix: "console.anthropic.com > API keys; paste the whole key including the sk-ant- prefix" }];
+      return [
+        {
+          detail: "Claude rejected the key",
+          fix: "console.anthropic.com > API keys; paste the whole key including the sk-ant- prefix",
+        },
+      ];
     }
     if (error instanceof Anthropic.NotFoundError) {
-      return [{ detail: `no model called ${values.CLAUDE_MODEL}`, fix: "use an id from https://docs.anthropic.com/en/docs/about-claude/models" }];
+      return [
+        {
+          detail: `no model called ${values.CLAUDE_MODEL}`,
+          fix: "use an id from https://docs.anthropic.com/en/docs/about-claude/models",
+        },
+      ];
     }
     if (error instanceof Anthropic.PermissionDeniedError) {
-      return [{ detail: `this key may not use ${values.CLAUDE_MODEL}`, fix: "the workspace this key belongs to is not allowed that model; pick another or change the workspace's model access" }];
+      return [
+        {
+          detail: `this key may not use ${values.CLAUDE_MODEL}`,
+          fix: "the workspace this key belongs to is not allowed that model; pick another or change the workspace's model access",
+        },
+      ];
     }
-    return [{ detail: `Claude API: ${error.message}`, fix: "retry; if it persists, check the key's workspace is active" }];
+    return [
+      { detail: `Claude API: ${error.message}`, fix: "retry; if it persists, check the key's workspace is active" },
+    ];
   }
   // Priced, or the budgets are decoration — the same rule as boot.
   const rate = priceBook({ dir: agentDir, reload: true })[values.CLAUDE_MODEL];
   if (!rate) {
-    return [{
-      detail: `${values.CLAUDE_MODEL} has no price in ${path.join(agentDir, "models.json")}`,
-      fix: "add it with input and output prices per million tokens, or pick a priced model; a model that cannot be priced cannot be budgeted",
-    }];
+    return [
+      {
+        detail: `${values.CLAUDE_MODEL} has no price in ${path.join(agentDir, "models.json")}`,
+        fix: "add it with input and output prices per million tokens, or pick a priced model; a model that cannot be priced cannot be budgeted",
+      },
+    ];
   }
   ok(`priced at $${rate.input}/M in, $${rate.output}/M out`);
   return [];
@@ -386,7 +410,12 @@ heading("Routines (what this bot does)");
 const entries = catalog({ exampleDir, instanceDir: agentDir });
 for (const entry of entries.filter((e) => e.error)) fail({ detail: `${entry.key}: ${entry.error}` });
 const usable = entries.filter((e) => e.routine);
-const previouslyDisabled = new Set((values.ROUTINES_DISABLED || "").split(",").map((k) => k.trim()).filter(Boolean));
+const previouslyDisabled = new Set(
+  (values.ROUTINES_DISABLED || "")
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean),
+);
 // WHAT THE BOT DOES IS DECIDED IN THE DM, NOT HERE. Choosing routines needs
 // the channel directory, the clan's name and its evenings, all of which the
 // bot only has once it is connected; and the person choosing is on a phone,
@@ -395,7 +424,9 @@ const previouslyDisabled = new Set((values.ROUTINES_DISABLED || "").split(",").m
 // and the bot's first DM to the admins is the introduction. The picker is
 // still here for anyone who prefers the terminal.
 const chosen = new Set(usable.filter((e) => e.installed && !previouslyDisabled.has(e.key)).map((e) => e.key));
-const pickHere = interactive && (await yesNo(`Pick routines here now? (No: the bot introduces itself by DM and you choose there)`, false));
+const pickHere =
+  interactive &&
+  (await yesNo(`Pick routines here now? (No: the bot introduces itself by DM and you choose there)`, false));
 if (pickHere) {
   note("Each routine is one file in agent/routines; pick the ones this clan wants.");
   note("A file already in the instance is never overwritten — rewrite it freely.");
@@ -434,15 +465,16 @@ note("An IANA zone such as America/Chicago, Europe/London, Asia/Kolkata — not 
 note("abbreviation like CST. DST is handled from the zone.");
 values.TIMEZONE = await askValid("Timezone the times below are written in", {
   fallback: values.TIMEZONE || "UTC",
-  validate: (tz) => (isTimezone(tz) ? null : `"${tz}" is not an IANA timezone; try the form Region/City, e.g. America/Chicago`),
+  validate: (tz) =>
+    isTimezone(tz) ? null : `"${tz}" is not an IANA timezone; try the form Region/City, e.g. America/Chicago`,
 });
 save("timezone");
-const active = loadRoutines({ dir: agentDir }).routines.filter(
-  (r) => chosen.has(r.key),
-);
+const active = loadRoutines({ dir: agentDir }).routines.filter((r) => chosen.has(r.key));
 for (const routine of active.filter((r) => r.trigger === "schedule")) {
   const current = describeWhen(routine).split(" at ")[1];
-  const answer = await ask(`${routine.key} · ${describeWhen(routine)} ${values.TIMEZONE} · run at`, { fallback: current });
+  const answer = await ask(`${routine.key} · ${describeWhen(routine)} ${values.TIMEZONE} · run at`, {
+    fallback: current,
+  });
   if (answer === current) continue;
   const file = path.join(agentDir, "routines", `${routine.key}.md`);
   try {
@@ -463,10 +495,14 @@ const requirements = requirementsFor(routines, { feedbackChannel: values.FEEDBAC
 // The ask channel is the one binding that stays explicit, whether or not a
 // message routine exists yet: it is where members will speak, and the DM
 // introduction offers the ask routine first.
-if (!requirements.some((r) => r.name === "ask")) requirements.unshift(requirementsFor([{ trigger: "message", channel: "ask", disabled: false }], { feedbackChannel: null })[0]);
+if (!requirements.some((r) => r.name === "ask"))
+  requirements.unshift(
+    requirementsFor([{ trigger: "message", channel: "ask", disabled: false }], { feedbackChannel: null })[0],
+  );
 if (!inspected?.guild) {
   note("skipped: the bot is not in the server yet, so nothing can be checked.");
-  if (values.DISCORD_APP_ID && values.DISCORD_GUILD_ID) note(`invite: ${inviteUrl(values.DISCORD_APP_ID, values.DISCORD_GUILD_ID)}`);
+  if (values.DISCORD_APP_ID && values.DISCORD_GUILD_ID)
+    note(`invite: ${inviteUrl(values.DISCORD_APP_ID, values.DISCORD_GUILD_ID)}`);
   unresolved.push("channels");
 } else {
   const botRole = inspected.roles.find((role) => role.tags?.bot_id === inspected.user.id);
@@ -480,17 +516,30 @@ if (!inspected?.guild) {
   note("those channels' names and topics and chooses among them; a topic on each");
   note("channel is what makes the choice good. Widen or narrow it in Discord.");
   const directoryOk = await untilOk(async () => {
-    inspected = await inspectDiscord({ token: values.DISCORD_BOT_TOKEN, appId: values.DISCORD_APP_ID || null, guildId: values.DISCORD_GUILD_ID });
+    inspected = await inspectDiscord({
+      token: values.DISCORD_BOT_TOKEN,
+      appId: values.DISCORD_APP_ID || null,
+      guildId: values.DISCORD_GUILD_ID,
+    });
     const entries = fromRest(inspected, permissionsIn);
     if (entries.length === 0) {
-      return [{
-        detail: "the bot is not explicitly allowed to post anywhere yet",
-        fix: `in each channel it should post in: Edit Channel > Permissions > add ${roleName} > allow View Channel and Send Messages`,
-      }];
+      return [
+        {
+          detail: "the bot is not explicitly allowed to post anywhere yet",
+          fix: `in each channel it should post in: Edit Channel > Permissions > add ${roleName} > allow View Channel and Send Messages`,
+        },
+      ];
     }
     for (const entry of entries) {
-      const who = entry.visibility === "everyone" ? "everyone" : entry.visibleTo?.length ? `visible to ${entry.visibleTo.join(", ")}` : "restricted";
-      ok(`may post in #${entry.name} (${who})${entry.topic ? ` — ${entry.topic.slice(0, 60)}` : "  — no topic; a one-line topic helps the model choose"}`);
+      const who =
+        entry.visibility === "everyone"
+          ? "everyone"
+          : entry.visibleTo?.length
+            ? `visible to ${entry.visibleTo.join(", ")}`
+            : "restricted";
+      ok(
+        `may post in #${entry.name} (${who})${entry.topic ? ` — ${entry.topic.slice(0, 60)}` : "  — no topic; a one-line topic helps the model choose"}`,
+      );
     }
     return [];
   });
@@ -505,28 +554,33 @@ if (!inspected?.guild) {
     const needsThreads = "CreatePublicThreads" in requirement.needs;
     const candidates = granted.filter((e) => !needsThreads || e.threads);
     const guess =
-      candidates.find((e) => e.name.includes(requirement.name)) ??
-      (candidates.length === 1 ? candidates[0] : null);
+      candidates.find((e) => e.name.includes(requirement.name)) ?? (candidates.length === 1 ? candidates[0] : null);
     const current = inspected.channels.find((c) => c.id === values[envName]);
     const fallbackName = current ? `#${current.name}` : guess ? `#${guess.name}` : "";
     if (interactive) {
       note(`channels the bot is granted in${needsThreads ? " with thread permissions" : ""}:`);
-      candidates.forEach((e, index) => note(`  ${String(index + 1).padStart(2)}. #${e.name}  (${e.id})${e.topic ? ` — ${e.topic.slice(0, 50)}` : ""}`));
-      if (candidates.length === 0) note("  (none yet — grant the bot's role in the channel, then answer with its id or #name)");
+      candidates.forEach((e, index) =>
+        note(`  ${String(index + 1).padStart(2)}. #${e.name}  (${e.id})${e.topic ? ` — ${e.topic.slice(0, 50)}` : ""}`),
+      );
+      if (candidates.length === 0)
+        note("  (none yet — grant the bot's role in the channel, then answer with its id or #name)");
     }
     const what = requirement.name === "ask" ? "where members ask the bot questions" : `for \`${requirement.name}\``;
     const channelOk = await untilOk(async () => {
       const answer = await ask(`Channel ${what} (number, #name or id)`, { fallback: fallbackName });
       const wanted = answer.replace(/^#/, "");
       const raw =
-        candidates[Number(answer) - 1] && inspected.channels.find((c) => c.id === candidates[Number(answer) - 1].id) ||
+        (candidates[Number(answer) - 1] &&
+          inspected.channels.find((c) => c.id === candidates[Number(answer) - 1].id)) ||
         inspected.channels.find((c) => c.id === wanted) ||
         inspected.channels.find((c) => c.name === wanted);
       if (!raw) {
-        return [{
-          detail: answer ? `${answer} is not a text channel in ${inspected.guild.name}` : `${envName} is required`,
-          fix: "a number from the list, the channel's #name, or its id (right-click the channel > Copy Channel ID)",
-        }];
+        return [
+          {
+            detail: answer ? `${answer} is not a text channel in ${inspected.guild.name}` : `${envName} is required`,
+            fix: "a number from the list, the channel's #name, or its id (right-click the channel > Copy Channel ID)",
+          },
+        ];
       }
       values[envName] = raw.id;
       const problem = inspectChannel({
@@ -537,10 +591,12 @@ if (!inspected?.guild) {
         guildId: values.DISCORD_GUILD_ID,
       });
       if (problem) {
-        return [{
-          detail: `#${raw.name}: ${problem.missing ? `missing ${problem.missing.join(", ")}` : problem.hint}`,
-          fix: `#${raw.name} > Edit Channel > Permissions > add ${roleName} (or the bot itself) and allow: ${problem.missing?.join(", ") ?? "the permissions above"}`,
-        }];
+        return [
+          {
+            detail: `#${raw.name}: ${problem.missing ? `missing ${problem.missing.join(", ")}` : problem.hint}`,
+            fix: `#${raw.name} > Edit Channel > Permissions > add ${roleName} (or the bot itself) and allow: ${problem.missing?.join(", ") ?? "the permissions above"}`,
+          },
+        ];
       }
       ok(`${requirement.name} → #${raw.name} · ${Object.keys(requirement.needs).join(", ")}`);
       return [];
@@ -568,7 +624,8 @@ if (identity.includes("## About this clan")) {
 heading("Budgets");
 const estimate = estimateMonthly(routines);
 if (routines.length) {
-  for (const line of estimate.lines) note(`${line.key.padEnd(22)} ~${String(line.runs).padStart(3)} posts/month  ~${money(line.usd)}`);
+  for (const line of estimate.lines)
+    note(`${line.key.padEnd(22)} ~${String(line.runs).padStart(3)} posts/month  ~${money(line.usd)}`);
   note(`≈ ${money(estimate.usd)}/month at ~${money(estimate.perPostUsd)} a post — a starting point, not a forecast.`);
 } else {
   note("No routines yet, so no estimate: a scheduled post is roughly $0.10, and the");
@@ -576,15 +633,28 @@ if (routines.length) {
 }
 note("Budgets are strict: a lane stops BEFORE a turn that could cross the line.");
 const suggested = routines.length ? Math.max(5, Math.ceil(estimate.usd * 2)).toFixed(2) : "20.00";
-values.MONTHLY_BUDGET_USD = await askValid("Monthly budget for schedules and events, USD", { fallback: values.MONTHLY_BUDGET_USD || suggested, validate: numberIn("a budget", 0) });
-values.ASK_MONTHLY_BUDGET_USD = await askValid("Monthly budget for member questions, USD", { fallback: values.ASK_MONTHLY_BUDGET_USD || "10.00", validate: numberIn("a budget", 0) });
+values.MONTHLY_BUDGET_USD = await askValid("Monthly budget for schedules and events, USD", {
+  fallback: values.MONTHLY_BUDGET_USD || suggested,
+  validate: numberIn("a budget", 0),
+});
+values.ASK_MONTHLY_BUDGET_USD = await askValid("Monthly budget for member questions, USD", {
+  fallback: values.ASK_MONTHLY_BUDGET_USD || "10.00",
+  validate: numberIn("a budget", 0),
+});
 save("budgets");
 
 heading("Polling and commands");
 note("Every feed poll is a metered call; 1800 s is the hub's own advice, 300 s posts");
 note("joins within minutes.");
-values.EVENT_POLL_SECONDS = await askValid("Feed poll interval, seconds", { fallback: values.EVENT_POLL_SECONDS || "1800", validate: numberIn("the interval", 60) });
-values.COMMAND_PREFIX = (await ask("Slash-command prefix (→ /<prefix>-run; 'none' for plain /run)", { fallback: values.COMMAND_PREFIX || path.basename(instanceDir) }))
+values.EVENT_POLL_SECONDS = await askValid("Feed poll interval, seconds", {
+  fallback: values.EVENT_POLL_SECONDS || "1800",
+  validate: numberIn("the interval", 60),
+});
+values.COMMAND_PREFIX = (
+  await ask("Slash-command prefix (→ /<prefix>-run; 'none' for plain /run)", {
+    fallback: values.COMMAND_PREFIX || path.basename(instanceDir),
+  })
+)
   .replace(/^none$/i, "")
   .toLowerCase()
   .replace(/[^a-z0-9_-]+/g, "");
@@ -595,8 +665,11 @@ note("Discord user ids: Settings > Advanced > Developer Mode, then right-click a
 note("name > Copy User ID. Every command spends money, so this is an allow-list.");
 const adminsOk = await untilOk(async () => {
   values.ADMIN_USER_IDS = await ask("Admin user ids (comma-separated)", { fallback: values.ADMIN_USER_IDS || "" });
-  const ids = values.ADMIN_USER_IDS.split(",").map((id) => id.trim()).filter(Boolean);
-  if (ids.length === 0) return [{ detail: "no admin user ids", fix: "without ADMIN_USER_IDS nobody can use the commands" }];
+  const ids = values.ADMIN_USER_IDS.split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  if (ids.length === 0)
+    return [{ detail: "no admin user ids", fix: "without ADMIN_USER_IDS nobody can use the commands" }];
   if (!inspected?.guild) {
     note("cannot check them against the server until the bot is in it");
     return [];
@@ -605,7 +678,11 @@ const adminsOk = await untilOk(async () => {
   for (const id of ids) {
     const member = await memberOf({ token: values.DISCORD_BOT_TOKEN, guildId: values.DISCORD_GUILD_ID, userId: id });
     if (member) ok(`${id} is ${member.user.username}${member.nick ? ` (${member.nick})` : ""}`);
-    else problems.push({ detail: `${id} is not a member of ${inspected.guild.name}`, fix: "copy the USER id, not a channel or role id" });
+    else
+      problems.push({
+        detail: `${id} is not a member of ${inspected.guild.name}`,
+        fix: "copy the USER id, not a channel or role id",
+      });
   }
   return problems;
 });
@@ -626,7 +703,10 @@ if (checkOnly) {
   const { isRepo, initInstanceRepo } = await import("./instance-git.js");
   if (isRepo(instanceDir)) {
     ok("instance is a git repository; accepted changes are committed");
-  } else if (!interactive || (await yesNo("Track this instance's config and prompts in a local git repository? (never pushed)", true))) {
+  } else if (
+    !interactive ||
+    (await yesNo("Track this instance's config and prompts in a local git repository? (never pushed)", true))
+  ) {
     try {
       const repo = await initInstanceRepo({ dir: instanceDir });
       ok(`git repository in ${instanceDir}: ${repo.tracked} files at ${repo.sha}; .env and state/ ignored`);
@@ -645,16 +725,28 @@ const channelName = (logical) => {
   return raw ? `#${raw.name}` : id ? `#${id}` : "(unbound)";
 };
 for (const routine of routines) {
-  const where = routine.trigger === "message" ? `listens in ${channelName(routine.channel)}` : routine.channel ? `→ ${channelName(routine.channel)}` : "→ model's choice";
+  const where =
+    routine.trigger === "message"
+      ? `listens in ${channelName(routine.channel)}`
+      : routine.channel
+        ? `→ ${channelName(routine.channel)}`
+        : "→ model's choice";
   note(`${routine.key.padEnd(22)} ${describeWhen(routine).padEnd(34)} ${where}`);
 }
 if (values.ROUTINES_DISABLED) note(`off: ${values.ROUTINES_DISABLED}`);
 if (routines.length === 0) note("routines: none yet — chosen in the DM");
-note(`commands: /${values.COMMAND_PREFIX ? `${values.COMMAND_PREFIX}-` : ""}run, -budget, -routines · admins: ${values.ADMIN_USER_IDS}`);
-note(`budgets: ${money(values.MONTHLY_BUDGET_USD)} routines + ${money(values.ASK_MONTHLY_BUDGET_USD)} ask per month · schedule in ${values.TIMEZONE}`);
+note(
+  `commands: /${values.COMMAND_PREFIX ? `${values.COMMAND_PREFIX}-` : ""}run, -budget, -routines · admins: ${values.ADMIN_USER_IDS}`,
+);
+note(
+  `budgets: ${money(values.MONTHLY_BUDGET_USD)} routines + ${money(values.ASK_MONTHLY_BUDGET_USD)} ask per month · schedule in ${values.TIMEZONE}`,
+);
 
 if (unresolved.length > 0) {
-  fail({ detail: `still unresolved: ${unresolved.join(", ")}`, fix: `run this again when fixed: npm run setup -- ${instanceDir}` });
+  fail({
+    detail: `still unresolved: ${unresolved.join(", ")}`,
+    fix: `run this again when fixed: npm run setup -- ${instanceDir}`,
+  });
   process.exit(1);
 }
 ok("everything checked out");
@@ -663,7 +755,8 @@ ok("everything checked out");
 
 if (interactive) {
   heading("run it");
-  const installer = os.platform() === "darwin" ? "install-launchd.sh" : os.platform() === "linux" ? "install-systemd.sh" : null;
+  const installer =
+    os.platform() === "darwin" ? "install-launchd.sh" : os.platform() === "linux" ? "install-systemd.sh" : null;
   if (!installer) {
     note(`start it with: INSTANCE_DIR=${instanceDir} npm start`);
   } else if (await yesNo(`Install and start it now as a service (${installer})?`, true)) {
@@ -679,7 +772,11 @@ if (interactive) {
       const text = fs.existsSync(logFile) ? fs.readFileSync(logFile, "utf8").slice(before) : "";
       const lines = text
         .split("\n")
-        .filter((line) => /\b(instance|mcp_connected|not_an_agent|channel_ok|channel_unusable|channels_ok|channels_unusable|commands_registered|scheduler_started|ERROR)\b/.test(line));
+        .filter((line) =>
+          /\b(instance|mcp_connected|not_an_agent|channel_ok|channel_unusable|channels_ok|channels_unusable|commands_registered|scheduler_started|ERROR)\b/.test(
+            line,
+          ),
+        );
       if (lines.length === 0) note(`nothing in ${logFile} yet — tail it`);
       for (const line of lines) note(line.length > 200 ? `${line.slice(0, 200)}…` : line);
       note(`log: ${logFile}`);

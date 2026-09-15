@@ -25,13 +25,7 @@
  * server can override; the second is the rule.
  */
 
-import {
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  MessageFlags,
-  REST,
-  Routes,
-} from "discord.js";
+import { SlashCommandBuilder, PermissionFlagsBits, MessageFlags, REST, Routes } from "discord.js";
 import { config } from "./config.js";
 import { loadRoutines } from "./routines.js";
 import { runRoutine } from "./run.js";
@@ -75,11 +69,7 @@ export function commandDefinitions({ review = config.review.enabled } = {}) {
       .setDescription("Run one routine now and post it to its channel")
       .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
       .addStringOption((option) =>
-        option
-          .setName("routine")
-          .setDescription("Which routine to run")
-          .setRequired(true)
-          .setAutocomplete(true),
+        option.setName("routine").setDescription("Which routine to run").setRequired(true).setAutocomplete(true),
       ),
   ].map((c) => c.toJSON());
 }
@@ -89,13 +79,14 @@ export function commandDefinitions({ review = config.review.enabled } = {}) {
 export async function registerCommands(client) {
   const rest = new REST().setToken(config.discord.token);
   try {
-    await rest.put(
-      Routes.applicationGuildCommands(client.user.id, config.discord.guildId),
-      { body: commandDefinitions() },
-    );
+    await rest.put(Routes.applicationGuildCommands(client.user.id, config.discord.guildId), {
+      body: commandDefinitions(),
+    });
     log.info("commands_registered", {
       guild: config.discord.guildId,
-      commands: ["budget", "routines", "run", ...(config.review.enabled ? ["review"] : [])].map((c) => `/${commandName(c)}`).join(","),
+      commands: ["budget", "routines", "run", ...(config.review.enabled ? ["review"] : [])]
+        .map((c) => `/${commandName(c)}`)
+        .join(","),
     });
   } catch (error) {
     log.error("commands_registration_failed", {
@@ -114,8 +105,7 @@ const money = (n) => `$${n.toFixed(2)}`;
 export function budgetReply(status = budget.status()) {
   const lines = status.map((b) => {
     const cap = b.budget === null ? "no budget set" : `of ${money(b.budget)}`;
-    const left =
-      b.remaining === null ? "" : ` · ${money(b.remaining)} left`;
+    const left = b.remaining === null ? "" : ` · ${money(b.remaining)} left`;
     const mark = b.state === "ok" ? "" : ` · **${b.state}**`;
     return `**${b.lane}** — ${money(b.spent)} ${cap}${left}${mark}`;
   });
@@ -163,8 +153,7 @@ export async function handleInteraction(interaction, { resolveChannel }) {
 
   if (!isAdmin(interaction.user.id)) {
     await interaction.reply({
-      content:
-        "That one is for whoever runs this bot — every command here spends money.",
+      content: "That one is for whoever runs this bot — every command here spends money.",
       flags: MessageFlags.Ephemeral,
     });
     log.warn("command_refused", {
@@ -192,7 +181,10 @@ export async function handleInteraction(interaction, { resolveChannel }) {
 
   if (command === "review") {
     if (!config.review.enabled) {
-      await interaction.reply({ content: "The review lane is off. Set `REVIEW=on` in this instance's .env and restart.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({
+        content: "The review lane is off. Set `REVIEW=on` in this instance's .env and restart.",
+        flags: MessageFlags.Ephemeral,
+      });
       return;
     }
     // A review reads a week and thinks for a while; Discord wants three seconds.
@@ -207,7 +199,11 @@ export async function handleInteraction(interaction, { resolveChannel }) {
       await interaction.editReply("Nothing new in the ledger since the last review.");
       return;
     }
-    const reached = await deliverReview({ client: interaction.client, review: findReview(outcome.reviewId) ?? outcome.record, outcome });
+    const reached = await deliverReview({
+      client: interaction.client,
+      review: findReview(outcome.reviewId) ?? outcome.record,
+      outcome,
+    });
     await interaction.editReply(
       `Read ${outcome.turns} turns (${outcome.flagged} flagged): ${outcome.proposals.length} proposal${outcome.proposals.length === 1 ? "" : "s"}, ${outcome.reports.length} mechanics report${outcome.reports.length === 1 ? "" : "s"} · $${outcome.usd.toFixed(2)}. ${reached ? "Sent to you by DM." : "Could not DM you — check that DMs from this server are allowed."}`,
     );

@@ -22,10 +22,7 @@ import { instanceDir } from "./config.js";
 
 // Relative to the INSTANCE directory, not the checkout. Several instances of
 // one checkout must never share a state file; see instanceDir in config.js.
-export const STATE_PATH = path.resolve(
-  instanceDir,
-  process.env.STATE_PATH || path.join("state", "state.json"),
-);
+export const STATE_PATH = path.resolve(instanceDir, process.env.STATE_PATH || path.join("state", "state.json"));
 
 const DEFAULTS = {
   // { [routineKey]: eventId }. A key absent means "start from now" and is

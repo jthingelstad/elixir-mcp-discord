@@ -14,13 +14,18 @@
 
 import { callTool } from "./mcp.js";
 
-const LINK = /(?:link\.clashroyale\.com\/[^\s]*|clashroyale:\/\/copyDeck)[^\s]*?[?&]deck=([0-9;]+)(?:[^\s]*?[?&]tt=(\d+))?(?:[^\s]*?[?&]id=([0-9A-Z]+))?/i;
+const LINK =
+  /(?:link\.clashroyale\.com\/[^\s]*|clashroyale:\/\/copyDeck)[^\s]*?[?&]deck=([0-9;]+)(?:[^\s]*?[?&]tt=(\d+))?(?:[^\s]*?[?&]id=([0-9A-Z]+))?/i;
 
 /** The deck in a message, or null. */
 export function parseDeckLink(text) {
   const match = LINK.exec(String(text || ""));
   if (!match) return null;
-  const cardIds = match[1].split(";").filter(Boolean).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  const cardIds = match[1]
+    .split(";")
+    .filter(Boolean)
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n > 0);
   if (cardIds.length !== 8) return null;
   return { cardIds, towerTroopId: match[2] ? Number(match[2]) : null, sharerTag: match[3] ? `#${match[3]}` : null };
 }
@@ -45,7 +50,9 @@ export function deckLinkTool({ resolve = callTool } = {}) {
       const byId = new Map(cards.map((c) => [Number(c.id ?? c.card_id), c]));
       const shape = (id) => {
         const c = byId.get(id);
-        return c ? { id, name: c.name, rarity: c.rarity ?? undefined, elixir: c.elixir ?? c.cost ?? undefined } : { id, name: null };
+        return c
+          ? { id, name: c.name, rarity: c.rarity ?? undefined, elixir: c.elixir ?? c.cost ?? undefined }
+          : { id, name: null };
       };
       return {
         ok: true,
@@ -53,8 +60,24 @@ export function deckLinkTool({ resolve = callTool } = {}) {
           cards: deck.cardIds.map(shape),
           tower_troop: deck.towerTroopId ? shape(deck.towerTroopId) : null,
           shared_by: deck.sharerTag,
-          average_elixir: cards.length ? Number((deck.cardIds.map((id) => byId.get(id)?.elixir ?? byId.get(id)?.cost).filter((n) => typeof n === "number").reduce((a, b) => a + b, 0) / Math.max(1, deck.cardIds.filter((id) => typeof (byId.get(id)?.elixir ?? byId.get(id)?.cost) === "number").length)).toFixed(1)) : null,
-          note: catalog.ok ? "A link does not say which cards are evolved or what level they are; only the record does." : `cards_catalog did not answer (${catalog.error}); ids only.`,
+          average_elixir: cards.length
+            ? Number(
+                (
+                  deck.cardIds
+                    .map((id) => byId.get(id)?.elixir ?? byId.get(id)?.cost)
+                    .filter((n) => typeof n === "number")
+                    .reduce((a, b) => a + b, 0) /
+                  Math.max(
+                    1,
+                    deck.cardIds.filter((id) => typeof (byId.get(id)?.elixir ?? byId.get(id)?.cost) === "number")
+                      .length,
+                  )
+                ).toFixed(1),
+              )
+            : null,
+          note: catalog.ok
+            ? "A link does not say which cards are evolved or what level they are; only the record does."
+            : `cards_catalog did not answer (${catalog.error}); ids only.`,
         },
       };
     },

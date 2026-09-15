@@ -34,8 +34,7 @@ const key = rest.find((arg) => !arg.startsWith("--"));
 
 function budgetLines() {
   return budget.status().map((b) => {
-    const of =
-      b.budget === null ? "no budget set" : `of $${b.budget.toFixed(2)}`;
+    const of = b.budget === null ? "no budget set" : `of $${b.budget.toFixed(2)}`;
     return `  ${b.lane.padEnd(9)} $${b.spent.toFixed(2)} ${of}  (${b.state}, reserve $${b.reserve.toFixed(2)})`;
   });
 }
@@ -44,9 +43,7 @@ function listRoutines() {
   warnAboutShadowedConfig();
   const { routines, errors } = loadRoutines();
   console.log(`agent dir: ${config.agentDir}   timezone: ${config.timezone}`);
-  console.log(
-    `model: ${config.claude.model} · effort ${config.claude.effort}\n`,
-  );
+  console.log(`model: ${config.claude.model} · effort ${config.claude.effort}\n`);
   console.log(`budgets (${budget.monthKey()}):`);
   for (const line of budgetLines()) console.log(line);
   console.log("");
@@ -77,8 +74,7 @@ function listRoutines() {
       ].join(" "),
     );
   }
-  for (const failure of errors)
-    console.error(`✗ ${failure.key}: ${failure.error}`);
+  for (const failure of errors) console.error(`✗ ${failure.key}: ${failure.error}`);
   if (errors.length) process.exitCode = 1;
 }
 
@@ -88,9 +84,7 @@ function listRoutines() {
 function warnAboutShadowedConfig() {
   for (const entry of provenance) {
     if (entry.source.startsWith("SHELL") || entry.source === "shell") {
-      console.error(
-        `# ${entry.name}=${entry.value} (from your SHELL, not .env)`,
-      );
+      console.error(`# ${entry.name}=${entry.value} (from your SHELL, not .env)`);
     }
   }
 }
@@ -100,9 +94,7 @@ async function tryRoutine() {
   const { routines } = loadRoutines();
   const routine = routines.find((entry) => entry.key === key);
   if (!routine) {
-    console.error(
-      `No routine called "${key ?? ""}". Run \`npm run routines\` to see them.`,
-    );
+    console.error(`No routine called "${key ?? ""}". Run \`npm run routines\` to see them.`);
     process.exit(1);
   }
 
@@ -116,9 +108,7 @@ async function tryRoutine() {
     });
     console.error(`# connected as ${describePrincipal(handshake.principal)}`);
   } else if (!handshake.ok) {
-    console.error(
-      `# WARNING: initialize failed (${handshake.error}) — prompt may lack its subject`,
-    );
+    console.error(`# WARNING: initialize failed (${handshake.error}) — prompt may lack its subject`);
   }
 
   // The channel directory, over REST, so a dry run exercises the model's
@@ -132,10 +122,17 @@ async function tryRoutine() {
       if (inspected.guild) {
         const active = routines.filter((r) => !r.disabled);
         const bound = new Set(active.map((r) => r.channel && config.channels.get(r.channel)).filter(Boolean));
-        const askIds = new Set(active.filter((r) => r.trigger === "message").map((r) => config.channels.get(r.channel)).filter(Boolean));
+        const askIds = new Set(
+          active
+            .filter((r) => r.trigger === "message")
+            .map((r) => config.channels.get(r.channel))
+            .filter(Boolean),
+        );
         entries = directory.fromRest(inspected, permissionsIn, { bound, askIds });
         directory.configure({ list: () => entries, resolve: null });
-        console.error(`# directory: ${entries.map((e) => `#${e.name}${e.role === "ask" ? "(ask)" : ""}`).join(", ") || "EMPTY — the model gets no post tool"}`);
+        console.error(
+          `# directory: ${entries.map((e) => `#${e.name}${e.role === "ask" ? "(ask)" : ""}`).join(", ") || "EMPTY — the model gets no post tool"}`,
+        );
       } else {
         console.error(`# directory: unavailable (${inspected.problems[0]?.detail ?? "not in the guild"})`);
       }
@@ -157,7 +154,7 @@ async function tryRoutine() {
       systemFor(routine, {
         includePrompt: routine.trigger === "message",
         entries,
-        defaultChannelId: routine.channel ? config.channels.get(routine.channel) ?? null : null,
+        defaultChannelId: routine.channel ? (config.channels.get(routine.channel) ?? null) : null,
       }),
     );
     console.log("\n=== USER ===\n");
@@ -200,14 +197,13 @@ async function tryRoutine() {
   console.log(run.skipped ? "(SKIP — nothing would be posted)\n" : "");
   if (run.posts?.length) {
     for (const p of run.posts) console.log(`=== ${p.channel} ===\n${p.text}\n`);
-    if (run.text && run.text !== run.posts.map((p) => p.text).join("\n\n")) console.log(`(prose outside the posts, not posted)\n${run.text}`);
+    if (run.text && run.text !== run.posts.map((p) => p.text).join("\n\n"))
+      console.log(`(prose outside the posts, not posted)\n${run.text}`);
   } else {
     console.log(run.text);
   }
   console.log("\n---");
-  console.log(
-    renderTrace(run.result, { label: routine.key }) ?? "(no tool activity)",
-  );
+  console.log(renderTrace(run.result, { label: routine.key }) ?? "(no tool activity)");
   console.log(
     `\n${routine.model} · effort ${routine.effort} · $${run.result.usd.toFixed(4)} · ${((Date.now() - started) / 1000).toFixed(1)}s · ${posting ? "POSTED" : "dry run, nothing posted"}`,
   );
@@ -230,11 +226,16 @@ async function reviewDry() {
   }
   console.log(`=== REPORT (${outcome.turns} turns, ${outcome.flagged} flagged) ===\n\n${outcome.report}\n`);
   for (const [i, p] of outcome.proposals.entries()) {
-    console.log(`=== PROPOSAL ${i + 1}: ${p.file} · ${p.rule} ===\n${p.summary}\nturns ${p.turnIds.join(", ")}\n${p.preview}\n`);
+    console.log(
+      `=== PROPOSAL ${i + 1}: ${p.file} · ${p.rule} ===\n${p.summary}\nturns ${p.turnIds.join(", ")}\n${p.preview}\n`,
+    );
   }
-  for (const r of outcome.reports) console.log(`=== MECHANICS: ${r.rule} ===\n${r.summary}\nturns ${r.turnIds.join(", ")}\n`);
+  for (const r of outcome.reports)
+    console.log(`=== MECHANICS: ${r.rule} ===\n${r.summary}\nturns ${r.turnIds.join(", ")}\n`);
   for (const f of outcome.filed) console.log(`=== FILED WITH ELIXIR ===\n${f}\n`);
-  console.log(`---\n${config.review.model} · effort ${config.review.effort} · $${outcome.usd.toFixed(4)} · dry run, nothing written${outcome.truncated ? " · TRUNCATED" : ""}`);
+  console.log(
+    `---\n${config.review.model} · effort ${config.review.effort} · $${outcome.usd.toFixed(4)} · dry run, nothing written${outcome.truncated ? " · TRUNCATED" : ""}`,
+  );
 }
 
 if (command === "list") listRoutines();

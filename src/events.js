@@ -157,7 +157,11 @@ async function pollRoutine(routine, channel) {
   if (version && version !== state.get("contractVersion")) {
     log.info("contract_version_changed", { from: state.get("contractVersion"), to: version });
     if (state.get("contractVersion")) {
-      await notify("Elixir changed", `contract ${state.get("contractVersion")} → ${version} while running. Tool schemas may have moved; the elixir_changelog tool says what.`, { fingerprint: `contract:${version}` });
+      await notify(
+        "Elixir changed",
+        `contract ${state.get("contractVersion")} → ${version} while running. Tool schemas may have moved; the elixir_changelog tool says what.`,
+        { fingerprint: `contract:${version}` },
+      );
     }
     state.set({ contractVersion: version });
   }
@@ -264,7 +268,9 @@ export function startEventLoop(routinesFn, resolveChannel) {
       if (routine.channel && !channel) continue;
       const meta = await pollRoutine(routine, channel).catch(async (error) => {
         log.error("events_routine_crashed", { routine: routine.key, error: error.message });
-        await notify("feed routine crashed", `${routine.key}: ${error.message.slice(0, 300)}`, { fingerprint: `events_crashed:${routine.key}` });
+        await notify("feed routine crashed", `${routine.key}: ${error.message.slice(0, 300)}`, {
+          fingerprint: `events_crashed:${routine.key}`,
+        });
         return null;
       });
       if (meta?.feedback_responses_pending !== undefined) {

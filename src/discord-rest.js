@@ -57,8 +57,7 @@ export function inviteUrl(appId, guildId) {
 export function hasMessageContentIntent(application) {
   const flags = Number(application?.flags ?? 0);
   return Boolean(
-    flags & ApplicationFlags.GatewayMessageContent ||
-      flags & ApplicationFlags.GatewayMessageContentLimited,
+    flags & ApplicationFlags.GatewayMessageContent || flags & ApplicationFlags.GatewayMessageContentLimited,
   );
 }
 
@@ -132,7 +131,11 @@ export async function inspectDiscord({ token, appId = null, guildId }) {
   try {
     out.application = await rest.get(Routes.currentApplication());
   } catch (error) {
-    out.problems.push({ what: "application", detail: error.message, fix: "retry; this endpoint needs only the bot token" });
+    out.problems.push({
+      what: "application",
+      detail: error.message,
+      fix: "retry; this endpoint needs only the bot token",
+    });
     return out;
   }
   if (appId && out.application.id !== appId) {
@@ -156,10 +159,7 @@ export async function inspectDiscord({ token, appId = null, guildId }) {
     const code = status(error);
     out.problems.push({
       what: "guild",
-      detail:
-        code === 403 || code === 404
-          ? `the bot is not in guild ${guildId}`
-          : error.message,
+      detail: code === 403 || code === 404 ? `the bot is not in guild ${guildId}` : error.message,
       fix: `invite it with this link (it carries the bot and applications.commands scopes and every permission a lane can need):\n      ${inviteUrl(out.application.id, guildId)}`,
     });
     return out;
@@ -172,7 +172,11 @@ export async function inspectDiscord({ token, appId = null, guildId }) {
       rest.get(Routes.guildMember(guildId, out.user.id)),
     ]);
   } catch (error) {
-    out.problems.push({ what: "guild_read", detail: error.message, fix: "retry; reading roles, channels and the bot's own membership needs no extra permission" });
+    out.problems.push({
+      what: "guild_read",
+      detail: error.message,
+      fix: "retry; reading roles, channels and the bot's own membership needs no extra permission",
+    });
     return out;
   }
   out.channels = out.channels

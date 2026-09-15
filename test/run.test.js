@@ -47,10 +47,7 @@ const answer = (text, extra = {}) => ({
   ...extra,
 });
 
-const routine = (
-  fields,
-  body = "Report the war decks, and skip if it is not a war day.",
-) =>
+const routine = (fields, body = "Report the war decks, and skip if it is not a war day.") =>
   parseRoutine(
     "war-deck-check",
     `---\n${Object.entries(fields)
@@ -60,13 +57,10 @@ const routine = (
 
 test("a routine's answer reaches its channel", async () => {
   const channel = fakeChannel();
-  const run = await runRoutine(
-    routine({ trigger: "schedule", channel: "pulse", at: "01:00" }),
-    {
-      channel,
-      askFn: async () => answer("**War decks** — 3 untouched."),
-    },
-  );
+  const run = await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "01:00" }), {
+    channel,
+    askFn: async () => answer("**War decks** — 3 untouched."),
+  });
   assert.equal(run.ok, true);
   assert.equal(run.skipped, false);
   assert.equal(channel.sent[0].text, "**War decks** — 3 untouched.");
@@ -95,13 +89,10 @@ test("a routine that may NOT skip posts what it said", async () => {
   // Otherwise a prompt bug is invisible: the routine looks like it ran and the
   // channel looks like a quiet day, forever.
   const channel = fakeChannel();
-  const run = await runRoutine(
-    routine({ trigger: "schedule", channel: "pulse", at: "01:00" }),
-    {
-      channel,
-      askFn: async () => answer("SKIP"),
-    },
-  );
+  const run = await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "01:00" }), {
+    channel,
+    askFn: async () => answer("SKIP"),
+  });
   assert.equal(run.skipped, false);
   assert.equal(channel.sent.length, 1);
 });
@@ -126,10 +117,7 @@ test("trace: true attaches the diagnostics under the post", async () => {
 
 test("a long post is split rather than truncated", async () => {
   const channel = fakeChannel();
-  const long = Array.from(
-    { length: 60 },
-    (_, i) => `line ${i} ${"x".repeat(40)}`,
-  ).join("\n");
+  const long = Array.from({ length: 60 }, (_, i) => `line ${i} ${"x".repeat(40)}`).join("\n");
   await runRoutine(
     routine({
       trigger: "schedule",
@@ -148,31 +136,25 @@ test("a long post is split rather than truncated", async () => {
 });
 
 test("a dry run composes without touching Discord", async () => {
-  const run = await runRoutine(
-    routine({ trigger: "schedule", channel: "pulse", at: "01:00" }),
-    {
-      dryRun: true,
-      askFn: async () => answer("Would have posted this."),
-    },
-  );
+  const run = await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "01:00" }), {
+    dryRun: true,
+    askFn: async () => answer("Would have posted this."),
+  });
   assert.equal(run.text, "Would have posted this.");
 });
 
 test("a failed turn is reported, not posted", async () => {
   const channel = fakeChannel();
-  const run = await runRoutine(
-    routine({ trigger: "schedule", channel: "pulse", at: "01:00" }),
-    {
-      channel,
-      askFn: async () => ({
-        ok: false,
-        error: "overloaded_error",
-        called: [],
-        errors: [],
-        trace: [],
-      }),
-    },
-  );
+  const run = await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "01:00" }), {
+    channel,
+    askFn: async () => ({
+      ok: false,
+      error: "overloaded_error",
+      called: [],
+      errors: [],
+      trace: [],
+    }),
+  });
   assert.equal(run.ok, false);
   assert.equal(run.error, "overloaded_error");
   assert.equal(channel.sent.length, 0);
@@ -195,16 +177,13 @@ test("a routine whose lane is spent never calls the model", async () => {
 
   const channel = fakeChannel();
   let called = false;
-  const run = await runRoutine(
-    routine({ trigger: "schedule", channel: "pulse", at: "01:00" }),
-    {
-      channel,
-      askFn: async () => {
-        called = true;
-        return answer("should never be composed");
-      },
+  const run = await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "01:00" }), {
+    channel,
+    askFn: async () => {
+      called = true;
+      return answer("should never be composed");
     },
-  );
+  });
 
   assert.equal(called, false, "the model was not called");
   assert.equal(run.ok, false);
@@ -220,21 +199,14 @@ test("the runner charges the lane the trigger belongs to", async () => {
   // seam to read that from.
   const channel = fakeChannel();
   let seen = null;
-  await runRoutine(
-    routine({ trigger: "schedule", channel: "pulse", at: "01:00" }),
-    {
-      channel,
-      askFn: async (args) => {
-        seen = args;
-        return answer("posted");
-      },
+  await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "01:00" }), {
+    channel,
+    askFn: async (args) => {
+      seen = args;
+      return answer("posted");
     },
-  );
-  assert.equal(
-    seen.lane,
-    "routines",
-    "a scheduled post is the operator's cost",
-  );
+  });
+  assert.equal(seen.lane, "routines", "a scheduled post is the operator's cost");
   assert.equal(seen.routineKey, "war-deck-check");
   assert.equal(seen.maxTokens, 6000, "the routine's own output ceiling");
 });
@@ -301,7 +273,10 @@ test("expected error codes do not earn a footer", async () => {
   await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "17:00" }), {
     channel,
     askFn: async () =>
-      answer("Who are you?", { called: ["players_summary"], errors: [{ name: "players_summary", code: "no_subject", detail: "Nobody." }] }),
+      answer("Who are you?", {
+        called: ["players_summary"],
+        errors: [{ name: "players_summary", code: "no_subject", detail: "Nobody." }],
+      }),
   });
   assert.equal(channel.sent[0].replies.length, 0);
 });
@@ -337,7 +312,7 @@ test("a turn posts through post_message to the channel it chose, and the rules h
     { id: "12", name: "leaders", topic: "Leaders", visibility: "restricted", threads: false, role: null },
     { id: "13", name: "ask", topic: "Ask", visibility: "everyone", threads: true, role: "ask" },
   ];
-  const resolve = async (id) => ({ 11: news, 12: leaders }[id] ?? null);
+  const resolve = async (id) => ({ 11: news, 12: leaders })[id] ?? null;
   const seen = {};
   const askFn = async ({ system, localTools }) => {
     assert.match(system, /CHANNELS YOU MAY POST IN/);
@@ -351,7 +326,12 @@ test("a turn posts through post_message to the channel it chose, and the rules h
     seen.fourth = await tool.handler({ channel_id: "11", content: "cap" });
     return answer("Posted.", { called: ["clans_roster", "post_message", "post_message", "post_message"], trace: [] });
   };
-  const run = await runRoutine(routine({ trigger: "schedule", at: "01:00" }), { channel: null, askFn, entries, resolve });
+  const run = await runRoutine(routine({ trigger: "schedule", at: "01:00" }), {
+    channel: null,
+    askFn,
+    entries,
+    resolve,
+  });
   assert.equal(seen.unknown.code, "unknown_channel");
   assert.equal(seen.ask.code, "ask_channel");
   assert.equal(seen.first.ok, true);
@@ -359,11 +339,18 @@ test("a turn posts through post_message to the channel it chose, and the rules h
   assert.equal(seen.third.ok, true);
   assert.equal(seen.fourth.code, "post_cap", "three posts is the cap");
   assert.equal(run.ok, true);
-  assert.deepEqual(run.posts.map((p) => p.channel), ["#news", "#leaders", "#news"]);
+  assert.deepEqual(
+    run.posts.map((p) => p.channel),
+    ["#news", "#leaders", "#news"],
+  );
   assert.equal(news.sent.length, 2);
   assert.equal(leaders.sent.length, 1);
   assert.match(leaders.sent[0].text, /One left/);
-  assert.equal(run.text, "Two joined today.\n\nOne left: an elder.\n\nagain", "the posts are the output; trailing prose is not");
+  assert.equal(
+    run.text,
+    "Two joined today.\n\nOne left: an elder.\n\nagain",
+    "the posts are the output; trailing prose is not",
+  );
 });
 
 test("with a directory, no post call and prose still goes to the routine's default; SKIP still skips", async () => {
@@ -414,14 +401,37 @@ test("a routine turn can read the room: the last two hours in a directory channe
   const { roomTool } = await import("../src/run.js");
   const now = Date.parse("2026-09-15T20:00:00Z");
   const messages = new Map([
-    ["1", { createdTimestamp: now - 10 * 60000, cleanContent: "GG everyone, decks done", author: { username: "levy", bot: false }, member: { displayName: "King Levy" } }],
+    [
+      "1",
+      {
+        createdTimestamp: now - 10 * 60000,
+        cleanContent: "GG everyone, decks done",
+        author: { username: "levy", bot: false },
+        member: { displayName: "King Levy" },
+      },
+    ],
     ["2", { createdTimestamp: now - 3 * 3600 * 1000, cleanContent: "old news", author: { username: "x", bot: false } }],
-    ["3", { createdTimestamp: now - 5 * 60000, cleanContent: "-# 👋 Online", author: { username: "Elixir MCP", bot: true } }],
+    [
+      "3",
+      {
+        createdTimestamp: now - 5 * 60000,
+        cleanContent: "-# 👋 Online",
+        author: { username: "Elixir MCP", bot: true },
+      },
+    ],
   ]);
-  const tool = roomTool({ entries: [{ id: "77", name: "news" }], resolve: async () => ({ messages: { fetch: async () => messages } }), now: () => now });
+  const tool = roomTool({
+    entries: [{ id: "77", name: "news" }],
+    resolve: async () => ({ messages: { fetch: async () => messages } }),
+    now: () => now,
+  });
   const out = await tool.handler({ channel_id: "77" });
   assert.equal(out.ok, true);
-  assert.deepEqual(out.body.messages.map((m) => m.who), ["King Levy", "Elixir MCP (bot)"], "two hours, oldest first, humans and bots");
+  assert.deepEqual(
+    out.body.messages.map((m) => m.who),
+    ["King Levy", "Elixir MCP (bot)"],
+    "two hours, oldest first, humans and bots",
+  );
   assert.match(out.body.messages[0].text, /decks done/);
   assert.equal((await tool.handler({ channel_id: "99" })).ok, false, "only directory channels");
 });

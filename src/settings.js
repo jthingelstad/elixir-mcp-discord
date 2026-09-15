@@ -46,10 +46,14 @@ function isTimezone(tz) {
   }
 }
 
-const money = (name) => (v) => (v === "" || (Number.isFinite(Number(v)) && Number(v) >= 0) ? null : `${name} must be a number of dollars (or empty for unlimited)`);
+const money = (name) => (v) =>
+  v === "" || (Number.isFinite(Number(v)) && Number(v) >= 0)
+    ? null
+    : `${name} must be a number of dollars (or empty for unlimited)`;
 const onOff = (v) => (["on", "off"].includes(v.toLowerCase()) ? null : "on or off");
 const trueFalse = (v) => (["true", "false"].includes(v.toLowerCase()) ? null : "true or false");
-const intAtLeast = (min, what) => (v) => (Number.isInteger(Number(v)) && Number(v) >= min ? null : `${what} must be a whole number ≥ ${min}`);
+const intAtLeast = (min, what) => (v) =>
+  Number.isInteger(Number(v)) && Number(v) >= min ? null : `${what} must be a whole number ≥ ${min}`;
 const pricedModel = (v) => {
   try {
     rateFor(v);
@@ -62,28 +66,74 @@ const effort = (v) => (EFFORTS.has(v.toLowerCase()) ? null : `effort is one of $
 
 /** What the DM may change, with what makes a value acceptable. */
 export const SETTINGS = {
-  MONTHLY_BUDGET_USD: { about: "monthly budget for scheduled and event posts, USD; empty = unlimited", check: money("MONTHLY_BUDGET_USD") },
-  ASK_MONTHLY_BUDGET_USD: { about: "monthly budget for members' questions, USD; empty = unlimited", check: money("ASK_MONTHLY_BUDGET_USD") },
-  REVIEW_MONTHLY_BUDGET_USD: { about: "monthly budget for the review lane and DM turns, USD", check: money("REVIEW_MONTHLY_BUDGET_USD") },
-  ASK_DAILY_TURNS_PER_MEMBER: { about: "questions one member may ask per day; 0 = no cap; admins exempt", check: intAtLeast(0, "ASK_DAILY_TURNS_PER_MEMBER") },
-  DAILY_USD_CAP: { about: "a daily ceiling on top of the monthly budgets; empty = none", check: money("DAILY_USD_CAP") },
+  MONTHLY_BUDGET_USD: {
+    about: "monthly budget for scheduled and event posts, USD; empty = unlimited",
+    check: money("MONTHLY_BUDGET_USD"),
+  },
+  ASK_MONTHLY_BUDGET_USD: {
+    about: "monthly budget for members' questions, USD; empty = unlimited",
+    check: money("ASK_MONTHLY_BUDGET_USD"),
+  },
+  REVIEW_MONTHLY_BUDGET_USD: {
+    about: "monthly budget for the review lane and DM turns, USD",
+    check: money("REVIEW_MONTHLY_BUDGET_USD"),
+  },
+  ASK_DAILY_TURNS_PER_MEMBER: {
+    about: "questions one member may ask per day; 0 = no cap; admins exempt",
+    check: intAtLeast(0, "ASK_DAILY_TURNS_PER_MEMBER"),
+  },
+  DAILY_USD_CAP: {
+    about: "a daily ceiling on top of the monthly budgets; empty = none",
+    check: money("DAILY_USD_CAP"),
+  },
   TURN_RESERVE_USD: { about: "what one turn is assumed to cost before any has run", check: money("TURN_RESERVE_USD") },
   CLAUDE_MODEL: { about: "default model for routines that name none", check: pricedModel },
   CLAUDE_EFFORT: { about: "default effort: low, medium, high, xhigh, max", check: effort },
   CLAUDE_MAX_TOKENS: { about: "default output ceiling per turn", check: intAtLeast(256, "CLAUDE_MAX_TOKENS") },
-  REVIEW: { about: "the review lane: on or off (the /review slash command appears after a restart; the lane itself is live)", check: onOff },
-  REVIEW_AT: { about: '"<weekday|daily> HH:MM" in TIMEZONE, e.g. "sun 20:00"', check: (v) => { try { parseReviewAt(v); return null; } catch (error) { return error.message; } } },
+  REVIEW: {
+    about: "the review lane: on or off (the /review slash command appears after a restart; the lane itself is live)",
+    check: onOff,
+  },
+  REVIEW_AT: {
+    about: '"<weekday|daily> HH:MM" in TIMEZONE, e.g. "sun 20:00"',
+    check: (v) => {
+      try {
+        parseReviewAt(v);
+        return null;
+      } catch (error) {
+        return error.message;
+      }
+    },
+  },
   REVIEW_MODEL: { about: "model for the review lane", check: pricedModel },
   REVIEW_EFFORT: { about: "effort for the review lane", check: effort },
   REVIEW_AUTO_MEMORY: { about: "let the review write memory.md without a click: true or false", check: trueFalse },
   REVIEW_MAX_PROPOSALS: { about: "proposals per review", check: intAtLeast(1, "REVIEW_MAX_PROPOSALS") },
-  TIMEZONE: { about: "IANA zone schedules are written in, e.g. America/Chicago", check: (v) => (isTimezone(v) ? null : `"${v}" is not an IANA timezone (Region/City)`) },
-  EVENT_POLL_SECONDS: { about: "how often the timeline is read; every poll is a metered call (restart)", check: intAtLeast(60, "EVENT_POLL_SECONDS"), restart: true },
+  TIMEZONE: {
+    about: "IANA zone schedules are written in, e.g. America/Chicago",
+    check: (v) => (isTimezone(v) ? null : `"${v}" is not an IANA timezone (Region/City)`),
+  },
+  EVENT_POLL_SECONDS: {
+    about: "how often the timeline is read; every poll is a metered call (restart)",
+    check: intAtLeast(60, "EVENT_POLL_SECONDS"),
+    restart: true,
+  },
   STARTUP_MESSAGE: { about: "the one-line hello on boot: on or off", check: onOff },
   MAX_POSTS_PER_TURN: { about: "how many posts one routine turn may make", check: intAtLeast(1, "MAX_POSTS_PER_TURN") },
-  COMMAND_PREFIX: { about: "slash-command prefix (/<prefix>-run); empty for plain /run (restart)", check: (v) => (/^[a-z0-9_-]*$/.test(v) ? null : "letters, digits, - and _ only"), restart: true },
-  FEEDBACK_CHANNEL: { about: "logical channel name for Elixir's replies to filed feedback", check: (v) => (/^[a-z0-9-]*$/.test(v) ? null : "a channel's logical name (lowercase, hyphens)") },
-  ADMIN_USER_IDS: { about: "who may DM the bot and use its commands; comma-separated Discord user ids", check: (v) => (v.split(",").every((id) => /^\d{5,}$/.test(id.trim())) ? null : "comma-separated numeric Discord user ids") },
+  COMMAND_PREFIX: {
+    about: "slash-command prefix (/<prefix>-run); empty for plain /run (restart)",
+    check: (v) => (/^[a-z0-9_-]*$/.test(v) ? null : "letters, digits, - and _ only"),
+    restart: true,
+  },
+  FEEDBACK_CHANNEL: {
+    about: "logical channel name for Elixir's replies to filed feedback",
+    check: (v) => (/^[a-z0-9-]*$/.test(v) ? null : "a channel's logical name (lowercase, hyphens)"),
+  },
+  ADMIN_USER_IDS: {
+    about: "who may DM the bot and use its commands; comma-separated Discord user ids",
+    check: (v) =>
+      v.split(",").every((id) => /^\d{5,}$/.test(id.trim())) ? null : "comma-separated numeric Discord user ids",
+  },
 };
 
 export const isSetting = (key) => Object.hasOwn(SETTINGS, key) || /^CHANNEL_[A-Z0-9_]+$/.test(key);
@@ -102,14 +152,25 @@ export function checkSetting(key, rawValue, { by = null, entries = directory() }
     if (!value) return { ok: true, value: "" };
     const wanted = value.replace(/^#/, "");
     const entry = entries.find((e) => e.id === wanted || e.name === wanted);
-    if (!entry) return { ok: false, error: `${value} is not a channel the bot is granted in; it may post in ${entries.map((e) => `#${e.name}`).join(", ") || "nothing yet"}` };
+    if (!entry)
+      return {
+        ok: false,
+        error: `${value} is not a channel the bot is granted in; it may post in ${entries.map((e) => `#${e.name}`).join(", ") || "nothing yet"}`,
+      };
     return { ok: true, value: entry.id, shown: `#${entry.name}` };
   }
   const setting = SETTINGS[key];
   if (!setting) return { ok: false, error: `${key} is not a setting the DM may change` };
   const problem = setting.check(value);
   if (problem) return { ok: false, error: `${key}: ${problem}` };
-  if (key === "ADMIN_USER_IDS" && by && !value.split(",").map((s) => s.trim()).includes(String(by))) {
+  if (
+    key === "ADMIN_USER_IDS" &&
+    by &&
+    !value
+      .split(",")
+      .map((s) => s.trim())
+      .includes(String(by))
+  ) {
     return { ok: false, error: "that would remove you as an admin; keep your own id in the list" };
   }
   return { ok: true, value };
@@ -117,7 +178,7 @@ export function checkSetting(key, rawValue, { by = null, entries = directory() }
 
 /** config.json with keys set (a value of "" removes the key), everything else untouched. */
 export function withSettings(text, changes) {
-  const values = (parseConfig(text) ?? {});
+  const values = parseConfig(text) ?? {};
   for (const [k, v] of Object.entries(changes)) {
     if (v === "") delete values[k];
     else values[k] = v;
@@ -126,7 +187,7 @@ export function withSettings(text, changes) {
 }
 
 export function currentSettings(text) {
-  return Object.fromEntries(Object.entries((parseConfig(text) ?? {})).filter(([k]) => isSetting(k)));
+  return Object.fromEntries(Object.entries(parseConfig(text) ?? {}).filter(([k]) => isSetting(k)));
 }
 
 /** A diff for the operator: old and new, only the keys that change. */
@@ -180,10 +241,10 @@ export function describeSettings() {
   const values = currentSettings(readConfigText());
   const entries = directory();
   return Object.keys(SETTINGS)
-    .concat(Object.keys(values).filter((k) => k.startsWith('CHANNEL_')))
+    .concat(Object.keys(values).filter((k) => k.startsWith("CHANNEL_")))
     .map((k) => {
       const raw = values[k];
-      const shown = k.startsWith('CHANNEL_') ? `#${entries.find((e) => e.id === raw)?.name ?? raw}` : raw;
+      const shown = k.startsWith("CHANNEL_") ? `#${entries.find((e) => e.id === raw)?.name ?? raw}` : raw;
       return `${k} = ${raw === undefined ? "(default)" : shown || "(unset)"}${SETTINGS[k] ? ` — ${SETTINGS[k].about}` : ""}`;
     })
     .join("\n");

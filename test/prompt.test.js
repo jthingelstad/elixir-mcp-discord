@@ -10,7 +10,12 @@ import { systemFor, userMessageFor, isSkip, readIdentity } from "../src/prompt.j
 import { parseRoutine } from "../src/routines.js";
 
 const routine = (fields, body = "Do the thing.") =>
-  parseRoutine("r", `---\n${Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join("\n")}\n---\n${body}`);
+  parseRoutine(
+    "r",
+    `---\n${Object.entries(fields)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join("\n")}\n---\n${body}`,
+  );
 
 test("every prompt carries the rules a routine is not allowed to get wrong", () => {
   const system = systemFor(routine({ trigger: "schedule", channel: "pulse", at: "01:00" }), {
@@ -27,10 +32,7 @@ test("every prompt carries the rules a routine is not allowed to get wrong", () 
 test("the skip protocol appears only for routines allowed to skip", () => {
   const base = { trigger: "schedule", channel: "pulse", at: "01:00" };
   assert.doesNotMatch(systemFor(routine(base), { identity: null }), /SILENCE IS A VALID OUTPUT/);
-  assert.match(
-    systemFor(routine({ ...base, may_skip: "true" }), { identity: null }),
-    /SILENCE IS A VALID OUTPUT/,
-  );
+  assert.match(systemFor(routine({ ...base, may_skip: "true" }), { identity: null }), /SILENCE IS A VALID OUTPUT/);
 });
 
 test("only a message routine is told how to work out who is asking", () => {
@@ -71,7 +73,11 @@ test("the operator's identity file is what makes the agent theirs", () => {
 
 test("events and recent posts reach the user turn, not the system prompt", () => {
   const message = userMessageFor(routine({ trigger: "events", channel: "pulse", kinds: "member_joined" }), {
-    events: { window: { from: "a", to: "b" }, timeline: [{ kind: "member_joined", text: "New joined", facts: {} }], entries: [{ kind: "clan_activity", summary: "Example." }] },
+    events: {
+      window: { from: "a", to: "b" },
+      timeline: [{ kind: "member_joined", text: "New joined", facts: {} }],
+      entries: [{ kind: "clan_activity", summary: "Example." }],
+    },
     recent: ["**War decks** — 3 untouched."],
   });
   assert.match(message, /"kind": "member_joined"/);

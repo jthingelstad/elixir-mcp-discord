@@ -41,7 +41,12 @@ if (!tools.ok) {
   process.exit(1);
 }
 console.log(`ok    ${tools.tools.length} tools published`);
-console.log(`      ${tools.tools.map((t) => t.name).sort().join(", ")}`);
+console.log(
+  `      ${tools.tools
+    .map((t) => t.name)
+    .sort()
+    .join(", ")}`,
+);
 
 // game_clock, deliberately: it is on every principal's surface and needs no
 // subject. This check used to call elixir_my_players, which an AGENT door does
@@ -60,10 +65,18 @@ if (!feed.ok) {
   process.exit(1);
 }
 const cursors = state.get("cursors") || {};
-const positions = Object.entries(cursors).map(([key, at]) => `${key}=${at}`).join(", ");
+const positions = Object.entries(cursors)
+  .map(([key, at]) => `${key}=${at}`)
+  .join(", ");
 const timeline = feed.body?.timeline ?? [];
 const kinds = [...new Set(timeline.map((i) => i.kind))];
-console.log(`ok    timeline readable; ${timeline.length} item(s) in the last day${kinds.length ? `: ${kinds.join(", ")}` : ""}`);
-console.log(`      subjects: ${(feed.body?.entries ?? []).map((e) => e.name).join(", ") || "none"} · local cursors = ${positions || "unset (seed on first poll)"}`);
-console.log(`      contract ${feed.body?.meta?.contract_version ?? "?"} · feedback responses pending = ${feed.body?.meta?.feedback_responses_pending ?? "?"}`);
+console.log(
+  `ok    timeline readable; ${timeline.length} item(s) in the last day${kinds.length ? `: ${kinds.join(", ")}` : ""}`,
+);
+console.log(
+  `      subjects: ${(feed.body?.entries ?? []).map((e) => e.name).join(", ") || "none"} · local cursors = ${positions || "unset (seed on first poll)"}`,
+);
+console.log(
+  `      contract ${feed.body?.meta?.contract_version ?? "?"} · feedback responses pending = ${feed.body?.meta?.feedback_responses_pending ?? "?"}`,
+);
 console.log(`      spend today = $${state.todaySpend().toFixed(4)}`);

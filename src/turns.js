@@ -46,7 +46,8 @@ function clip(text, max) {
 
 function body(result) {
   if (result === null || result === undefined) return null;
-  if (typeof result === "object" && result.clipped) return `${result.head}… (clipped at ${result.head.length} of ${result.chars} chars)`;
+  if (typeof result === "object" && result.clipped)
+    return `${result.head}… (clipped at ${result.head.length} of ${result.chars} chars)`;
   return String(result);
 }
 
@@ -104,7 +105,11 @@ export function renderTurn(turn, { full = false } = {}) {
     if (step.kind === "thought") {
       out.push(`💭 ${clip(step.text.replace(/\s+/g, " "), full ? Infinity : 600)}`);
     } else if (step.kind === "tool") {
-      const meta = [step.shape ? `→ ${step.shape}` : null, step.ms !== null && step.ms !== undefined ? `${(step.ms / 1000).toFixed(1)}s` : null, step.requestId ? `req ${String(step.requestId).slice(0, 8)}` : null]
+      const meta = [
+        step.shape ? `→ ${step.shape}` : null,
+        step.ms !== null && step.ms !== undefined ? `${(step.ms / 1000).toFixed(1)}s` : null,
+        step.requestId ? `req ${String(step.requestId).slice(0, 8)}` : null,
+      ]
         .filter(Boolean)
         .join(" · ");
       out.push(`🔧 \`${step.name}\` \`${JSON.stringify(step.input ?? {})}\`${meta ? ` ${meta}` : ""}`);
@@ -115,7 +120,9 @@ export function renderTurn(turn, { full = false } = {}) {
         out.push("```");
       }
     } else if (step.kind === "error") {
-      out.push(`⚠️ \`${step.name}\` failed${step.code ? ` (${step.code})` : ""}: ${step.detail}${step.requestId ? ` · req ${String(step.requestId).slice(0, 8)}` : ""}`);
+      out.push(
+        `⚠️ \`${step.name}\` failed${step.code ? ` (${step.code})` : ""}: ${step.detail}${step.requestId ? ` · req ${String(step.requestId).slice(0, 8)}` : ""}`,
+      );
     }
     out.push("");
   }
@@ -140,25 +147,57 @@ export function renderTurn(turn, { full = false } = {}) {
   } else if (output.text && !output.skipped) {
     out.push(output.text);
   }
-  const flags = [output.ungrounded ? "**UNGROUNDED**" : null, output.friction ? `friction: ${output.friction}` : null, turn.truncated ? "**TRUNCATED**" : null].filter(Boolean);
+  const flags = [
+    output.ungrounded ? "**UNGROUNDED**" : null,
+    output.friction ? `friction: ${output.friction}` : null,
+    turn.truncated ? "**TRUNCATED**" : null,
+  ].filter(Boolean);
   if (flags.length) out.push(`\n_${flags.join(" · ")}_`);
   for (const f of output.footers || []) out.push(`\n${clip(f, full ? Infinity : 500)}`);
 
-  if (turn.reactions?.length || turn.filed?.length || turn.findings?.length || turn.interventions?.length || turn.retractions?.length) {
+  if (
+    turn.reactions?.length ||
+    turn.filed?.length ||
+    turn.findings?.length ||
+    turn.interventions?.length ||
+    turn.retractions?.length
+  ) {
     out.push("");
     out.push("### Afterwards");
     out.push("");
-    for (const r of turn.retractions || []) out.push(`- 🗑 RETRACTED by discord:${r.by}${r.at ? ` at ${r.at.slice(0, 16)}Z` : ""} (${r.deleted} message(s))${r.reason ? ` — "${r.reason}"` : ""}`);
-    for (const r of turn.reactions || []) out.push(`- ${r.reaction === "up" ? "👍" : "👎"} discord:${r.userId}${r.at ? ` at ${r.at.slice(0, 16)}Z` : ""}${r.note ? ` — "${r.note}"` : ""}`);
-    for (const i of turn.interventions || []) out.push(`- 🙋 ${i.by === "other_member" ? "another member stepped in" : "the asker pushed back"} (discord:${i.userId}): "${clip(i.text, full ? Infinity : 200)}"`);
+    for (const r of turn.retractions || [])
+      out.push(
+        `- 🗑 RETRACTED by discord:${r.by}${r.at ? ` at ${r.at.slice(0, 16)}Z` : ""} (${r.deleted} message(s))${r.reason ? ` — "${r.reason}"` : ""}`,
+      );
+    for (const r of turn.reactions || [])
+      out.push(
+        `- ${r.reaction === "up" ? "👍" : "👎"} discord:${r.userId}${r.at ? ` at ${r.at.slice(0, 16)}Z` : ""}${r.note ? ` — "${r.note}"` : ""}`,
+      );
+    for (const i of turn.interventions || [])
+      out.push(
+        `- 🙋 ${i.by === "other_member" ? "another member stepped in" : "the asker pushed back"} (discord:${i.userId}): "${clip(i.text, full ? Infinity : 200)}"`,
+      );
     for (const f of turn.findings || []) out.push(`- 🔎 ${f.class} (${f.source}): ${f.note}`);
     for (const f of turn.filed || []) out.push(`- 📮 filed: ${f.summary}`);
   }
 
   out.push("");
-  const cache = turn.usage && turn.usage.input + turn.usage.cacheRead > 0 ? `cache ${Math.round((turn.usage.cacheRead / (turn.usage.input + turn.usage.cacheRead + turn.usage.cacheWrite)) * 100)}%` : null;
+  const cache =
+    turn.usage && turn.usage.input + turn.usage.cacheRead > 0
+      ? `cache ${Math.round((turn.usage.cacheRead / (turn.usage.input + turn.usage.cacheRead + turn.usage.cacheWrite)) * 100)}%`
+      : null;
   out.push(
-    `_${[turn.model, `effort ${turn.effort}`, turn.usd !== null ? `$${Number(turn.usd).toFixed(4)}` : null, cache, turn.ms ? `${(turn.ms / 1000).toFixed(1)}s` : null, turn.rounds > 1 ? `${turn.rounds} rounds` : null, turn.stopReason, turn.serverVersion, turn.prompt?.system ? `prompt ${turn.prompt.system}` : null]
+    `_${[
+      turn.model,
+      `effort ${turn.effort}`,
+      turn.usd !== null ? `$${Number(turn.usd).toFixed(4)}` : null,
+      cache,
+      turn.ms ? `${(turn.ms / 1000).toFixed(1)}s` : null,
+      turn.rounds > 1 ? `${turn.rounds} rounds` : null,
+      turn.stopReason,
+      turn.serverVersion,
+      turn.prompt?.system ? `prompt ${turn.prompt.system}` : null,
+    ]
       .filter(Boolean)
       .join(" · ")}_`,
   );
@@ -176,12 +215,22 @@ function select() {
 }
 
 function renderReview(r) {
-  const out = [`## Review ${r.reviewId} · ${r.at.slice(0, 16)}Z · ${r.trigger} · ${r.turnsRead} turns (${r.flagged ?? "?"} flagged) · $${Number(r.usd ?? 0).toFixed(2)}`, "", r.report || "_(no report)_", ""];
+  const out = [
+    `## Review ${r.reviewId} · ${r.at.slice(0, 16)}Z · ${r.trigger} · ${r.turnsRead} turns (${r.flagged ?? "?"} flagged) · $${Number(r.usd ?? 0).toFixed(2)}`,
+    "",
+    r.report || "_(no report)_",
+    "",
+  ];
   for (const p of r.proposals || []) {
     const d = (r.decisions || []).filter((x) => x.proposalId === p.id).at(-1);
     out.push(`- **${p.id}** \`${p.file}\` · ${p.rule} · ${d ? d.decision.toUpperCase() : "pending"} — ${p.summary}`);
     out.push("  ```diff");
-    out.push(p.preview.split("\n").map((l) => `  ${l}`).join("\n"));
+    out.push(
+      p.preview
+        .split("\n")
+        .map((l) => `  ${l}`)
+        .join("\n"),
+    );
     out.push("  ```");
   }
   for (const m of r.reports || []) out.push(`- 🛠 mechanics · ${m.rule} — ${m.summary}`);
@@ -191,7 +240,9 @@ function renderReview(r) {
 
 function main() {
   if (flag("help")) {
-    console.log("usage: turns [--instance <dir>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--lane ask|routines] [--routine <key>] [--turn <id>] [--full] [--json] [--export <dir>] | --reviews");
+    console.log(
+      "usage: turns [--instance <dir>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--lane ask|routines] [--routine <key>] [--turn <id>] [--full] [--json] [--export <dir>] | --reviews",
+    );
     return;
   }
   if (flag("reviews")) {
@@ -221,7 +272,10 @@ function main() {
     fs.mkdirSync(target, { recursive: true });
     const prompts = new Set();
     for (const t of turns) {
-      fs.writeFileSync(path.join(target, `${t.at.slice(0, 10)}-${t.routine}-${t.turnId}.md`), `${renderTurn(t, { full: true })}\n`);
+      fs.writeFileSync(
+        path.join(target, `${t.at.slice(0, 10)}-${t.routine}-${t.turnId}.md`),
+        `${renderTurn(t, { full: true })}\n`,
+      );
       if (t.prompt?.system) prompts.add(t.prompt.system);
     }
     const promptOut = path.join(target, "prompts");

@@ -67,10 +67,7 @@ import { log } from "./log.js";
 
 const instanceDir = path.resolve(process.env.INSTANCE_DIR || process.cwd());
 
-export const LEDGER_DIR = path.resolve(
-  instanceDir,
-  process.env.LEDGER_DIR || path.join("state", "turns"),
-);
+export const LEDGER_DIR = path.resolve(instanceDir, process.env.LEDGER_DIR || path.join("state", "turns"));
 export const PROMPTS_DIR = path.join(path.dirname(LEDGER_DIR), "prompts");
 
 /** A tool result body larger than this is clipped in the record. 16 KB keeps a
@@ -82,7 +79,11 @@ const EVENTS_CHARS = 64000;
 
 export const RECORD_VERSION = 1;
 
-export const sha = (text) => createHash("sha256").update(String(text ?? "")).digest("hex").slice(0, 12);
+export const sha = (text) =>
+  createHash("sha256")
+    .update(String(text ?? ""))
+    .digest("hex")
+    .slice(0, 12);
 
 export const instanceName = () => path.basename(instanceDir);
 
@@ -193,7 +194,16 @@ export function turnEntry({ routine, lane, result, system, input, output, contra
 }
 
 export function reactionEntry({ turnId, reaction, userId, note = null }) {
-  return { kind: "reaction", v: RECORD_VERSION, turnId, at: new Date().toISOString(), instance: instanceName(), reaction, userId, note };
+  return {
+    kind: "reaction",
+    v: RECORD_VERSION,
+    turnId,
+    at: new Date().toISOString(),
+    instance: instanceName(),
+    reaction,
+    userId,
+    note,
+  };
 }
 
 export function filedEntry({ turnId, summary }) {
@@ -202,24 +212,74 @@ export function filedEntry({ turnId, summary }) {
 
 /** `cls` is "prompt" or "mechanics"; `source` is "reaction" or "sweep". */
 export function findingEntry({ turnId, cls, source, note }) {
-  return { kind: "finding", v: RECORD_VERSION, turnId, at: new Date().toISOString(), instance: instanceName(), class: cls, source, note: String(note ?? "").slice(0, 600) };
+  return {
+    kind: "finding",
+    v: RECORD_VERSION,
+    turnId,
+    at: new Date().toISOString(),
+    instance: instanceName(),
+    class: cls,
+    source,
+    note: String(note ?? "").slice(0, 600),
+  };
 }
 
 /** `by` is "other_member" or "asker"; `text` is what they said, clipped. */
 export function interventionEntry({ turnId, by, userId, text }) {
-  return { kind: "intervention", v: RECORD_VERSION, turnId, at: new Date().toISOString(), instance: instanceName(), by, userId, text: String(text ?? "").slice(0, 500) };
+  return {
+    kind: "intervention",
+    v: RECORD_VERSION,
+    turnId,
+    at: new Date().toISOString(),
+    instance: instanceName(),
+    by,
+    userId,
+    text: String(text ?? "").slice(0, 500),
+  };
 }
 
 export function retractionEntry({ turnId, by, deleted, reason = null }) {
-  return { kind: "retraction", v: RECORD_VERSION, turnId, at: new Date().toISOString(), instance: instanceName(), by, deleted, reason };
+  return {
+    kind: "retraction",
+    v: RECORD_VERSION,
+    turnId,
+    at: new Date().toISOString(),
+    instance: instanceName(),
+    by,
+    deleted,
+    reason,
+  };
 }
 
 export function reviewEntry({ reviewId, trigger, window, turnsRead, proposals, report, usd, model }) {
-  return { kind: "review", v: RECORD_VERSION, reviewId, at: new Date().toISOString(), instance: instanceName(), trigger, window, turnsRead, proposals, report: String(report ?? "").slice(0, 8000), usd, model };
+  return {
+    kind: "review",
+    v: RECORD_VERSION,
+    reviewId,
+    at: new Date().toISOString(),
+    instance: instanceName(),
+    trigger,
+    window,
+    turnsRead,
+    proposals,
+    report: String(report ?? "").slice(0, 8000),
+    usd,
+    model,
+  };
 }
 
 export function decisionEntry({ reviewId, proposalId, decision, by = null, detail = null }) {
-  return { kind: "decision", v: RECORD_VERSION, reviewId, proposalId, at: new Date().toISOString(), instance: instanceName(), decision, by, detail };
+  return {
+    kind: "decision",
+    v: RECORD_VERSION,
+    reviewId,
+    proposalId,
+    at: new Date().toISOString(),
+    instance: instanceName(),
+    decision,
+    by,
+    detail,
+  };
 }
 
 export const fileFor = (at, dir = LEDGER_DIR) => path.join(dir, `${String(at).slice(0, 10)}.jsonl`);
@@ -246,7 +306,10 @@ export function append(record, { dir = LEDGER_DIR } = {}) {
 export function readRecords({ dir = LEDGER_DIR, since = null, until = null } = {}) {
   let files;
   try {
-    files = fs.readdirSync(dir).filter((f) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(f)).sort();
+    files = fs
+      .readdirSync(dir)
+      .filter((f) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(f))
+      .sort();
   } catch {
     return [];
   }
@@ -272,7 +335,9 @@ export function readRecords({ dir = LEDGER_DIR, since = null, until = null } = {
 export function readTurns(options = {}) {
   const records = readRecords(options);
   const turns = new Map();
-  for (const r of records) if (r.kind === "turn" && r.turnId) turns.set(r.turnId, { ...r, reactions: [], filed: [], findings: [], interventions: [], retractions: [] });
+  for (const r of records)
+    if (r.kind === "turn" && r.turnId)
+      turns.set(r.turnId, { ...r, reactions: [], filed: [], findings: [], interventions: [], retractions: [] });
   for (const r of records) {
     const turn = turns.get(r.turnId);
     if (!turn) continue;
@@ -290,15 +355,33 @@ export function readTurns(options = {}) {
  * case-insensitively against the question or brief, the answer, the tool
  * names and the routine key; empty matches everything in the window.
  */
-export function searchTurns({ query = "", since = null, until = null, lane = null, routine = null, limit = 20, dir = LEDGER_DIR } = {}) {
-  const needle = String(query || "").toLowerCase().trim();
+export function searchTurns({
+  query = "",
+  since = null,
+  until = null,
+  lane = null,
+  routine = null,
+  limit = 20,
+  dir = LEDGER_DIR,
+} = {}) {
+  const needle = String(query || "")
+    .toLowerCase()
+    .trim();
   const hay = (t) =>
-    [t.input?.question, t.input?.brief, t.output?.text, t.routine, ...(t.trace || []).filter((s) => s.kind === "tool").map((s) => s.name)]
+    [
+      t.input?.question,
+      t.input?.brief,
+      t.output?.text,
+      t.routine,
+      ...(t.trace || []).filter((s) => s.kind === "tool").map((s) => s.name),
+    ]
       .filter(Boolean)
       .join("\n")
       .toLowerCase();
   return readTurns({ dir, since, until })
-    .filter((t) => (!lane || t.lane === lane) && (!routine || t.routine === routine) && (!needle || hay(t).includes(needle)))
+    .filter(
+      (t) => (!lane || t.lane === lane) && (!routine || t.routine === routine) && (!needle || hay(t).includes(needle)),
+    )
     .sort((a, b) => (b.at > a.at ? 1 : -1))
     .slice(0, limit)
     .map((t) => ({
@@ -309,7 +392,14 @@ export function searchTurns({ query = "", since = null, until = null, lane = nul
       asked: (t.input?.question ?? t.input?.brief ?? "").slice(0, 160),
       answered: (t.output?.text ?? "").slice(0, 200),
       tools: (t.trace || []).filter((s) => s.kind === "tool").map((s) => s.name),
-      flags: [t.output?.ungrounded ? "ungrounded" : null, t.output?.error ? "failed" : null, t.reactions?.length ? "reacted" : null, t.interventions?.length ? "intervention" : null, t.findings?.length ? "finding" : null, t.retractions?.length ? "RETRACTED" : null].filter(Boolean),
+      flags: [
+        t.output?.ungrounded ? "ungrounded" : null,
+        t.output?.error ? "failed" : null,
+        t.reactions?.length ? "reacted" : null,
+        t.interventions?.length ? "intervention" : null,
+        t.findings?.length ? "finding" : null,
+        t.retractions?.length ? "RETRACTED" : null,
+      ].filter(Boolean),
       usd: t.usd,
     }));
 }
@@ -319,6 +409,7 @@ export function readReviews(options = {}) {
   const records = readRecords(options);
   const reviews = new Map();
   for (const r of records) if (r.kind === "review") reviews.set(r.reviewId, { ...r, decisions: [] });
-  for (const r of records) if (r.kind === "decision" && reviews.has(r.reviewId)) reviews.get(r.reviewId).decisions.push(r);
+  for (const r of records)
+    if (r.kind === "decision" && reviews.has(r.reviewId)) reviews.get(r.reviewId).decisions.push(r);
   return [...reviews.values()];
 }

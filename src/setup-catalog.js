@@ -19,7 +19,8 @@ export function describeWhen(routine) {
     const days = routine.days ? routine.days.map((d) => WEEKDAY_NAMES[d]).join(",") : "daily";
     return `${days} at ${hhmm}`;
   }
-  if (routine.trigger === "events") return `timeline: ${routine.kinds?.join(", ") ?? routine.sections?.join(", ") ?? "everything"}`;
+  if (routine.trigger === "events")
+    return `timeline: ${routine.kinds?.join(", ") ?? routine.sections?.join(", ") ?? "everything"}`;
   return "on message";
 }
 
@@ -66,7 +67,16 @@ export function catalog({ exampleDir, instanceDir }) {
     } catch (problem) {
       error = problem.message;
     }
-    entries.set(key, { key, example: null, instanceFile: file, text, routine: parsed, error, installed: true, custom: true });
+    entries.set(key, {
+      key,
+      example: null,
+      instanceFile: file,
+      text,
+      routine: parsed,
+      error,
+      installed: true,
+      custom: true,
+    });
   }
   return [...entries.values()];
 }
@@ -98,7 +108,10 @@ export function installRoutines({ exampleDir, instanceDir, keys }) {
  *  on, chosen keys off, anything else the operator had in there left alone. */
 export function disabledAfter({ previous, installedKeys, chosenKeys }) {
   const disabled = new Set(
-    (previous || "").split(",").map((k) => k.trim()).filter(Boolean),
+    (previous || "")
+      .split(",")
+      .map((k) => k.trim())
+      .filter(Boolean),
   );
   for (const key of installedKeys) {
     if (chosenKeys.includes(key)) disabled.delete(key);

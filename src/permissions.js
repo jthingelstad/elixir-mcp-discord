@@ -164,9 +164,7 @@ export async function checkChannelPermissions({ client, routines, resolveChannel
     hint: "routines bound to these channels will spend the model call and fail to post; fix the ids or the role and restart",
   });
 
-  const fingerprint = JSON.stringify(
-    problems.map((p) => [p.name, p.id, p.reason, p.missing ?? []]),
-  );
+  const fingerprint = JSON.stringify(problems.map((p) => [p.name, p.id, p.reason, p.missing ?? []]));
   if (!post || healthy.length === 0 || state.get("channelProblems") === fingerprint) {
     if (healthy.length === 0) {
       log.error("no_usable_channel", {

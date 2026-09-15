@@ -188,7 +188,13 @@ export const MEMORY_ENTRY = /^- (\d{4}-\d{2}-\d{2}) \((turns [^)]+|from owner)\)
 export function parseMemoryEntry(line) {
   const m = MEMORY_ENTRY.exec(line.trim());
   if (!m) return null;
-  return { date: m[1], source: m[2] === "from owner" ? "owner" : "turns", turns: m[2].startsWith("turns ") ? m[2].slice(6).split(/,\s*/) : [], until: m[3] ?? null, text: m[4] };
+  return {
+    date: m[1],
+    source: m[2] === "from owner" ? "owner" : "turns",
+    turns: m[2].startsWith("turns ") ? m[2].slice(6).split(/,\s*/) : [],
+    until: m[3] ?? null,
+    text: m[4],
+  };
 }
 
 /** An expired entry is dropped at load, so "this week" stops being true on
@@ -251,7 +257,14 @@ clan_tag and it means this clan.`;
  */
 export function systemFor(
   routine,
-  { identity = readIdentity(), memory = readMemory(), includePrompt = false, subject = subjectBlock(), entries = [], defaultChannelId = null } = {},
+  {
+    identity = readIdentity(),
+    memory = readMemory(),
+    includePrompt = false,
+    subject = subjectBlock(),
+    entries = [],
+    defaultChannelId = null,
+  } = {},
 ) {
   const withTool = entries.length > 0;
   // The posting rule frames the whole task, so it comes first when it applies.
@@ -286,7 +299,16 @@ call and reply SKIP.`;
  * the user turn, not the system block, so the cached prefix is untouched.
  */
 export function nowLine(now = new Date(), timezone = config.timezone) {
-  const text = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "long", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now);
+  const text = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    weekday: "long",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
   const get = (type) => text.find((p) => p.type === type)?.value;
   return `[now: ${get("weekday")} ${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")} ${timezone}]`;
 }

@@ -124,13 +124,7 @@ export function status(now = new Date()) {
       budget: budget ?? null,
       remaining: budget ? Math.max(0, budget - used) : null,
       reserve: reserveFor(lane),
-      state: !budget
-        ? "unlimited"
-        : check(lane, now).ok
-          ? "ok"
-          : used >= budget
-            ? "exhausted"
-            : "reserved",
+      state: !budget ? "unlimited" : check(lane, now).ok ? "ok" : used >= budget ? "exhausted" : "reserved",
     };
   });
 }

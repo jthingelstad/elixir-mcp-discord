@@ -108,9 +108,7 @@ export function cacheShare(usage) {
 function resultText(content) {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
-    return content
-      .map((block) => (typeof block?.text === "string" ? block.text : ""))
-      .join("");
+    return content.map((block) => (typeof block?.text === "string" ? block.text : "")).join("");
   }
   return "";
 }
@@ -137,9 +135,7 @@ export function describeShape(body) {
   }
   if (!sawArray) return "object";
   const total = counts.join(", ");
-  return total.startsWith("0 ") && counts.length === 1
-    ? `${total} (EMPTY)`
-    : total;
+  return total.startsWith("0 ") && counts.length === 1 ? `${total} (EMPTY)` : total;
 }
 
 function readEnvelope(body) {
@@ -330,16 +326,12 @@ export async function ask({
               onEvent?.({ kind: "tool_start", name: block.name || "unknown" });
             } else if (type.endsWith("tool_result") && block.tool_use_id) {
               const start = execStart.get(block.tool_use_id);
-              if (start !== undefined)
-                timings.set(block.tool_use_id, Date.now() - start);
+              if (start !== undefined) timings.set(block.tool_use_id, Date.now() - start);
             }
           } else if (event.type === "content_block_stop") {
             const id = idByIndex.get(event.index);
             if (id) execStart.set(id, Date.now());
-          } else if (
-            event.type === "content_block_delta" &&
-            event.delta?.type === "text_delta"
-          ) {
+          } else if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
             onEvent?.({ kind: "text", text: event.delta.text });
           }
         } catch {
@@ -406,9 +398,7 @@ export async function ask({
     // the same key. This is NOT a tool mirror: the name and arguments are
     // forwarded opaquely, and nothing here knows what any tool does.
     if (stopReason === "tool_use") {
-      const pending = response.content.filter(
-        (block) => block.type === "tool_use",
-      );
+      const pending = response.content.filter((block) => block.type === "tool_use");
       if (pending.length > 0) {
         history.push({ role: "assistant", content: response.content });
         const results = [];
@@ -426,9 +416,14 @@ export async function ask({
             }
             log.info("local_tool_call", { turnId, tool: block.name, ok: call.ok });
             const step = trace.find((s) => s.kind === "tool" && s.id === block.id);
-            if (step) step.result = JSON.stringify(call.ok ? call.body ?? { ok: true } : { error: call.error });
+            if (step) step.result = JSON.stringify(call.ok ? (call.body ?? { ok: true }) : { error: call.error });
             if (!call.ok) {
-              const failure = { name: block.name, code: call.code ?? null, detail: String(call.error).slice(0, 400), requestId: null };
+              const failure = {
+                name: block.name,
+                code: call.code ?? null,
+                detail: String(call.error).slice(0, 400),
+                requestId: null,
+              };
               errors.push(failure);
               trace.push({ kind: "error", ...failure });
             }
@@ -436,7 +431,9 @@ export async function ask({
               type: "tool_result",
               tool_use_id: block.id,
               is_error: !call.ok,
-              content: JSON.stringify(call.ok ? call.body ?? { ok: true } : { error: { message: call.error, code: call.code ?? null } }),
+              content: JSON.stringify(
+                call.ok ? (call.body ?? { ok: true }) : { error: { message: call.error, code: call.code ?? null } },
+              ),
             });
             continue;
           }
@@ -462,9 +459,7 @@ export async function ask({
             type: "tool_result",
             tool_use_id: block.id,
             is_error: !call.ok,
-            content: JSON.stringify(
-              call.ok ? call.body : { error: { message: call.error } },
-            ),
+            content: JSON.stringify(call.ok ? call.body : { error: { message: call.error } }),
           });
         }
         // All results in ONE user message: splitting them teaches the model to

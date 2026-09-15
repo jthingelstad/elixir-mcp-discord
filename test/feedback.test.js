@@ -54,7 +54,14 @@ test("an error without a code is still friction", () => {
 });
 
 test("a filed turn and a clean turn are not friction", () => {
-  assert.equal(detectFriction({ text: "ok", called: ["elixir_feedback"], errors: [{ name: "x", code: "not_found", detail: "d" }] }), null);
+  assert.equal(
+    detectFriction({
+      text: "ok",
+      called: ["elixir_feedback"],
+      errors: [{ name: "x", code: "not_found", detail: "d" }],
+    }),
+    null,
+  );
   assert.equal(detectFriction(turn([])), null);
   assert.equal(detectFriction(turn([], "I can't see donation history.")).reason, "conceded_limit");
 });
@@ -81,7 +88,14 @@ test("a turn that took many calls is friction, tallied by tool", () => {
 
 test("a failed call's request_id rides into the sweep", () => {
   const friction = detectFriction(
-    turn([{ name: "battles_meta_cards", code: null, detail: "Connection closed", requestId: "dc5ec8de-b919-4934-97af-4dd95433a4ff" }]),
+    turn([
+      {
+        name: "battles_meta_cards",
+        code: null,
+        detail: "Connection closed",
+        requestId: "dc5ec8de-b919-4934-97af-4dd95433a4ff",
+      },
+    ]),
   );
   assert.deepEqual(friction.requestIds, ["dc5ec8de-b919-4934-97af-4dd95433a4ff"]);
   assert.match(friction.detail, /req dc5ec8de/);
@@ -91,6 +105,9 @@ test("figures with no tool call are ungrounded, unless the feed supplied them", 
   const { looksUngrounded } = await import("../src/feedback.js");
   assert.equal(looksUngrounded({ text: "You are 55-38 this month.", called: [] }), true);
   assert.equal(looksUngrounded({ text: "You are 55-38 this month.", called: ["players_summary"] }), false);
-  assert.equal(looksUngrounded({ text: "Two members joined.", called: [], events: [{ kind: "clan_activity" }] }), false);
+  assert.equal(
+    looksUngrounded({ text: "Two members joined.", called: [], events: [{ kind: "clan_activity" }] }),
+    false,
+  );
   assert.equal(looksUngrounded({ text: "Which player are you?", called: [] }), false, "no figures, no problem");
 });

@@ -83,11 +83,15 @@ export function readPrincipal(initializeResult) {
 export async function initialize(auth = null) {
   // `auth` ({url, token}) lets setup try a key BEFORE it is written to .env;
   // everything else reads the configured connection.
-  const result = await rpc("initialize", {
-    protocolVersion: "2025-06-18",
-    capabilities: {},
-    clientInfo: { name: "elixir-mcp-discord", version: "0.2.0" },
-  }, auth);
+  const result = await rpc(
+    "initialize",
+    {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: { name: "elixir-mcp-discord", version: "0.2.0" },
+    },
+    auth,
+  );
   if (!result.ok) return result;
   return {
     ok: true,

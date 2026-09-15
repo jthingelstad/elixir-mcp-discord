@@ -8,16 +8,7 @@
  */
 
 import { Client, GatewayIntentBits, Partials, Events } from "discord.js";
-import {
-  config,
-  provenance,
-  channelEnvName,
-  instanceDir,
-  envFile,
-  configFile,
-  envLoaded,
-  migrated,
-} from "./config.js";
+import { config, provenance, channelEnvName, instanceDir, envFile, configFile, envLoaded, migrated } from "./config.js";
 import { handleAsk, isThreadOf } from "./ask.js";
 import { handleReaction } from "./reactions.js";
 import { startEventLoop } from "./events.js";
@@ -120,10 +111,7 @@ function reportPrincipal(handshake) {
   }
 
   const previous = state.get("principal");
-  if (
-    previous?.subject?.tag &&
-    previous.subject.tag !== principal?.subject?.tag
-  ) {
+  if (previous?.subject?.tag && previous.subject.tag !== principal?.subject?.tag) {
     log.warn("principal_subject_changed", {
       from: previous.subject.tag,
       to: principal?.subject?.tag ?? null,
@@ -147,7 +135,11 @@ client.once(Events.ClientReady, async (ready) => {
   });
   if (migrated?.moved) {
     log.info("config_migrated", { moved: migrated.moved.join(","), backup: migrated.backup });
-    await notify.notify("settings moved", `${migrated.moved.length} settings moved from .env to config.json (${migrated.moved.join(", ")}). .env now holds the secrets and the wiring; the old one is backed up under state/env-history/.`, { fingerprint: "config_migrated" });
+    await notify.notify(
+      "settings moved",
+      `${migrated.moved.length} settings moved from .env to config.json (${migrated.moved.join(", ")}). .env now holds the secrets and the wiring; the old one is backed up under state/env-history/.`,
+      { fingerprint: "config_migrated" },
+    );
   } else if (migrated?.movedBack) {
     log.info("wiring_moved_back", { keys: migrated.movedBack.join(","), backup: migrated.backup });
   }
@@ -163,17 +155,21 @@ client.once(Events.ClientReady, async (ready) => {
   const handshake = await initialize();
   if (!handshake.ok) {
     log.error("mcp_unreachable_at_boot", { error: handshake.error });
-    await notify.notify("Elixir unreachable at boot", `initialize failed: ${handshake.error}. Every lane will fail until it is back.`);
+    await notify.notify(
+      "Elixir unreachable at boot",
+      `initialize failed: ${handshake.error}. Every lane will fail until it is back.`,
+    );
   } else {
-    if (
-      state.get("serverVersion") &&
-      state.get("serverVersion") !== handshake.version
-    ) {
+    if (state.get("serverVersion") && state.get("serverVersion") !== handshake.version) {
       log.warn("contract_version_changed_at_boot", {
         from: state.get("serverVersion"),
         to: handshake.version,
       });
-      await notify.notify("Elixir changed", `contract ${state.get("serverVersion")} → ${handshake.version}. Tool schemas may have moved; the elixir_changelog tool says what.`, { fingerprint: `contract:${handshake.version}` });
+      await notify.notify(
+        "Elixir changed",
+        `contract ${state.get("serverVersion")} → ${handshake.version}. Tool schemas may have moved; the elixir_changelog tool says what.`,
+        { fingerprint: `contract:${handshake.version}` },
+      );
     }
     state.set({ serverVersion: handshake.version });
     reportPrincipal(handshake);
@@ -184,7 +180,11 @@ client.once(Events.ClientReady, async (ready) => {
   if (errors.length) {
     // The 2026-09-13 outage: every routine failed to parse and the only
     // record was here. Now it is also a DM.
-    await notify.notify("routine files", `${errors.length} routine file${errors.length === 1 ? "" : "s"} failed to load and ${errors.length === 1 ? "is" : "are"} off the air: ${errors.map((e) => `${e.key} — ${e.error}`).join("; ")}`, { fingerprint: `routine_invalid:${errors.map((e) => e.key).join(",")}` });
+    await notify.notify(
+      "routine files",
+      `${errors.length} routine file${errors.length === 1 ? "" : "s"} failed to load and ${errors.length === 1 ? "is" : "are"} off the air: ${errors.map((e) => `${e.key} — ${e.error}`).join("; ")}`,
+      { fingerprint: `routine_invalid:${errors.map((e) => e.key).join(",")}` },
+    );
   }
 
   // THE DIRECTORY: where the model may post, from Discord's own permissions
@@ -201,7 +201,10 @@ client.once(Events.ClientReady, async (ready) => {
       const active = loadRoutines().routines.filter((r) => !r.disabled);
       const bound = new Set(active.map((r) => r.channel && config.channels.get(r.channel)).filter(Boolean));
       const askIds = new Set(
-        active.filter((r) => r.trigger === "message").map((r) => config.channels.get(r.channel)).filter(Boolean),
+        active
+          .filter((r) => r.trigger === "message")
+          .map((r) => config.channels.get(r.channel))
+          .filter(Boolean),
       );
       return directory.fromGateway(guild, client.user, { bound, askIds });
     },
@@ -210,8 +213,13 @@ client.once(Events.ClientReady, async (ready) => {
   const entries = directory.directory();
   const postable = entries.filter((e) => e.role !== "ask");
   log[postable.length ? "info" : "error"]("directory", {
-    postable: postable.map((e) => `#${e.name}${e.visibility === "restricted" ? "(restricted)" : ""}`).join(",") || "NONE",
-    ask: entries.filter((e) => e.role === "ask").map((e) => `#${e.name}`).join(",") || undefined,
+    postable:
+      postable.map((e) => `#${e.name}${e.visibility === "restricted" ? "(restricted)" : ""}`).join(",") || "NONE",
+    ask:
+      entries
+        .filter((e) => e.role === "ask")
+        .map((e) => `#${e.name}`)
+        .join(",") || undefined,
     hint: postable.length ? undefined : "grant the bot's role Send Messages explicitly in each channel it may post in",
   });
 
@@ -233,7 +241,10 @@ client.once(Events.ClientReady, async (ready) => {
       });
     } catch (error) {
       log.error("model_unpriced", { model, error: error.message });
-      await notify.notify("unpriced model", `${model} has no price in agent/models.json, so no budget could be enforced against it; the bot will not run until it does.`);
+      await notify.notify(
+        "unpriced model",
+        `${model} has no price in agent/models.json, so no budget could be enforced against it; the bot will not run until it does.`,
+      );
       throw error;
     }
   }
@@ -252,9 +263,7 @@ client.once(Events.ClientReady, async (ready) => {
       key: routine.key,
       trigger: routine.trigger,
       channel: routine.channel,
-      when: routine.at
-        ? `${routine.at.hour}:${String(routine.at.minute).padStart(2, "0")}`
-        : undefined,
+      when: routine.at ? `${routine.at.hour}:${String(routine.at.minute).padStart(2, "0")}` : undefined,
       disabled: routine.disabled || undefined,
     });
     if (!routine.disabled && routine.channel) await resolveChannel(routine.channel);
@@ -262,14 +271,21 @@ client.once(Events.ClientReady, async (ready) => {
   if (routines.every((routine) => routine.disabled)) {
     // Not an error on a fresh instance: setup wires the connection and the
     // bot introduces itself here. An error only when it stays that way.
-    log[routines.length ? "error" : "warn"]("no_active_routines", { dir: config.agentDir, hint: "the admins are being introduced by DM" });
+    log[routines.length ? "error" : "warn"]("no_active_routines", {
+      dir: config.agentDir,
+      hint: "the admins are being introduced by DM",
+    });
     await introduce({ guildName: guild?.name, subject: state.get("principal")?.subject });
   }
   // Loud, per channel, before anything runs: a wrong id or a missing
   // permission is a routine that spends a model call and then cannot post.
   const problems = await checkChannelPermissions({ client, routines, resolveChannel });
   if (problems.length) {
-    await notify.notify("channels", `${problems.length} bound channel${problems.length === 1 ? "" : "s"} unusable: ${problems.map((p) => `${p.name} (${p.reason}${p.missing?.length ? `: ${p.missing.join(", ")}` : ""})`).join("; ")}. Routines bound to them will fail until fixed and restarted.`, { fingerprint: `channels:${problems.map((p) => p.name).join(",")}` });
+    await notify.notify(
+      "channels",
+      `${problems.length} bound channel${problems.length === 1 ? "" : "s"} unusable: ${problems.map((p) => `${p.name} (${p.reason}${p.missing?.length ? `: ${p.missing.join(", ")}` : ""})`).join("; ")}. Routines bound to them will fail until fixed and restarted.`,
+      { fingerprint: `channels:${problems.map((p) => p.name).join(",")}` },
+    );
   }
 
   await registerCommands(client);
@@ -361,7 +377,9 @@ client.on(Events.MessageCreate, async (message) => {
 
   // A direct message is the operator's console, or a stranger to turn away.
   if (!message.guildId) {
-    await handleDm(message).catch((error) => log.error("dm_crashed", { error: error.message, stack: error.stack?.slice(0, 400) }));
+    await handleDm(message).catch((error) =>
+      log.error("dm_crashed", { error: error.message, stack: error.stack?.slice(0, 400) }),
+    );
     return;
   }
 
@@ -377,7 +395,10 @@ client.on(Events.MessageCreate, async (message) => {
     // A member speaking in a bound channel while NO message routine exists
     // is the ask lane being off the air (see activeRoutines), not chatter.
     if (askRoutines.length === 0 && [...config.channels.values()].includes(message.channelId)) {
-      log.warn("message_unclaimed", { channel: message.channelId, hint: "no message routine loaded; see routine_invalid above" });
+      log.warn("message_unclaimed", {
+        channel: message.channelId,
+        hint: "no message routine loaded; see routine_invalid above",
+      });
     }
     return;
   }
@@ -385,16 +406,10 @@ client.on(Events.MessageCreate, async (message) => {
 });
 
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
-  await handleReaction(reaction, user).catch((error) =>
-    log.error("reaction_failed", { error: error.message }),
-  );
+  await handleReaction(reaction, user).catch((error) => log.error("reaction_failed", { error: error.message }));
 });
 
-client.on(Events.Error, (error) =>
-  log.error("discord_error", { error: error.message }),
-);
-process.on("unhandledRejection", (reason) =>
-  log.error("unhandled_rejection", { error: String(reason) }),
-);
+client.on(Events.Error, (error) => log.error("discord_error", { error: error.message }));
+process.on("unhandledRejection", (reason) => log.error("unhandled_rejection", { error: String(reason) }));
 
 await client.login(config.discord.token);

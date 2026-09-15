@@ -61,17 +61,19 @@ test("installing copies what is missing and never touches what is there", () => 
 
 test("a routine chosen off is disabled, not deleted; chosen back on is re-enabled", () => {
   assert.equal(
-    disabledAfter({ previous: "meta-report,other", installedKeys: ["meta-report", "ask", "clan-feed"], chosenKeys: ["ask"] }),
+    disabledAfter({
+      previous: "meta-report,other",
+      installedKeys: ["meta-report", "ask", "clan-feed"],
+      chosenKeys: ["ask"],
+    }),
     "clan-feed,meta-report,other",
   );
-  assert.equal(
-    disabledAfter({ previous: "clan-feed", installedKeys: ["clan-feed"], chosenKeys: ["clan-feed"] }),
-    "",
-  );
+  assert.equal(disabledAfter({ previous: "clan-feed", installedKeys: ["clan-feed"], chosenKeys: ["clan-feed"] }), "");
 });
 
 test("moving a schedule rewrites only the at: line", () => {
-  const text = "---\ndescription: x\ntrigger: schedule\nchannel: pulse\nat: 01:00\ncatch_up_hours: 3\n---\nBody with at: 01:00 in it.\n";
+  const text =
+    "---\ndescription: x\ntrigger: schedule\nchannel: pulse\nat: 01:00\ncatch_up_hours: 3\n---\nBody with at: 01:00 in it.\n";
   const moved = rewriteAt(text, "22:30");
   assert.ok(moved.includes("\nat: 22:30\n"));
   assert.ok(moved.includes("Body with at: 01:00 in it."), "the prompt body is untouched");
@@ -89,5 +91,8 @@ test("the monthly estimate counts schedules and events, never the ask lane", () 
   ]);
   assert.equal(estimate.runs, 30 + 4 + 30);
   assert.equal(estimate.usd, estimate.runs * 0.1);
-  assert.deepEqual(estimate.lines.map((l) => l.key), ["daily", "weekly", "feed"]);
+  assert.deepEqual(
+    estimate.lines.map((l) => l.key),
+    ["daily", "weekly", "feed"],
+  );
 });

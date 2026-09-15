@@ -39,7 +39,9 @@ function recentlySent(fingerprint, every) {
 
 function remember(fingerprint) {
   const sent = { ...state.get("notices"), [fingerprint]: new Date().toISOString() };
-  const keys = Object.keys(sent).sort((a, b) => (sent[a] < sent[b] ? -1 : 1)).slice(-KEEP);
+  const keys = Object.keys(sent)
+    .sort((a, b) => (sent[a] < sent[b] ? -1 : 1))
+    .slice(-KEEP);
   state.set({ notices: Object.fromEntries(keys.map((k) => [k, sent[k]])) });
 }
 
@@ -53,7 +55,11 @@ export async function notify(kind, text, { fingerprint = null, every = HOUR_MS }
   const fp = fingerprint ?? `${kind}:${sha(text)}`;
   const admins = [...config.adminUserIds];
   if (!client || admins.length === 0) {
-    log.info("notice_unsent", { kind, reason: !client ? "no client yet" : "no ADMIN_USER_IDS", text: text.slice(0, 200) });
+    log.info("notice_unsent", {
+      kind,
+      reason: !client ? "no client yet" : "no ADMIN_USER_IDS",
+      text: text.slice(0, 200),
+    });
     return 0;
   }
   if (recentlySent(fp, every)) return 0;

@@ -39,10 +39,7 @@ import { isEnvFile, isEnvOnly, renderSecrets, renderConfig, parseConfig } from "
 
 export { renderConfig };
 
-export const repoRoot = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-);
+export const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
  * THE INSTANCE IS A DIRECTORY: `.env`, `agent/` and `state/` live together in
@@ -85,11 +82,16 @@ export function readConfigFile(file = configFile) {
  * what belongs there. A backup of the old .env goes under state/, which is
  * gitignored; nothing is lost, nothing is duplicated afterwards.
  */
-export function migrateEnvToConfig({ parsed = loaded.parsed, env = envFile, cfg = configFile, dir = instanceDir } = {}) {
+export function migrateEnvToConfig({
+  parsed = loaded.parsed,
+  env = envFile,
+  cfg = configFile,
+  dir = instanceDir,
+} = {}) {
   if (!parsed) return null;
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const history = path.join(dir, "state", "env-history");
-  const existing = fs.existsSync(cfg) ? parseConfig(fs.readFileSync(cfg, "utf8")) ?? {} : null;
+  const existing = fs.existsSync(cfg) ? (parseConfig(fs.readFileSync(cfg, "utf8")) ?? {}) : null;
 
   if (existing === null) {
     // First time: settings out of .env into a new config.json.
@@ -150,7 +152,6 @@ function liveSettings() {
 export function _setSettings(values) {
   settingsOverride = values;
 }
-
 
 /**
  * Where a value comes from. Secrets and paths: the environment (the shell,
@@ -247,10 +248,7 @@ export function readChannels(env = { ...process.env, ...liveSettings() }) {
   for (const [key, value] of Object.entries(env)) {
     const match = /^CHANNEL_([A-Z0-9_]+)$/.exec(key);
     if (!match || !String(value).trim()) continue;
-    channels.set(
-      match[1].toLowerCase().replace(/_/g, "-"),
-      String(value).trim(),
-    );
+    channels.set(match[1].toLowerCase().replace(/_/g, "-"), String(value).trim());
   }
   return channels;
 }
@@ -274,9 +272,15 @@ export const config = {
   // with no price is refused rather than billed at zero. Live: a routine
   // re-reads it every run.
   claude: {
-    get model() { return optional("CLAUDE_MODEL", "claude-sonnet-5"); },
-    get effort() { return optional("CLAUDE_EFFORT", "medium"); },
-    get maxTokens() { return num("CLAUDE_MAX_TOKENS", "8000"); },
+    get model() {
+      return optional("CLAUDE_MODEL", "claude-sonnet-5");
+    },
+    get effort() {
+      return optional("CLAUDE_EFFORT", "medium");
+    },
+    get maxTokens() {
+      return num("CLAUDE_MAX_TOKENS", "8000");
+    },
   },
   // Schedules are written in whatever timezone the clan lives in. UTC is the
   // default because it is the only one that is never surprising, but an
@@ -308,19 +312,29 @@ export const config = {
   // routines you wrote), and ASK_MONTHLY_BUDGET_USD is what clan members ask
   // for. One pot means a chatty afternoon quietly cancels tomorrow's war-deck
   // nudge and the only symptom is silence.
-  get monthlyBudgetUsd() { return money("MONTHLY_BUDGET_USD"); },
-  get askMonthlyBudgetUsd() { return money("ASK_MONTHLY_BUDGET_USD"); },
+  get monthlyBudgetUsd() {
+    return money("MONTHLY_BUDGET_USD");
+  },
+  get askMonthlyBudgetUsd() {
+    return money("ASK_MONTHLY_BUDGET_USD");
+  },
   // One member cannot spend the shared ask pot for everyone. 0 = no cap.
-  get askDailyTurnsPerMember() { return num("ASK_DAILY_TURNS_PER_MEMBER", "20"); },
+  get askDailyTurnsPerMember() {
+    return num("ASK_DAILY_TURNS_PER_MEMBER", "20");
+  },
   // What a single turn is assumed to cost before we have seen one. A lane
   // refuses to start a turn that could take it past its budget, and this is
   // the floor for that estimate; the real figure climbs to the largest turn
   // the lane has actually produced.
-  get turnReserveUsd() { return num("TURN_RESERVE_USD", "0.30"); },
+  get turnReserveUsd() {
+    return num("TURN_RESERVE_USD", "0.30");
+  },
 
   // Soft guard on top of the monthly budgets: the process stops answering once
   // the day's measured spend crosses this. Unset means no daily cap.
-  get dailyUsdCap() { return money("DAILY_USD_CAP"); },
+  get dailyUsdCap() {
+    return money("DAILY_USD_CAP");
+  },
   // Where the prompts live: `agent/` in the instance directory. Relative paths
   // resolve against the cwd, not the checkout — see instanceDir above.
   agentDir: path.resolve(instanceDir, optional("AGENT_DIR", "agent")),
@@ -337,16 +351,24 @@ export const config = {
     return new Set([...list("ROUTINES_DISABLED"), ...list("SCHEDULE_DISABLED")]);
   },
   // Discord ids allowed to use the admin slash commands and to DM the bot.
-  get adminUserIds() { return list("ADMIN_USER_IDS"); },
+  get adminUserIds() {
+    return list("ADMIN_USER_IDS");
+  },
   // Logical channel name for maintainer replies to filed feedback. Unset falls
   // back to the first event routine's channel.
-  get feedbackChannel() { return optional("FEEDBACK_CHANNEL", "") || null; },
+  get feedbackChannel() {
+    return optional("FEEDBACK_CHANNEL", "") || null;
+  },
   // How many post_message calls one turn may make. One event can fairly be
   // two posts (a welcome for members, a note for leaders); it is never five.
-  get maxPostsPerTurn() { return num("MAX_POSTS_PER_TURN", "3"); },
+  get maxPostsPerTurn() {
+    return num("MAX_POSTS_PER_TURN", "3");
+  },
   // The boot hello: one line in the first channel of the directory saying
   // the bot is up and what build it is. STARTUP_MESSAGE=off to silence it.
-  get startupMessage() { return optional("STARTUP_MESSAGE", "on").toLowerCase() !== "off"; },
+  get startupMessage() {
+    return optional("STARTUP_MESSAGE", "on").toLowerCase() !== "off";
+  },
 
   // THE REVIEW LANE (src/review.js): the bot reading its own turn ledger and
   // proposing edits to agent/ — evaluation as a feature, off by default. Its
@@ -355,19 +377,33 @@ export const config = {
   // cost the ask lane a question; its own clock, in the operator's timezone.
   // All live except the slash command's existence (registered at boot).
   review: {
-    get enabled() { return optional("REVIEW", "off").toLowerCase() === "on"; },
-    get model() { return optional("REVIEW_MODEL", "claude-opus-5"); },
-    get effort() { return optional("REVIEW_EFFORT", "high"); },
-    get monthlyBudgetUsd() { return money("REVIEW_MONTHLY_BUDGET_USD"); },
+    get enabled() {
+      return optional("REVIEW", "off").toLowerCase() === "on";
+    },
+    get model() {
+      return optional("REVIEW_MODEL", "claude-opus-5");
+    },
+    get effort() {
+      return optional("REVIEW_EFFORT", "high");
+    },
+    get monthlyBudgetUsd() {
+      return money("REVIEW_MONTHLY_BUDGET_USD");
+    },
     // "sun 20:00" — weekday (or "daily") and wall time. Weekly is the shape
     // this was designed for: enough turns to see a pattern, few enough
     // proposals to read.
-    get at() { return parseReviewAt(optional("REVIEW_AT", "sun 20:00")); },
+    get at() {
+      return parseReviewAt(optional("REVIEW_AT", "sun 20:00"));
+    },
     // Let the review write agent/memory.md without a click. Never
     // identity.md, never a routine — those are policy and stay gated.
-    get autoMemory() { return optional("REVIEW_AUTO_MEMORY", "false").toLowerCase() === "true"; },
+    get autoMemory() {
+      return optional("REVIEW_AUTO_MEMORY", "false").toLowerCase() === "true";
+    },
     // Proposals per review. Three is a decision; ten is a backlog.
-    get maxProposals() { return num("REVIEW_MAX_PROPOSALS", "3"); },
+    get maxProposals() {
+      return num("REVIEW_MAX_PROPOSALS", "3");
+    },
   },
 };
 
@@ -381,7 +417,14 @@ function overridable(target) {
   for (const key of Object.keys(target)) {
     const descriptor = Object.getOwnPropertyDescriptor(target, key);
     if (!descriptor?.get) {
-      if (descriptor && typeof descriptor.value === "object" && descriptor.value && !Array.isArray(descriptor.value) && !(descriptor.value instanceof Set)) overridable(descriptor.value);
+      if (
+        descriptor &&
+        typeof descriptor.value === "object" &&
+        descriptor.value &&
+        !Array.isArray(descriptor.value) &&
+        !(descriptor.value instanceof Set)
+      )
+        overridable(descriptor.value);
       continue;
     }
     Object.defineProperty(target, key, {

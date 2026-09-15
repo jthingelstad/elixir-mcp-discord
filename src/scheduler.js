@@ -26,7 +26,10 @@ export function retireOnce(routine, { agentDir = config.agentDir } = {}) {
     const text = fs.readFileSync(file, "utf8");
     const history = path.join(agentDir, ".history");
     fs.mkdirSync(history, { recursive: true });
-    fs.copyFileSync(file, path.join(history, `routines__${routine.key}.md.${new Date().toISOString().replace(/[:.]/g, "-")}`));
+    fs.copyFileSync(
+      file,
+      path.join(history, `routines__${routine.key}.md.${new Date().toISOString().replace(/[:.]/g, "-")}`),
+    );
     fs.writeFileSync(file, withFields(text, { enabled: "false" }));
     log.info("routine_once_done", { routine: routine.key });
     void commitInstance({ message: `Retire one-shot ${routine.key} after it ran` });
@@ -49,7 +52,11 @@ export async function tick(routines, resolveChannel, now = new Date()) {
       reason: blocked.reason,
       due: due.map((entry) => entry.routine.key).join(","),
     });
-    await notify("budget", `${due.map((e) => e.routine.key).join(", ")} due and not run: the routines lane is ${blocked.reason} ($${blocked.spent?.toFixed(2) ?? "?"} of $${blocked.budget?.toFixed(2) ?? "?"} this month). They run again when it resets.`, { fingerprint: `budget:routines:${blocked.reason}`, every: 24 * 3600 * 1000 });
+    await notify(
+      "budget",
+      `${due.map((e) => e.routine.key).join(", ")} due and not run: the routines lane is ${blocked.reason} ($${blocked.spent?.toFixed(2) ?? "?"} of $${blocked.budget?.toFixed(2) ?? "?"} this month). They run again when it resets.`,
+      { fingerprint: `budget:routines:${blocked.reason}`, every: 24 * 3600 * 1000 },
+    );
     return;
   }
 
@@ -76,7 +83,11 @@ export async function tick(routines, resolveChannel, now = new Date()) {
     });
     if (routine.once && run) {
       retireOnce(routine);
-      await notify("one-shot done", `${routine.key} ran${run.ok ? (run.skipped ? " (and chose to post nothing)" : "") : ` and failed: ${run.error}`}; it is now disabled. Delete it from the DM when you are done with it.`, { fingerprint: `once:${routine.key}` });
+      await notify(
+        "one-shot done",
+        `${routine.key} ran${run.ok ? (run.skipped ? " (and chose to post nothing)" : "") : ` and failed: ${run.error}`}; it is now disabled. Delete it from the DM when you are done with it.`,
+        { fingerprint: `once:${routine.key}` },
+      );
     }
   }
 }
@@ -99,9 +110,7 @@ export function startScheduler(routinesFn, resolveChannel) {
   });
 
   const run = () =>
-    tick(routinesFn(), resolveChannel).catch((error) =>
-      log.error("scheduler_tick_failed", { error: error.message }),
-    );
+    tick(routinesFn(), resolveChannel).catch((error) => log.error("scheduler_tick_failed", { error: error.message }));
   void run();
   return setInterval(run, 60_000);
 }

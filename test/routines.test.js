@@ -28,7 +28,10 @@ test("a schedule routine parses its clock, days and window", () => {
 });
 
 test("an events routine names the timeline kinds or sections that wake it; topics is gone and says so", () => {
-  const events = parseRoutine("feed", doc({ trigger: "events", channel: "pulse", kinds: "[member_joined, returned]", sections: "roster" }));
+  const events = parseRoutine(
+    "feed",
+    doc({ trigger: "events", channel: "pulse", kinds: "[member_joined, returned]", sections: "roster" }),
+  );
   assert.deepEqual(events.kinds, ["member_joined", "returned"]);
   assert.deepEqual(events.sections, ["roster"]);
   const all = parseRoutine("feed", doc({ trigger: "events", channel: "pulse" }));
@@ -113,14 +116,23 @@ test("a routine file the runner cannot parse is logged, once, and loudly when no
   const { activeRoutines } = await import("../src/routines.js");
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "emd-routines-"));
   fs.mkdirSync(path.join(dir, "routines"));
-  fs.writeFileSync(path.join(dir, "routines", "feed.md"), "---\ntrigger: events\nchannel: pulse\nfuture_field: 1\n---\nx\n");
+  fs.writeFileSync(
+    path.join(dir, "routines", "feed.md"),
+    "---\ntrigger: events\nchannel: pulse\nfuture_field: 1\n---\nx\n",
+  );
   const lines = [];
   const original = console.error;
   console.error = (line) => lines.push(String(line));
   try {
     assert.deepEqual(activeRoutines({ dir, disabled: new Set() }), []);
-    assert.ok(lines.some((l) => l.includes("routine_invalid") && l.includes("future_field")), "the parse error is logged");
-    assert.ok(lines.some((l) => l.includes("no_routines_load")), "nothing loading is its own alarm");
+    assert.ok(
+      lines.some((l) => l.includes("routine_invalid") && l.includes("future_field")),
+      "the parse error is logged",
+    );
+    assert.ok(
+      lines.some((l) => l.includes("no_routines_load")),
+      "nothing loading is its own alarm",
+    );
     lines.length = 0;
     activeRoutines({ dir, disabled: new Set() });
     assert.equal(lines.length, 0, "the same failure is not repeated every tick");

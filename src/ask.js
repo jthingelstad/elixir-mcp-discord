@@ -121,9 +121,7 @@ class LiveMessage {
 
 /** The in-progress view: tools as they fire, then prose as it arrives. */
 function renderProgress(toolsSoFar, text) {
-  const lines = toolsSoFar.map(
-    (name) => `-# 🔧 \`${name.replace(/^.*__/, "")}\``,
-  );
+  const lines = toolsSoFar.map((name) => `-# 🔧 \`${name.replace(/^.*__/, "")}\``);
   if (text) {
     lines.push("");
     lines.push(text.length > 1500 ? `${text.slice(0, 1500)}…` : text);
@@ -195,16 +193,33 @@ const REQUESTS_PER_MEMBER_PER_DAY = 3;
 export function tellOperatorTool({ message, channelName }) {
   return {
     name: "tell_operator",
-    description: "Pass a member's request to whoever runs this bot — a change to what you post or when, a feature, a complaint about a routine. Their words, once per turn. Then tell the member it has been passed on.",
-    input_schema: { type: "object", properties: { request: { type: "string", description: "What they asked for, in their words, under 300 characters." } }, required: ["request"], additionalProperties: false },
+    description:
+      "Pass a member's request to whoever runs this bot — a change to what you post or when, a feature, a complaint about a routine. Their words, once per turn. Then tell the member it has been passed on.",
+    input_schema: {
+      type: "object",
+      properties: {
+        request: { type: "string", description: "What they asked for, in their words, under 300 characters." },
+      },
+      required: ["request"],
+      additionalProperties: false,
+    },
     async handler({ request }) {
       const today = new Date().toISOString().slice(0, 10);
       const all = state.get("operatorRequests") || {};
       const mine = (all[message.author.id] || []).filter((d) => d.startsWith(today));
-      if (mine.length >= REQUESTS_PER_MEMBER_PER_DAY) return { ok: false, code: "rate_limited", error: "that member has already sent the operator three requests today; tell them it will keep for tomorrow" };
+      if (mine.length >= REQUESTS_PER_MEMBER_PER_DAY)
+        return {
+          ok: false,
+          code: "rate_limited",
+          error: "that member has already sent the operator three requests today; tell them it will keep for tomorrow",
+        };
       state.set({ operatorRequests: { ...all, [message.author.id]: [...mine, new Date().toISOString()] } });
       const who = message.member?.displayName || message.author.username;
-      await notify("member request", `${who} (discord:${message.author.id}) in #${channelName ?? "?"}: "${String(request).slice(0, 300)}"`, { fingerprint: `request:${message.author.id}:${String(request).slice(0, 60)}`, every: 24 * 3600 * 1000 });
+      await notify(
+        "member request",
+        `${who} (discord:${message.author.id}) in #${channelName ?? "?"}: "${String(request).slice(0, 300)}"`,
+        { fingerprint: `request:${message.author.id}:${String(request).slice(0, 60)}`, every: 24 * 3600 * 1000 },
+      );
       return { ok: true, body: { passed_on: true } };
     },
   };
@@ -244,7 +259,9 @@ const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export function imageBlocks(message) {
   const blocks = [];
   for (const a of message.attachments?.values?.() ?? []) {
-    const type = String(a.contentType ?? "").toLowerCase().split(";")[0];
+    const type = String(a.contentType ?? "")
+      .toLowerCase()
+      .split(";")[0];
     if (!/^image\/(png|jpeg|jpg|gif|webp)$/.test(type) || (a.size ?? 0) > IMAGE_MAX_BYTES) continue;
     blocks.push({ type: "image", source: { type: "url", url: a.url } });
     if (blocks.length === IMAGE_MAX) break;
@@ -261,7 +278,8 @@ export function imageBlocks(message) {
  * it is recorded on the turn it answers: a follow-up from someone other than
  * the asker, or the asker saying the answer was wrong.
  */
-export const CORRECTION_MARKERS = /\b(no|nope|wrong|incorrect|not right|that'?s not|not what i|i meant|i said|actually|try again|you missed)\b/i;
+export const CORRECTION_MARKERS =
+  /\b(no|nope|wrong|incorrect|not right|that'?s not|not what i|i meant|i said|actually|try again|you missed)\b/i;
 
 export function looksLikeCorrection(text) {
   return CORRECTION_MARKERS.test((text || "").slice(0, 200));
@@ -290,9 +308,13 @@ function recordIntervention(message, ctx, question) {
   if (!ctx.turnId) return;
   const other = ctx.starterAuthorId && ctx.starterAuthorId !== message.author.id;
   if (other) {
-    ledger.append(ledger.interventionEntry({ turnId: ctx.turnId, by: "other_member", userId: message.author.id, text: question }));
+    ledger.append(
+      ledger.interventionEntry({ turnId: ctx.turnId, by: "other_member", userId: message.author.id, text: question }),
+    );
   } else if (looksLikeCorrection(question)) {
-    ledger.append(ledger.interventionEntry({ turnId: ctx.turnId, by: "asker", userId: message.author.id, text: question }));
+    ledger.append(
+      ledger.interventionEntry({ turnId: ctx.turnId, by: "asker", userId: message.author.id, text: question }),
+    );
   } else {
     return;
   }
@@ -332,22 +354,28 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
       reason: blocked.reason,
       user: message.author.id,
     });
-    await notify("budget", `a member's question went unanswered: the ask lane is ${blocked.reason} ($${blocked.spent?.toFixed(2) ?? "?"} of $${blocked.budget?.toFixed(2) ?? "?"} this month).`, { fingerprint: `budget:ask:${blocked.reason}`, every: 24 * 3600 * 1000 });
+    await notify(
+      "budget",
+      `a member's question went unanswered: the ask lane is ${blocked.reason} ($${blocked.spent?.toFixed(2) ?? "?"} of $${blocked.budget?.toFixed(2) ?? "?"} this month).`,
+      { fingerprint: `budget:ask:${blocked.reason}`, every: 24 * 3600 * 1000 },
+    );
     return;
   }
 
   const cap = config.askDailyTurnsPerMember;
   if (cap && !config.adminUserIds.has(String(message.author.id)) && memberTurnsToday(message.author.id) >= cap) {
-    await message.reply(`That's ${cap} questions from you today, which is where I stop so the budget lasts for everyone. Tomorrow resets it.`).catch(() => {});
+    await message
+      .reply(
+        `That's ${cap} questions from you today, which is where I stop so the budget lasts for everyone. Tomorrow resets it.`,
+      )
+      .catch(() => {});
     log.info("ask_member_capped", { user: message.author.id, cap });
     return;
   }
 
   try {
     const inThread = Boolean(message.channel?.isThread?.());
-    const history = inThread
-      ? await recentTurns(message.channel, message.id, routine.historyTurns)
-      : [];
+    const history = inThread ? await recentTurns(message.channel, message.id, routine.historyTurns) : [];
     if (inThread) recordIntervention(message, await threadContext(message.channel, message.id), question);
     const asker = message.member?.displayName || message.author.username;
     const images = imageBlocks(message);
@@ -356,9 +384,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
     // already in one. If threads are not available, reply in place.
     const thread = inThread ? null : await threadFor(message);
     const target = thread ?? message.channel;
-    const placeholder = thread
-      ? await thread.send("-# thinking…")
-      : await message.reply("-# thinking…");
+    const placeholder = thread ? await thread.send("-# thinking…") : await message.reply("-# thinking…");
     const live = new LiveMessage(placeholder);
     const toolsSoFar = [];
     let streamed = "";
@@ -376,7 +402,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
             kind: "message",
             asker: { id: message.author.id, name: asker },
             channelId: message.channel?.id ?? null,
-            threadId: inThread ? message.channel.id : thread?.id ?? null,
+            threadId: inThread ? message.channel.id : (thread?.id ?? null),
             messageId: message.id,
             question,
             history,
@@ -399,12 +425,21 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
           // prompt is the cached prefix, and rewriting it per asker would
           // discard that cache on every single turn. A picture the member
           // attached comes first, then the words.
-          content: [...images, { type: "text", text: `${asker} (discord:${message.author.id}): ${question}\n\n${nowLine()}` }],
+          content: [
+            ...images,
+            { type: "text", text: `${asker} (discord:${message.author.id}): ${question}\n\n${nowLine()}` },
+          ],
         },
       ],
       // The local tools a member's turn gets: reading a pasted deck link
       // (text, not the web) and passing a request to the operator.
-      localTools: [deckLinkTool(), tellOperatorTool({ message, channelName: message.channel?.isThread?.() ? message.channel.parent?.name : message.channel?.name })],
+      localTools: [
+        deckLinkTool(),
+        tellOperatorTool({
+          message,
+          channelName: message.channel?.isThread?.() ? message.channel.parent?.name : message.channel?.name,
+        }),
+      ],
       onEvent: (event) => {
         if (event.kind === "tool_start") toolsSoFar.push(event.name);
         else if (event.kind === "text") streamed += event.text;
@@ -422,7 +457,11 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
       );
       log.error("ask_failed", { routine: routine.key, error: result.error });
       record(result, { error: result.error });
-      await notify("answer failed", `a question in the ask channel got an error instead of an answer: ${String(result.error).slice(0, 300)}`, { fingerprint: `ask_failed:${String(result.error).slice(0, 60)}` });
+      await notify(
+        "answer failed",
+        `a question in the ask channel got an error instead of an answer: ${String(result.error).slice(0, 300)}`,
+        { fingerprint: `ask_failed:${String(result.error).slice(0, 60)}` },
+      );
       return;
     }
 
@@ -448,12 +487,10 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
     const footnote = async (content, what) => {
       if (!sent || !content) return;
       footers.push(content);
-      const note = await sent
-        .reply({ content, allowedMentions: { repliedUser: false } })
-        .catch((error) => {
-          log.warn(`${what}_post_failed`, { error: error.message });
-          return null;
-        });
+      const note = await sent.reply({ content, allowedMentions: { repliedUser: false } }).catch((error) => {
+        log.warn(`${what}_post_failed`, { error: error.message });
+        return null;
+      });
       produced.push(note);
     };
     if (routine.trace) await footnote(renderTrace(result), "trace");
@@ -507,9 +544,9 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
       error: error.message,
       stack: error.stack?.slice(0, 400),
     });
-    await notify("ask lane crashed", `${error.message.slice(0, 300)} — the member was told it is logged.`, { fingerprint: `ask_crashed:${error.message.slice(0, 60)}` });
-    await message
-      .reply("I fell over answering that. It's logged.")
-      .catch(() => {});
+    await notify("ask lane crashed", `${error.message.slice(0, 300)} — the member was told it is logged.`, {
+      fingerprint: `ask_crashed:${error.message.slice(0, 60)}`,
+    });
+    await message.reply("I fell over answering that. It's logged.").catch(() => {});
   }
 }

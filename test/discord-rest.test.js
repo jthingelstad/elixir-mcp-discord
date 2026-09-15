@@ -54,7 +54,10 @@ test("overwrites apply in order: @everyone, then roles, then the member", () => 
 test("Administrator and ownership short-circuit to everything", () => {
   const admin = computePermissions({
     guild,
-    roles: [{ id: "g", permissions: "0" }, { id: "adm", permissions: str(PermissionFlagsBits.Administrator) }],
+    roles: [
+      { id: "g", permissions: "0" },
+      { id: "adm", permissions: str(PermissionFlagsBits.Administrator) },
+    ],
     member: { roles: ["adm"] },
     channel: { permission_overwrites: [{ id: "g", type: 0, allow: "0", deny: str(VIEW) }] },
     botId: "b",
@@ -72,7 +75,10 @@ test("a REST channel can be judged by the same rule as the boot check", () => {
   assert.equal(problem.reason, "missing_permissions");
   assert.deepEqual(problem.missing, ["CreatePublicThreads", "SendMessagesInThreads"]);
   const voice = channelLike({ ...raw, type: 2 }, perms);
-  assert.equal(inspectChannel({ name: "ask", needs, channel: voice, botId: "b", guildId: "g" }).reason, "not_a_text_channel");
+  assert.equal(
+    inspectChannel({ name: "ask", needs, channel: voice, botId: "b", guildId: "g" }).reason,
+    "not_a_text_channel",
+  );
 });
 
 test("the invite link carries both scopes and every permission a lane can need", () => {

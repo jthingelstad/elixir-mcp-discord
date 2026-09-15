@@ -50,7 +50,9 @@ function describeTurn(turn, note) {
     `TOOLS CALLED: ${tallyCalls(turn.called) || "none"}`,
   ];
   if (turn.errors?.length) {
-    lines.push(`TOOL ERRORS: ${turn.errors.map((e) => `${e.name}${e.code ? ` [${e.code}]` : ""}: ${e.detail}`).join(" | ")}`);
+    lines.push(
+      `TOOL ERRORS: ${turn.errors.map((e) => `${e.name}${e.code ? ` [${e.code}]` : ""}: ${e.detail}`).join(" | ")}`,
+    );
   }
   if (turn.requestIds?.length) lines.push(`REQUEST IDS: ${turn.requestIds.join(", ")}`);
   if (note) lines.push(`THE READER SAID: ${note}`);
@@ -173,7 +175,9 @@ export async function handleReaction(reaction, user, { sweepFn = sweepReaction, 
   // gets swept with the reader's words in hand.
   if (!note) {
     state.markReaction(turn.turnId, kind, false);
-    await respond("-# 📮 Noted. Reply to this message with what was wrong and react 👎 again, and it will be filed with the maintainer.");
+    await respond(
+      "-# 📮 Noted. Reply to this message with what was wrong and react 👎 again, and it will be filed with the maintainer.",
+    );
   }
   return { kind, filed: false };
 }

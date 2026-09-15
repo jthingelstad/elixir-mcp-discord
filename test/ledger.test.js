@@ -78,7 +78,10 @@ function fakeChannel() {
 
 test("a scheduled turn is recorded whole: brief, trace with bodies, post and destination", async () => {
   fresh();
-  const routine = parseRoutine("notable-movers", "---\ntrigger: schedule\nchannel: pulse\nat: 01:00\ntrace: true\n---\nName three movers.");
+  const routine = parseRoutine(
+    "notable-movers",
+    "---\ntrigger: schedule\nchannel: pulse\nat: 01:00\ntrace: true\n---\nName three movers.",
+  );
   const channel = fakeChannel();
   await runRoutine(routine, { channel, askFn: async () => result() });
 
@@ -109,9 +112,27 @@ test("a scheduled turn is recorded whole: brief, trace with bodies, post and des
 
 test("a skipped turn and a failed turn are recorded too", async () => {
   fresh();
-  const routine = parseRoutine("clan-feed", "---\ntrigger: schedule\nchannel: pulse\nat: 01:00\nmay_skip: true\n---\nSay what changed.");
-  await runRoutine(routine, { channel: fakeChannel(), askFn: async () => result({ text: "SKIP", turnId: "skip0001" }) });
-  await runRoutine(routine, { channel: fakeChannel(), askFn: async () => ({ ok: false, error: "overloaded", called: [], errors: [], trace: [], envelopes: [], usd: 0, turnId: "fail0001" }) });
+  const routine = parseRoutine(
+    "clan-feed",
+    "---\ntrigger: schedule\nchannel: pulse\nat: 01:00\nmay_skip: true\n---\nSay what changed.",
+  );
+  await runRoutine(routine, {
+    channel: fakeChannel(),
+    askFn: async () => result({ text: "SKIP", turnId: "skip0001" }),
+  });
+  await runRoutine(routine, {
+    channel: fakeChannel(),
+    askFn: async () => ({
+      ok: false,
+      error: "overloaded",
+      called: [],
+      errors: [],
+      trace: [],
+      envelopes: [],
+      usd: 0,
+      turnId: "fail0001",
+    }),
+  });
   const turns = ledger.readTurns({ since: today() });
   assert.deepEqual(
     turns.map((t) => [t.turnId, t.output.skipped ?? false, t.output.error ?? null]),
@@ -124,14 +145,20 @@ test("a skipped turn and a failed turn are recorded too", async () => {
 
 test("a dry run is a rehearsal and is not recorded", async () => {
   fresh();
-  const routine = parseRoutine("clan-feed", "---\ntrigger: schedule\nchannel: pulse\nat: 01:00\n---\nSay what changed.");
+  const routine = parseRoutine(
+    "clan-feed",
+    "---\ntrigger: schedule\nchannel: pulse\nat: 01:00\n---\nSay what changed.",
+  );
   await runRoutine(routine, { channel: fakeChannel(), dryRun: true, askFn: async () => result() });
   assert.equal(ledger.readTurns({ since: today() }).length, 0);
 });
 
 test("an ask turn keeps the asker, the question, the thread history and the answer", async () => {
   fresh();
-  const routine = parseRoutine("ask", "---\ntrigger: message\nchannel: ask\nhistory_turns: 4\n---\nAnswer clan questions.");
+  const routine = parseRoutine(
+    "ask",
+    "---\ntrigger: message\nchannel: ask\nhistory_turns: 4\n---\nAnswer clan questions.",
+  );
   const posted = [];
   const reply = (body) => {
     const entry = { id: `r${posted.length + 1}`, text: typeof body === "string" ? body : body.content };
@@ -173,14 +200,22 @@ test("an ask turn keeps the asker, the question, the thread history and the answ
 
 test("a reaction joins back to its turn as its own line", async () => {
   fresh();
-  state.rememberTurn("ask00002", { routine: "ask", lane: "ask", question: "q", answer: "a", called: [], errors: [], requestIds: [] }, ["msg-9"]);
+  state.rememberTurn(
+    "ask00002",
+    { routine: "ask", lane: "ask", question: "q", answer: "a", called: [], errors: [], requestIds: [] },
+    ["msg-9"],
+  );
   const message = {
     id: "msg-9",
     partial: false,
     reply: async () => {},
     channel: { messages: { fetch: async () => new Map() } },
   };
-  await handleReaction({ emoji: { name: "👍" }, message }, { id: "7", bot: false, partial: false }, { praiseFn: async () => true });
+  await handleReaction(
+    { emoji: { name: "👍" }, message },
+    { id: "7", bot: false, partial: false },
+    { praiseFn: async () => true },
+  );
   const records = ledger.readRecords({ since: today() });
   assert.deepEqual(
     records.map((r) => [r.kind, r.turnId, r.reaction]),
@@ -190,7 +225,10 @@ test("a reaction joins back to its turn as its own line", async () => {
 
 test("later signals fold into the turn on read, and the reader renders it", async () => {
   fresh();
-  const routine = parseRoutine("notable-movers", "---\ntrigger: schedule\nchannel: pulse\nat: 01:00\n---\nName three movers.");
+  const routine = parseRoutine(
+    "notable-movers",
+    "---\ntrigger: schedule\nchannel: pulse\nat: 01:00\n---\nName three movers.",
+  );
   await runRoutine(routine, { channel: fakeChannel(), askFn: async () => result() });
   ledger.append(ledger.reactionEntry({ turnId: "feed0001", reaction: "down", userId: "7", note: "canavar is 8-3" }));
   ledger.append(ledger.filedEntry({ turnId: "feed0001", summary: "off-by-one in the window" }));

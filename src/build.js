@@ -16,9 +16,7 @@ export function buildId() {
   try {
     const head = fs.readFileSync(path.join(repoRoot, ".git", "HEAD"), "utf8").trim();
     const ref = head.startsWith("ref: ") ? head.slice(5) : null;
-    const full = ref
-      ? fs.readFileSync(path.join(repoRoot, ".git", ref), "utf8").trim()
-      : head;
+    const full = ref ? fs.readFileSync(path.join(repoRoot, ".git", ref), "utf8").trim() : head;
     if (/^[0-9a-f]{40}$/.test(full)) sha = full.slice(0, 7);
   } catch {
     /* not a git checkout (a container, a tarball) */
