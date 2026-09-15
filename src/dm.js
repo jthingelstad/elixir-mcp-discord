@@ -48,7 +48,7 @@ import { renderTrace } from "./trace.js";
 import { renderTurn } from "./turns.js";
 import { budgetReply, routinesReply } from "./commands.js";
 import { FIELDS, splitFrontMatter } from "./routines.js";
-import { SETTINGS, readEnv, describeSettings, serviceManaged } from "./settings.js";
+import { SETTINGS, readConfigText, describeSettings, serviceManaged } from "./settings.js";
 import { planEdit, proposalMessage, toComponents, readAgentFiles } from "./review.js";
 import { isConversational } from "./ask.js";
 import { turnRecord } from "./run.js";
@@ -97,13 +97,14 @@ later: start from the nearest example's brief and change what differs.
 
 CHANGE A SETTING — a budget, the default model or effort, the review's
 day and time or whether it is on, the timezone, how often the feed is
-read, the ask channel, who is an admin. propose_change with file ".env",
-op set_env and fields {KEY: value}: the keys and what each means are in
+read, the ask channel, who is an admin. propose_change with file
+"config.json", op set_config and fields {KEY: value}: the keys and what each means are in
 the tool's description; "settings" shows the current values. A channel
 may be given as #name. Each value is checked the way setup checks it.
-Applying rewrites .env and restarts the bot (it says so; it is back in
-under a minute); if it is not running as a service the operator restarts
-it. Never a token, a key, a URL or a server id — those are not settings.
+Applying rewrites config.json and restarts the bot (it says so; it is
+back in under a minute); if it is not running as a service the operator
+restarts it. Never a token or a key (those are in .env, not here) and
+never the Elixir URL or the app and server ids — those are wiring.
 
 ADD TO A FILE: op append works on identity.md and a routine's brief too —
 raw text at the end — for "add a house rule" or "also mention X".
@@ -341,18 +342,18 @@ function proposeTool({ files, proposals, by, operatorId = null }) {
     input_schema: {
       type: "object",
       properties: {
-        file: { type: "string", description: "memory.md, identity.md, routines/<key>.md (key: lowercase letters, digits, hyphens), or .env for settings" },
+        file: { type: "string", description: "memory.md, identity.md, routines/<key>.md (key: lowercase letters, digits, hyphens), or config.json for settings" },
         summary: { type: "string", description: "One line for the operator: what this remembers or changes." },
         edit: {
           type: "object",
           properties: {
-            op: { type: "string", enum: ["append", "replace", "remove", "set_fields", "create", "delete", "set_env"] },
+            op: { type: "string", enum: ["append", "replace", "remove", "set_fields", "create", "delete", "set_config"] },
             text: { type: "string", description: "append to memory.md: '- YYYY-MM-DD (from owner)[ until YYYY-MM-DD]: their words'; append elsewhere: the text. create: the routine's brief." },
             find: { type: "string", description: "replace/remove: exact text occurring once" },
             replace: { type: "string" },
             fields: {
               type: "object",
-              description: `set_fields/create: front matter as strings — ${[...FIELDS].join(", ")}; an empty string removes a field. set_env: settings — ${Object.entries(SETTINGS).map(([k, v]) => `${k} (${v.about})`).join("; ")}; CHANNEL_<NAME> (a #name or id the bot is granted in); empty string unsets.`,
+              description: `set_fields/create: front matter as strings — ${[...FIELDS].join(", ")}; an empty string removes a field. set_config: settings — ${Object.entries(SETTINGS).map(([k, v]) => `${k} (${v.about})`).join("; ")}; CHANNEL_<NAME> (a #name or id the bot is granted in); empty string unsets.`,
               additionalProperties: { type: "string" },
             },
           },
@@ -368,10 +369,10 @@ function proposeTool({ files, proposals, by, operatorId = null }) {
       if (file === "memory.md" && edit?.op === "append" && !/\(from owner\)/.test(String(edit.text ?? ""))) {
         return { ok: false, code: "provenance", error: 'a memory entry from this conversation is "- YYYY-MM-DD (from owner): ..."' };
       }
-      const current = proposals.filter((p) => p.file === file).at(-1)?.next ?? (file === ".env" ? readEnv() : files[file] ?? null);
+      const current = proposals.filter((p) => p.file === file).at(-1)?.next ?? (file === "config.json" ? readConfigText() : files[file] ?? null);
       const plan = planEdit({ file, edit: { ...edit, by }, current, by: operatorId });
       if (!plan.ok) return { ok: false, code: "refused", error: plan.error };
-      const proposal = { id: `p${proposals.length + 1}`, class: file === ".env" ? "settings" : "prompt", file, rule: file === ".env" ? "settings" : "from the operator", turnIds: [], summary: String(summary ?? "").slice(0, 300), edit: { ...edit, by }, preview: plan.preview.slice(0, 1500), next: plan.next };
+      const proposal = { id: `p${proposals.length + 1}`, class: file === "config.json" ? "settings" : "prompt", file, rule: file === "config.json" ? "settings" : "from the operator", turnIds: [], summary: String(summary ?? "").slice(0, 300), edit: { ...edit, by }, preview: plan.preview.slice(0, 1500), next: plan.next };
       proposals.push(proposal);
       return { ok: true, body: { proposal_id: proposal.id, diff: proposal.preview } };
     },

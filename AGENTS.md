@@ -84,15 +84,27 @@ bot could have read off the roster; the server refuses `elixir_identify` for
 anyone outside the clan and a re-call replaces the mapping, so the exact
 match is cheap to make and cheap to undo.
 
-**Public repo, no secrets.** `.env` and `.env.*` are gitignored, `state/` is
-gitignored. Check `git ls-files` before assuming something is untracked. Since
+**Public repo, no secrets.** `.env`, `.env.*`, `/config.json` and `state/`
+are gitignored. Check `git ls-files` before assuming something is untracked. Since
 2026-09-13 the live instances keep nothing in the checkout at all — see below.
 
 ## Three bots, one checkout — since 2026-09-13
 
 The **instance is a directory** — the cwd, or `INSTANCE_DIR`. `.env`,
-`agent/` and `state/` resolve against it, never against the checkout
-(`instanceDir` in `src/config.js`, `STATE_PATH` in `src/state.js`). The live instances are
+`config.json`, `agent/` and `state/` resolve against it, never against the
+checkout (`instanceDir` in `src/config.js`, `STATE_PATH` in `src/state.js`).
+**Since 2026-09-15 `.env` holds only the three secrets** (`SECRET_KEYS` in
+`src/env-file.js`: the Elixir key, the Discord token, the Claude key) and
+`config.json` holds every other setting, flat, the same key names as
+before — so it can be versioned with the instance, backed up under
+`.history/` and edited from the DM with a diff. `lookup()` in `config.js`
+reads secrets and path overrides from the environment and everything else
+from `config.json` first, environment second (tests and deliberate shell
+overrides); a shell `CLAUDE_EFFORT` no longer silently outranks the file.
+A pre-`config.json` instance is migrated on its first boot by
+`migrateEnvToConfig`: settings out, `.env` rewritten to secrets, the old
+copy under `state/env-history/`, one `config_migrated` log line and a DM.
+`config.example.json` documents every key; `.env.example` the secrets. The live instances are
 
     ~/.elixir-mcp-discord/poapkings/     POAP KINGS   /pk-*   com.poapkings.elixir-mcp-discord.poapkings
     ~/.elixir-mcp-discord/shipit/        Ship It!     /si-*   com.poapkings.elixir-mcp-discord.shipit
@@ -253,23 +265,24 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
   restores from `.history/`. Front-matter comments do not survive
   `withFields`; the fields do.
 - **The operator changes settings from the DM** (`src/settings.js`).
-  `propose_change` with `file: ".env"`, `op: set_env`, `fields: {KEY:
-  value}` on an ALLOWLIST (`SETTINGS`: budgets, `CLAUDE_*`, `REVIEW_*`,
-  `TIMEZONE`, `EVENT_POLL_SECONDS`, `STARTUP_MESSAGE`, `MAX_POSTS_PER_TURN`,
-  `COMMAND_PREFIX`, `FEEDBACK_CHANNEL`, `ADMIN_USER_IDS`, plus `CHANNEL_*`
-  resolved against the directory) — never a token, key, URL, app/guild id,
-  `STATE_PATH` or `AGENT_DIR`. Each value is checked the way setup checks
-  it (`checkSetting`: a priced model, an IANA zone, numbers, `parseReviewAt`;
-  an admin may not remove themselves). `withSettings` rewrites only the
-  changed keys and leaves every other line of `.env` alone; the preview is
-  the diff of settings and never shows a secret. Apply writes `.env` with a
-  backup under `state/env-history/` (NOT `agent/.history/` — a copy of a
-  secrets file is a secrets file), then, when `serviceManaged()` (launchd or
-  systemd is the parent, or `SERVICE_MANAGED=1`), sends itself SIGTERM after
-  the reply so the supervisor brings it back on the new values; otherwise
-  the message says a restart is needed. Undo restores the backup, same
-  rule. The review lane cannot touch `.env` (`planEdit` refuses without
-  `edit.by === "owner"`). `settings` in the DM shows the current values.
+  `propose_change` with `file: "config.json"`, `op: set_config`, `fields:
+  {KEY: value}` on an ALLOWLIST (`SETTINGS`: budgets, `CLAUDE_*`,
+  `REVIEW_*`, `TIMEZONE`, `EVENT_POLL_SECONDS`, `STARTUP_MESSAGE`,
+  `MAX_POSTS_PER_TURN`, `COMMAND_PREFIX`, `FEEDBACK_CHANNEL`,
+  `ADMIN_USER_IDS`, plus `CHANNEL_*` resolved against the directory) — the
+  wiring keys that also live in `config.json` (`ELIXIR_MCP_URL`,
+  `DISCORD_APP_ID`, `DISCORD_GUILD_ID`) are not on it, and secrets are not
+  in the file at all. Each value is checked the way setup checks it
+  (`checkSetting`: a priced model, an IANA zone, numbers, `parseReviewAt`;
+  an admin may not remove themselves). `withSettings` changes only the
+  named keys; the preview is the diff. Apply writes `config.json` with a
+  backup under `<instance>/.history/`, then, when `serviceManaged()`
+  (launchd or systemd is the parent, or `SERVICE_MANAGED=1`), sends itself
+  SIGTERM after the reply so the supervisor brings it back on the new
+  values; otherwise the message says a restart is needed. Undo restores
+  the backup, same rule. The review lane cannot touch settings (`planEdit`
+  refuses without `edit.by === "owner"`). `settings` in the DM shows the
+  current values.
   `models.json` stays terminal-only on purpose: a wrong price typed in chat
   silently defeats every budget. `append` now works on `identity.md` and a
   brief too (raw text at the end) for "add a house rule".

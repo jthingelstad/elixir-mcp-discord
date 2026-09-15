@@ -5,6 +5,8 @@ node_modules/
 # protection caught it, which is not a control this repo should be relying on.
 .env.*
 !.env.example
+# config.json is an INSTANCE's settings; the checkout ships config.example.json.
+/config.json
 state/
 *.log
 

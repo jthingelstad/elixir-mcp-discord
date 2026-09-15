@@ -1,33 +1,34 @@
 /**
- * The operator's settings in .env, editable from the DM.
+ * The operator's settings in config.json, editable from the DM.
  *
  * "Raise the ask budget to $15", "run the review Saturday morning", "use
  * opus for everything", "add my co-leader as an admin", "move questions to
  * #ask-bot" — operator decisions, like a schedule is, and until now the only
- * way to make one was a terminal. They live in .env because .env is where
- * every knob is documented and setup writes it; this file lets the DM
- * propose a change to the SAME file, under three rules that agent/ edits do
- * not need:
+ * way to make one was a terminal. They live in config.json (src/config.js:
+ * every knob that is not a secret, flat, same key names as the docs), and
+ * this file lets the DM propose a change to that file under three rules
+ * that agent/ edits do not need:
  *
- *   AN ALLOWLIST. Only the keys below. Never a token, a key, a URL, an app
- *   or guild id, STATE_PATH or AGENT_DIR: those are wiring, and the bot
+ *   AN ALLOWLIST. Only the keys below. config.json also holds wiring — the
+ *   Elixir URL, the app and guild ids — that the DM may not touch: the bot
  *   editing its own wiring from a chat is how a bot locks itself out.
  *
  *   VALIDATION PER KEY, the same checks setup runs: a budget is a number, a
  *   model has a price, a timezone is IANA, an admin id is numeric, a channel
  *   is one the bot may see. A value the bot could not boot on never reaches
- *   a button — the parser-checks-the-routine rule, for .env.
+ *   a button — the parser-checks-the-routine rule, for settings.
  *
- *   A RESTART TO APPLY. .env is read at boot. When the bot runs as a service
- *   (launchd KeepAlive, systemd Restart=always) it drains and exits after
- *   applying, and the service brings it back on the new values; otherwise
- *   it says a restart is needed. The backup of .env goes under state/, not
- *   agent/.history/: a copy of a secrets file is a secrets file.
+ *   A RESTART TO APPLY. config.json is read at boot. When the bot runs as a
+ *   service (launchd KeepAlive, systemd Restart=always) it drains and exits
+ *   after applying, and the service brings it back on the new values;
+ *   otherwise it says a restart is needed. The prior config.json is kept
+ *   under .history/ in the instance, beside agent/'s.
  */
 
 import fs from "node:fs";
 import path from "node:path";
-import { instanceDir, envFile, parseReviewAt } from "./config.js";
+import { instanceDir, configFile, parseReviewAt } from "./config.js";
+import { renderConfig, parseConfig } from "./env-file.js";
 import { rateFor } from "./pricing.js";
 import { directory } from "./directory.js";
 import { log } from "./log.js";
@@ -108,35 +109,18 @@ export function checkSetting(key, rawValue, { by = null, entries = directory() }
   return { ok: true, value };
 }
 
-/** The .env text with keys set (a value of "" removes the line), everything else untouched. */
+/** config.json with keys set (a value of "" removes the key), everything else untouched. */
 export function withSettings(text, changes) {
-  const lines = (text ?? "").split("\n");
-  const seen = new Set();
-  const out = [];
-  for (const line of lines) {
-    const match = /^([A-Z0-9_]+)=/.exec(line);
-    if (match && Object.hasOwn(changes, match[1])) {
-      seen.add(match[1]);
-      if (changes[match[1]] !== "") out.push(`${match[1]}=${changes[match[1]]}`);
-      continue;
-    }
-    out.push(line);
+  const values = (parseConfig(text) ?? {});
+  for (const [k, v] of Object.entries(changes)) {
+    if (v === "") delete values[k];
+    else values[k] = v;
   }
-  const added = Object.entries(changes).filter(([k, v]) => !seen.has(k) && v !== "");
-  if (added.length) {
-    while (out.length && out.at(-1) === "") out.pop();
-    out.push("", "# --- Set from the DM", ...added.map(([k, v]) => `${k}=${v}`));
-  }
-  return `${out.join("\n").replace(/\n*$/, "")}\n`;
+  return renderConfig(values);
 }
 
 export function currentSettings(text) {
-  const values = {};
-  for (const line of (text ?? "").split("\n")) {
-    const match = /^([A-Z0-9_]+)=(.*)$/.exec(line);
-    if (match && isSetting(match[1])) values[match[1]] = match[2];
-  }
-  return values;
+  return Object.fromEntries(Object.entries((parseConfig(text) ?? {})).filter(([k]) => isSetting(k)));
 }
 
 /** A diff for the operator: old and new, only the keys that change. */
@@ -146,28 +130,28 @@ export function settingsPreview(before, after) {
   const lines = [];
   for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
     if (a[k] === b[k]) continue;
-    if (a[k] !== undefined) lines.push(`- ${k}=${a[k]}`);
-    if (b[k] !== undefined) lines.push(`+ ${k}=${b[k]}`);
+    if (a[k] !== undefined) lines.push(`- ${k}: ${a[k]}`);
+    if (b[k] !== undefined) lines.push(`+ ${k}: ${b[k]}`);
   }
   return lines.join("\n");
 }
 
-export const readEnv = () => {
+export const readConfigText = () => {
   try {
-    return fs.readFileSync(envFile, "utf8");
+    return fs.readFileSync(configFile, "utf8");
   } catch {
-    return "";
+    return "{}";
   }
 };
 
-/** Write .env with a backup under state/ (never under agent/). */
-export function writeEnv(next) {
-  const dir = path.join(instanceDir, "state", "env-history");
+/** Write config.json with a backup under .history/ in the instance. */
+export function writeConfig(next) {
+  const dir = path.join(instanceDir, ".history");
   fs.mkdirSync(dir, { recursive: true });
-  const backup = path.join(dir, `.env.${new Date().toISOString().replace(/[:.]/g, "-")}`);
-  if (fs.existsSync(envFile)) fs.copyFileSync(envFile, backup);
-  else fs.writeFileSync(backup, "");
-  fs.writeFileSync(envFile, next, { mode: 0o600 });
+  const backup = path.join(dir, `config.json.${new Date().toISOString().replace(/[:.]/g, "-")}`);
+  if (fs.existsSync(configFile)) fs.copyFileSync(configFile, backup);
+  else fs.writeFileSync(backup, "{}\n");
+  fs.writeFileSync(configFile, next);
   return backup;
 }
 
@@ -178,16 +162,16 @@ export function serviceManaged() {
   return process.env.SERVICE_MANAGED === "1" || process.ppid === 1;
 }
 
-/** Drain and exit so the service restarts on the new .env. The caller has
- *  already told the operator. */
+/** Drain and exit so the service restarts on the new config.json. The
+ *  caller has already told the operator. */
 export function restartSoon({ delayMs = 1500 } = {}) {
   log.info("restart_requested", { reason: "settings changed by DM", managed: serviceManaged() });
   setTimeout(() => process.kill(process.pid, "SIGTERM"), delayMs).unref();
 }
 
-/** The current settings, for the DM to show. Secrets never appear here. */
+/** The current settings, for the DM to show. Secrets are not in this file. */
 export function describeSettings() {
-  const values = currentSettings(readEnv());
+  const values = currentSettings(readConfigText());
   const entries = directory();
   return Object.keys(SETTINGS)
     .concat(Object.keys(values).filter((k) => /^CHANNEL_/.test(k)))

@@ -14,7 +14,9 @@ import {
   channelEnvName,
   instanceDir,
   envFile,
+  configFile,
   envLoaded,
+  migrated,
 } from "./config.js";
 import { handleAsk, isThreadOf } from "./ask.js";
 import { handleReaction } from "./reactions.js";
@@ -139,9 +141,14 @@ client.once(Events.ClientReady, async (ready) => {
   log[envLoaded ? "info" : "warn"]("instance", {
     dir: instanceDir,
     env: envLoaded ? envFile : `${envFile} (not found; shell environment only)`,
+    config: configFile,
     agent: config.agentDir,
     state: state.STATE_PATH,
   });
+  if (migrated) {
+    log.info("config_migrated", { moved: migrated.moved.join(","), backup: migrated.backup });
+    await notify.notify("settings moved", `${migrated.moved.length} settings moved from .env to config.json (${migrated.moved.join(", ")}). .env now holds only the three secrets; the old one is backed up under state/env-history/.`, { fingerprint: "config_migrated" });
+  }
   for (const entry of provenance) {
     const shadowed = entry.source.startsWith("SHELL");
     log[shadowed ? "warn" : "info"]("config_resolved", {

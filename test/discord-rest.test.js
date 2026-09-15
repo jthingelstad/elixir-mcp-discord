@@ -15,7 +15,7 @@ import {
   channelLike,
 } from "../src/discord-rest.js";
 import { inspectChannel, requirementsFor } from "../src/permissions.js";
-import { renderEnv } from "../src/env-file.js";
+import { renderSecrets, renderConfig, parseConfig } from "../src/env-file.js";
 
 const VIEW = PermissionFlagsBits.ViewChannel;
 const SEND = PermissionFlagsBits.SendMessages;
@@ -93,21 +93,26 @@ test("the Message Content intent is read from the application's flags", () => {
   assert.equal(hasMessageContentIntent({ flags: ApplicationFlags.GatewayMessageContent }), true);
 });
 
-test("the written .env keeps every managed key in order and carries the rest", () => {
-  const text = renderEnv({
-    values: {
-      ELIXIR_MCP_URL: "https://x/a/1/mcp",
-      DAILY_USD_CAP: "5.00",
-      CHANNEL_PULSE: "2",
-      CHANNEL_ASK: "1",
-      COMMAND_PREFIX: "pk",
-    },
-    instanceDir: "/tmp/kings",
-  });
-  const keys = text.split("\n").filter((l) => /^[A-Z_]+=/.test(l)).map((l) => l.split("=")[0]);
-  assert.ok(keys.indexOf("CHANNEL_ASK") < keys.indexOf("CHANNEL_PULSE"), "channels sorted");
-  assert.ok(keys.indexOf("DAILY_USD_CAP") > keys.indexOf("ADMIN_USER_IDS"), "unmanaged keys carried at the end");
-  assert.ok(text.includes("COMMAND_PREFIX=pk"));
-  assert.ok(text.includes("DISCORD_BOT_TOKEN=\n"), "unset managed keys are written blank, not dropped");
-  assert.ok(text.startsWith("# elixir-mcp-discord instance: kings"));
+test(".env gets the secrets and nothing else; config.json gets everything else, sorted", () => {
+  const values = {
+    ELIXIR_MCP_URL: "https://x/a/1/mcp",
+    ELIXIR_MCP_TOKEN: "svt_secret",
+    DISCORD_BOT_TOKEN: "tok",
+    ANTHROPIC_API_KEY: "",
+    DAILY_USD_CAP: "5.00",
+    CHANNEL_PULSE: "2",
+    CHANNEL_ASK: "1",
+    COMMAND_PREFIX: "pk",
+    STATE_PATH: "state/other.json",
+    _note: "ignored",
+  };
+  const env = renderSecrets({ values, instanceDir: "/tmp/kings" });
+  assert.ok(env.startsWith("# elixir-mcp-discord instance: kings"));
+  assert.ok(env.includes("ELIXIR_MCP_TOKEN=svt_secret\n"));
+  assert.ok(env.includes("ANTHROPIC_API_KEY=\n"), "an unset secret is written blank, not dropped");
+  assert.ok(env.includes("STATE_PATH=state/other.json"), "a path override stays with the environment");
+  assert.doesNotMatch(env, /ELIXIR_MCP_URL|CHANNEL_|COMMAND_PREFIX|DAILY_USD_CAP/, "no setting in .env");
+  const cfg = parseConfig(renderConfig(values));
+  assert.deepEqual(cfg, { CHANNEL_ASK: "1", CHANNEL_PULSE: "2", COMMAND_PREFIX: "pk", DAILY_USD_CAP: "5.00", ELIXIR_MCP_URL: "https://x/a/1/mcp" });
+  assert.deepEqual(Object.keys(cfg), ["CHANNEL_ASK", "CHANNEL_PULSE", "COMMAND_PREFIX", "DAILY_USD_CAP", "ELIXIR_MCP_URL"], "sorted");
 });

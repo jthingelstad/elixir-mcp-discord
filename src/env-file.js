@@ -1,62 +1,65 @@
 /**
- * The .env setup writes: the same keys in the same order every time, commented
- * the same way, so two instances' files diff cleanly and a value that moved
- * sections is visible. Anything setup does not manage is carried over verbatim
- * at the bottom rather than dropped — a DAILY_USD_CAP someone set by hand is
- * not setup's to lose.
+ * The two files setup writes, rendered the same way every time so two
+ * instances diff cleanly:
+ *
+ *   .env          SECRETS ONLY — the Elixir key, the Discord token, the
+ *                 Claude key — plus, if someone set one, a path override
+ *                 (STATE_PATH, AGENT_DIR). Mode 0600, never versioned.
+ *   config.json   every other setting, flat, the same key names the docs
+ *                 use, sorted. Versioned with the instance, backed up under
+ *                 .history/, edited from the DM (src/settings.js).
+ *
+ * Pure functions: src/config.js uses them for the one-time migration of a
+ * pre-config.json instance, setup uses them to write.
  */
 
 import path from "node:path";
 
-export const MANAGED_KEYS = [
-  "ELIXIR_MCP_URL", "ELIXIR_MCP_TOKEN",
-  "DISCORD_APP_ID", "DISCORD_BOT_TOKEN", "DISCORD_GUILD_ID",
-  "ANTHROPIC_API_KEY", "CLAUDE_MODEL",
-  "COMMAND_PREFIX", "TIMEZONE", "MONTHLY_BUDGET_USD", "ASK_MONTHLY_BUDGET_USD",
-  "EVENT_POLL_SECONDS", "ADMIN_USER_IDS",
-];
+/** The three that belong in .env and nowhere else. */
+export const SECRET_KEYS = ["ELIXIR_MCP_TOKEN", "DISCORD_BOT_TOKEN", "ANTHROPIC_API_KEY"];
+
+/** Environment-only: where an instance is, and test switches. Never in config.json. */
+export const ENV_ONLY_KEYS = ["INSTANCE_DIR", "STATE_PATH", "AGENT_DIR", "LEDGER_DIR", "LEDGER_BODY_CHARS", "SERVICE_MANAGED", "PATH"];
+
+export const isSecret = (key) => SECRET_KEYS.includes(key);
+export const isEnvOnly = (key) => ENV_ONLY_KEYS.includes(key);
 
 export function isChannelKey(key) {
   return /^CHANNEL_[A-Z0-9_]+$/.test(key);
 }
 
-export function renderEnv({ values, instanceDir }) {
-  const channelKeys = Object.keys(values).filter(isChannelKey);
-  const carried = Object.entries(values).filter(
-    ([key]) => !MANAGED_KEYS.includes(key) && !isChannelKey(key),
-  );
-  const line = (key) => `${key}=${values[key] ?? ""}`;
+/** .env: secrets, and any path override, nothing else. */
+export function renderSecrets({ values, instanceDir }) {
   return [
     `# elixir-mcp-discord instance: ${path.basename(instanceDir)}`,
-    `# Written by npm run setup. Wiring only: what this bot says lives in ./agent.`,
-    `# Every value is THIS bot's own; nothing here is shared with another instance.`,
-    ``,
-    `# --- Elixir MCP: the agent's door (elixir.poapkings.com > Account > Agents)`,
-    line("ELIXIR_MCP_URL"),
-    line("ELIXIR_MCP_TOKEN"),
-    ``,
-    `# --- Discord: this bot's own application, invited with bot + applications.commands`,
-    line("DISCORD_APP_ID"),
-    line("DISCORD_BOT_TOKEN"),
-    line("DISCORD_GUILD_ID"),
-    ...channelKeys.sort().map(line),
-    `# Three bots on one server each register /run; the prefix keeps them apart.`,
-    line("COMMAND_PREFIX"),
-    ``,
-    `# --- Claude`,
-    line("ANTHROPIC_API_KEY"),
-    line("CLAUDE_MODEL"),
-    ``,
-    `# --- Budgets (strict, UTC months, per lane) and schedule`,
-    line("MONTHLY_BUDGET_USD"),
-    line("ASK_MONTHLY_BUDGET_USD"),
-    line("TIMEZONE"),
-    line("EVENT_POLL_SECONDS"),
-    line("ADMIN_USER_IDS"),
-    ...(carried.length
-      ? [``, `# --- Carried over from the previous .env`, ...carried.map(([key, value]) => `${key}=${value}`)]
-      : []),
-    ``,
+    `# Secrets only. Every other setting is in config.json (written by setup,`,
+    `# editable from the DM). A path override such as STATE_PATH may also go here.`,
+    ...SECRET_KEYS.map((k) => `${k}=${values[k] ?? ""}`),
+    ...Object.entries(values)
+      .filter(([k, v]) => isEnvOnly(k) && k !== "PATH" && k !== "INSTANCE_DIR" && String(v ?? "") !== "")
+      .map(([k, v]) => `${k}=${v}`),
+    "",
   ].join("\n");
 }
 
+/** config.json: every non-secret, non-path key with a value, sorted. */
+export function renderConfig(values) {
+  const keys = Object.keys(values)
+    .filter((k) => !isSecret(k) && !isEnvOnly(k) && !k.startsWith("_") && String(values[k] ?? "") !== "")
+    .sort();
+  return `${JSON.stringify(Object.fromEntries(keys.map((k) => [k, String(values[k])])), null, 2)}\n`;
+}
+
+/** The flat string map a config.json holds; `_`-prefixed keys are notes. */
+export function parseConfig(text) {
+  try {
+    const parsed = JSON.parse(text || "{}");
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter(([k, v]) => !k.startsWith("_") && v !== null && typeof v !== "object")
+        .map(([k, v]) => [k, String(v)]),
+    );
+  } catch {
+    return null;
+  }
+}

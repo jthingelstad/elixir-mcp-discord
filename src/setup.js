@@ -45,7 +45,7 @@ import { requirementsFor, inspectChannel } from "./permissions.js";
 import { inspectDiscord, permissionsIn, channelLike, inviteUrl, memberOf } from "./discord-rest.js";
 import { fromRest } from "./directory.js";
 import { channelEnvName } from "./config.js";
-import { renderEnv } from "./env-file.js";
+import { renderSecrets, renderConfig, parseConfig } from "./env-file.js";
 import {
   catalog,
   installRoutines,
@@ -245,10 +245,15 @@ for (const file of ["identity.md", "models.json"]) {
 }
 ok(`agent directory ${agentDir}`);
 
+const configFile = path.join(instanceDir, "config.json");
 const env = fs.existsSync(envFile) ? dotenv.parse(fs.readFileSync(envFile, "utf8")) : {};
-note(fs.existsSync(envFile) ? `existing .env loaded; Enter keeps each current value` : `no .env yet; one will be written at the end`);
+const cfg = fs.existsSync(configFile) ? parseConfig(fs.readFileSync(configFile, "utf8")) ?? {} : {};
+// .env holds the secrets, config.json everything else; a pre-config.json
+// .env still loads (the bot migrates it on its first boot, and so does the
+// write below: setup always writes the two files in their new shape).
+note(fs.existsSync(envFile) || fs.existsSync(configFile) ? `existing .env and config.json loaded; Enter keeps each current value` : `no .env or config.json yet; both will be written at the end`);
 
-const values = { ...env };
+const values = { ...env, ...cfg };
 const unresolved = [];
 
 /** Written after EVERY section, not just at the end: a cancelled run — or a
@@ -256,9 +261,10 @@ const unresolved = [];
  *  and the next run offers it back on Enter. */
 function save(section) {
   if (checkOnly) return;
-  fs.writeFileSync(envFile, renderEnv({ values, instanceDir }), { mode: 0o600 });
+  fs.writeFileSync(envFile, renderSecrets({ values, instanceDir }), { mode: 0o600 });
   fs.chmodSync(envFile, 0o600);
-  if (section) note(`saved ${section} to .env`);
+  fs.writeFileSync(configFile, renderConfig(values));
+  if (section) note(`saved ${section}`);
 }
 
 // --- 2. Elixir MCP ----------------------------------------------------------------
@@ -613,7 +619,7 @@ if (checkOnly) {
   note("--check: nothing written");
 } else {
   save();
-  ok(`wrote ${envFile}`);
+  ok(`wrote ${envFile} (secrets) and ${configFile} (settings)`);
 }
 
 // --- 11. Summary ------------------------------------------------------------------

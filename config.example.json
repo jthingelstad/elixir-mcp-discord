@@ -1,0 +1,47 @@
+{
+  "_about": "Every setting that is not a secret. Flat, same key names the docs use. Written by npm run setup; editable from the DM ('raise the ask budget to $15'), which shows the diff and restarts the bot to apply. Keys starting with _ are notes and ignored.",
+
+  "_wiring": "Reachable things. Setup checks each against its service. The DM cannot change these.",
+  "ELIXIR_MCP_URL": "https://elixir.poapkings.com/a/REPLACE_ME/mcp",
+  "DISCORD_APP_ID": "",
+  "DISCORD_GUILD_ID": "",
+
+  "_channels": "Where the bot LISTENS: the ask channel, where members' questions are answered in threads. Where it POSTS is not configured: every channel where its role is explicitly granted Send Messages is in its directory and the model chooses. A routine may name a default with channel:, bound here as CHANNEL_<NAME> or matched by channel name.",
+  "CHANNEL_ASK": "",
+
+  "_admins": "Discord user ids who may use the admin slash commands, DM the bot as its operator, and receive its notices and review proposals. Everything they do costs money, so this is an allow-list. Empty means no DMs go anywhere.",
+  "ADMIN_USER_IDS": "",
+
+  "_budgets": "Strict, UTC calendar months, per lane, nothing rolls over. A lane refuses to START a turn that could take it past the line, using the largest turn it has ever produced as the estimate. Unset means unlimited, which the boot log warns about.",
+  "MONTHLY_BUDGET_USD": "20.00",
+  "ASK_MONTHLY_BUDGET_USD": "10.00",
+  "_TURN_RESERVE_USD": "What one turn is assumed to cost before this install has seen one. Default 0.30.",
+  "_DAILY_USD_CAP": "An extra ceiling on top of the monthly budgets. Unset means none.",
+
+  "_claude": "Your choice of model, for every routine that does not name its own; a routine can override both in its front matter. The model must have a price in agent/models.json or the shipped catalog, or the bot refuses to boot.",
+  "CLAUDE_MODEL": "claude-sonnet-5",
+  "CLAUDE_EFFORT": "medium",
+  "_CLAUDE_MAX_TOKENS": "Default 8000.",
+
+  "_schedule": "Schedules in agent/routines/*.md are written in THIS zone (IANA, e.g. America/Chicago); '22:00' means your evening, DST included.",
+  "TIMEZONE": "UTC",
+
+  "_feed": "How often the timeline is read. Every poll is a metered call and the feed is empty most of the time; 1800 is the hub's own advice, 300 posts joins within minutes.",
+  "EVENT_POLL_SECONDS": "1800",
+
+  "_commands": "Three bots on one server each register /run; a prefix keeps them apart (/pk-run).",
+  "COMMAND_PREFIX": "",
+
+  "_review": "The review lane: once a week (REVIEW_AT) and on /review the bot reads its own turn ledger, grades what it said, and DMs the admins at most REVIEW_MAX_PROPOSALS proposed edits to agent/ with Apply buttons. Its own model, budget and clock. REVIEW_AUTO_MEMORY lets it write memory.md without a click (never identity.md, never a brief).",
+  "REVIEW": "off",
+  "REVIEW_MODEL": "claude-opus-5",
+  "REVIEW_EFFORT": "high",
+  "REVIEW_MONTHLY_BUDGET_USD": "10.00",
+  "REVIEW_AT": "sun 20:00",
+  "REVIEW_AUTO_MEMORY": "false",
+  "REVIEW_MAX_PROPOSALS": "3",
+
+  "_misc": "FEEDBACK_CHANNEL: logical channel for Elixir's replies to filed feedback (default: the first event routine's channel, else the first in the directory). MAX_POSTS_PER_TURN: how many post_message calls one routine turn may make (3). STARTUP_MESSAGE: the one-line hello on boot (on). ROUTINES_DISABLED: comma-separated keys kept off; a routine's own enabled: false does the same.",
+  "STARTUP_MESSAGE": "on",
+  "MAX_POSTS_PER_TURN": "3"
+}

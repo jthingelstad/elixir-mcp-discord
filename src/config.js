@@ -1,12 +1,22 @@
 /**
- * Configuration: environment for the WIRING, files for the CONTENT.
+ * Configuration: `.env` for SECRETS, `config.json` for SETTINGS, `agent/` for
+ * CONTENT.
  *
- * That split is the whole shape of this project. Everything in here is about
- * how to reach things — credentials, channel ids, a timezone, a spend cap.
- * Nothing in here is about a clan, and nothing in here is a prompt. What the
- * agent says and when it says it lives in `agent/` as text an operator owns,
- * so installing this for a different clan is a token, some channel ids, and
- * whatever prompts you want. There is no code to fork.
+ * That split is the whole shape of this project. `.env` holds exactly three
+ * things — the Elixir key, the Discord token, the Claude key — and nothing
+ * else, so it is the one file that is never versioned, never backed up
+ * beside a prompt, never shown in a diff. `config.json` holds every other
+ * knob (same key names, flat), which is why it CAN be versioned with the
+ * instance, backed up under `.history/`, and edited from the DM with a
+ * diff the operator reads. Nothing in either is about a clan, and nothing
+ * is a prompt: what the agent says and when lives in `agent/` as text.
+ *
+ * Until 2026-09-15 everything was in `.env`. An instance from before is
+ * migrated the first time this code loads it: the non-secret keys move to
+ * `config.json` and `.env` is rewritten to the secrets (backup under
+ * `state/env-history/`). Paths and test switches (INSTANCE_DIR, STATE_PATH,
+ * AGENT_DIR, LEDGER_DIR, SERVICE_MANAGED) stay environment: they say where
+ * an instance IS, and belong to whoever starts the process.
  *
  * THERE IS NO CLAN_TAG. There used to be, and removing it is the point of the
  * agent model: an Elixir MCP agent key already knows the clan it acts for, and
@@ -20,9 +30,13 @@
  * your first run.
  */
 
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
+import { SECRET_KEYS, ENV_ONLY_KEYS, isSecret, isEnvOnly, renderSecrets, renderConfig, parseConfig } from "./env-file.js";
+
+export { SECRET_KEYS, ENV_ONLY_KEYS, renderConfig };
 
 export const repoRoot = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -51,8 +65,53 @@ export const repoRoot = path.join(
  */
 export const instanceDir = path.resolve(process.env.INSTANCE_DIR || process.cwd());
 export const envFile = path.join(instanceDir, ".env");
+export const configFile = path.join(instanceDir, "config.json");
+
 const loaded = dotenv.config({ path: envFile, quiet: true });
 export const envLoaded = Boolean(loaded.parsed);
+
+export function readConfigFile(file = configFile) {
+  try {
+    return parseConfig(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ONE-TIME MIGRATION of a pre-config.json instance: everything in .env that
+ * is not a secret or a path moves to config.json, and .env is rewritten to
+ * what belongs there. A backup of the old .env goes under state/, which is
+ * gitignored; nothing is lost, nothing is duplicated afterwards.
+ */
+export function migrateEnvToConfig({ parsed = loaded.parsed, env = envFile, cfg = configFile, dir = instanceDir } = {}) {
+  if (!parsed || fs.existsSync(cfg)) return null;
+  const moved = Object.fromEntries(Object.entries(parsed).filter(([k]) => !isSecret(k) && !isEnvOnly(k)));
+  if (Object.keys(moved).length === 0) return null;
+  const history = path.join(dir, "state", "env-history");
+  fs.mkdirSync(history, { recursive: true });
+  const backup = path.join(history, `.env.${new Date().toISOString().replace(/[:.]/g, "-")}.pre-config`);
+  fs.copyFileSync(env, backup);
+  fs.writeFileSync(cfg, renderConfig(moved));
+  fs.writeFileSync(env, renderSecrets({ values: parsed, instanceDir: dir }), { mode: 0o600 });
+  return { moved: Object.keys(moved).sort(), backup };
+}
+
+export const migrated = migrateEnvToConfig();
+const settings = readConfigFile() || {};
+
+/**
+ * Where a value comes from. Secrets and paths: the environment (the shell,
+ * or .env through dotenv). Everything else: config.json first, then the
+ * environment as a fallback — for tests, and for a shell override somebody
+ * means. The old trap of a shell CLAUDE_EFFORT silently outranking the file
+ * is gone: config.json wins when it names the key.
+ */
+export function lookup(name) {
+  if (isSecret(name) || isEnvOnly(name)) return (process.env[name] || "").trim();
+  if (Object.hasOwn(settings, name)) return settings[name].trim();
+  return (process.env[name] || "").trim();
+}
 
 /**
  * Where each optional value actually came from.
@@ -67,35 +126,36 @@ export const envLoaded = Boolean(loaded.parsed);
 export const provenance = [];
 
 function tracked(name, fallback) {
+  const fromConfig = Object.hasOwn(settings, name) ? settings[name].trim() : "";
   const fromEnv = (process.env[name] || "").trim();
   const fromFile = (loaded.parsed?.[name] || "").trim();
   let source = "default";
-  if (fromEnv && fromFile && fromEnv !== fromFile)
-    source = "SHELL (shadows .env)";
-  else if (fromEnv && fromFile) source = ".env";
+  if (fromConfig) source = fromEnv && fromEnv !== fromConfig ? "config.json (shell differs, ignored)" : "config.json";
+  else if (fromEnv && fromFile && fromEnv !== fromFile) source = "SHELL (shadows .env)";
+  else if (fromEnv && fromFile) source = ".env (legacy; belongs in config.json)";
   else if (fromEnv) source = "shell";
-  provenance.push({ name, value: fromEnv || fallback, source });
-  return fromEnv || fallback;
+  const value = fromConfig || fromEnv || fallback;
+  provenance.push({ name, value, source });
+  return value;
 }
 
 function required(name) {
-  const value = (process.env[name] || "").trim();
+  const value = lookup(name);
   if (!value) {
     throw new Error(
-      `Missing ${name}: no usable .env in ${instanceDir}. Run \`npm run setup -- <instance-dir>\`, then \`INSTANCE_DIR=<instance-dir> npm run ...\`.`,
+      `Missing ${name}: no usable ${isSecret(name) ? ".env" : "config.json"} in ${instanceDir}. Run \`npm run setup -- <instance-dir>\`, then \`INSTANCE_DIR=<instance-dir> npm run ...\`.`,
     );
   }
   return value;
 }
 
 function optional(name, fallback) {
-  const value = (process.env[name] || "").trim();
-  return value || fallback;
+  return lookup(name) || fallback;
 }
 
 function list(name) {
   return new Set(
-    (process.env[name] || "")
+    lookup(name)
       .split(",")
       .map((entry) => entry.trim())
       .filter(Boolean),
@@ -128,7 +188,7 @@ export function channelEnvName(name) {
   return `CHANNEL_${name.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
 }
 
-export function readChannels(env = process.env) {
+export function readChannels(env = { ...process.env, ...settings }) {
   const channels = new Map();
   for (const [key, value] of Object.entries(env)) {
     const match = /^CHANNEL_([A-Z0-9_]+)$/.exec(key);
@@ -188,12 +248,8 @@ export const config = {
   // routines you wrote), and ASK_MONTHLY_BUDGET_USD is what clan members ask
   // for. One pot means a chatty afternoon quietly cancels tomorrow's war-deck
   // nudge and the only symptom is silence.
-  monthlyBudgetUsd: process.env.MONTHLY_BUDGET_USD
-    ? Number(process.env.MONTHLY_BUDGET_USD)
-    : null,
-  askMonthlyBudgetUsd: process.env.ASK_MONTHLY_BUDGET_USD
-    ? Number(process.env.ASK_MONTHLY_BUDGET_USD)
-    : null,
+  monthlyBudgetUsd: lookup("MONTHLY_BUDGET_USD") ? Number(lookup("MONTHLY_BUDGET_USD")) : null,
+  askMonthlyBudgetUsd: lookup("ASK_MONTHLY_BUDGET_USD") ? Number(lookup("ASK_MONTHLY_BUDGET_USD")) : null,
   // What a single turn is assumed to cost before we have seen one. A lane
   // refuses to start a turn that could take it past its budget, and this is
   // the floor for that estimate; the real figure climbs to the largest turn
@@ -202,9 +258,7 @@ export const config = {
 
   // Soft guard on top of the monthly budgets: the process stops answering once
   // the day's measured spend crosses this. Unset means no daily cap.
-  dailyUsdCap: process.env.DAILY_USD_CAP
-    ? Number(process.env.DAILY_USD_CAP)
-    : null,
+  dailyUsdCap: lookup("DAILY_USD_CAP") ? Number(lookup("DAILY_USD_CAP")) : null,
   // Where the prompts live: `agent/` in the instance directory. Relative paths
   // resolve against the cwd, not the checkout — see instanceDir above.
   agentDir: path.resolve(instanceDir, optional("AGENT_DIR", "agent")),
@@ -242,9 +296,7 @@ export const config = {
     enabled: optional("REVIEW", "off").toLowerCase() === "on",
     model: tracked("REVIEW_MODEL", "claude-opus-5"),
     effort: tracked("REVIEW_EFFORT", "high"),
-    monthlyBudgetUsd: process.env.REVIEW_MONTHLY_BUDGET_USD
-      ? Number(process.env.REVIEW_MONTHLY_BUDGET_USD)
-      : null,
+    monthlyBudgetUsd: lookup("REVIEW_MONTHLY_BUDGET_USD") ? Number(lookup("REVIEW_MONTHLY_BUDGET_USD")) : null,
     // "sun 20:00" — weekday (or "daily") and wall time. Weekly is the shape
     // this was designed for: enough turns to see a pattern, few enough
     // proposals to read.
