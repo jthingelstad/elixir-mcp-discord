@@ -2,14 +2,15 @@
  * Configuration: `.env` for SECRETS, `config.json` for SETTINGS, `agent/` for
  * CONTENT.
  *
- * That split is the whole shape of this project. `.env` holds exactly three
- * things — the Elixir key, the Discord token, the Claude key — and nothing
- * else, so it is the one file that is never versioned, never backed up
- * beside a prompt, never shown in a diff. `config.json` holds every other
- * knob (same key names, flat), which is why it CAN be versioned with the
- * instance, backed up under `.history/`, and edited from the DM with a
- * diff the operator reads. Nothing in either is about a clan, and nothing
- * is a prompt: what the agent says and when lives in `agent/` as text.
+ * That split is the whole shape of this project. `.env` holds what the bot
+ * may not change about itself — the three secrets and the three wiring ids
+ * (the Elixir door, the Discord application, the server) — so it is the
+ * one file that is never versioned, never backed up beside a prompt, never
+ * shown in a diff. `config.json` holds every other knob (same key names,
+ * flat): what the DM may change, which is why it CAN be versioned with the
+ * instance, backed up under `.history/`, and edited with a diff the
+ * operator reads. Nothing in either is about a clan, and nothing is a
+ * prompt: what the agent says and when lives in `agent/` as text.
  *
  * Until 2026-09-15 everything was in `.env`. An instance from before is
  * migrated the first time this code loads it: the non-secret keys move to
@@ -34,9 +35,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
-import { SECRET_KEYS, ENV_ONLY_KEYS, isSecret, isEnvOnly, renderSecrets, renderConfig, parseConfig } from "./env-file.js";
+import { SECRET_KEYS, WIRING_KEYS, ENV_FILE_KEYS, ENV_ONLY_KEYS, isSecret, isEnvFile, isEnvOnly, renderSecrets, renderConfig, parseConfig } from "./env-file.js";
 
-export { SECRET_KEYS, ENV_ONLY_KEYS, renderConfig };
+export { SECRET_KEYS, WIRING_KEYS, ENV_FILE_KEYS, ENV_ONLY_KEYS, renderConfig };
 
 export const repoRoot = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -85,16 +86,38 @@ export function readConfigFile(file = configFile) {
  * gitignored; nothing is lost, nothing is duplicated afterwards.
  */
 export function migrateEnvToConfig({ parsed = loaded.parsed, env = envFile, cfg = configFile, dir = instanceDir } = {}) {
-  if (!parsed || fs.existsSync(cfg)) return null;
-  const moved = Object.fromEntries(Object.entries(parsed).filter(([k]) => !isSecret(k) && !isEnvOnly(k)));
-  if (Object.keys(moved).length === 0) return null;
+  if (!parsed) return null;
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const history = path.join(dir, "state", "env-history");
+  const existing = fs.existsSync(cfg) ? parseConfig(fs.readFileSync(cfg, "utf8")) ?? {} : null;
+
+  if (existing === null) {
+    // First time: settings out of .env into a new config.json.
+    const moved = Object.fromEntries(Object.entries(parsed).filter(([k]) => !isEnvFile(k) && !isEnvOnly(k)));
+    if (Object.keys(moved).length === 0) return null;
+    fs.mkdirSync(history, { recursive: true });
+    const backup = path.join(history, `.env.${stamp}.pre-config`);
+    fs.copyFileSync(env, backup);
+    fs.writeFileSync(cfg, renderConfig(moved));
+    fs.writeFileSync(env, renderSecrets({ values: parsed, instanceDir: dir }), { mode: 0o600 });
+    return { moved: Object.keys(moved).sort(), backup };
+  }
+
+  // A config.json from the day it briefly held the wiring ids: those go
+  // back to .env, where what the bot may not change belongs.
+  const back = Object.fromEntries(Object.entries(existing).filter(([k]) => isEnvFile(k)));
+  if (Object.keys(back).length === 0) return null;
   fs.mkdirSync(history, { recursive: true });
-  const backup = path.join(history, `.env.${new Date().toISOString().replace(/[:.]/g, "-")}.pre-config`);
+  const backup = path.join(history, `.env.${stamp}.pre-wiring`);
   fs.copyFileSync(env, backup);
-  fs.writeFileSync(cfg, renderConfig(moved));
-  fs.writeFileSync(env, renderSecrets({ values: parsed, instanceDir: dir }), { mode: 0o600 });
-  return { moved: Object.keys(moved).sort(), backup };
+  const dot = path.join(dir, ".history");
+  fs.mkdirSync(dot, { recursive: true });
+  fs.copyFileSync(cfg, path.join(dot, `config.json.${stamp}`));
+  const merged = { ...parsed, ...back };
+  fs.writeFileSync(env, renderSecrets({ values: merged, instanceDir: dir }), { mode: 0o600 });
+  fs.writeFileSync(cfg, renderConfig(existing));
+  for (const [k, v] of Object.entries(back)) if (!process.env[k]) process.env[k] = v;
+  return { movedBack: Object.keys(back).sort(), backup };
 }
 
 export const migrated = migrateEnvToConfig();
@@ -108,7 +131,7 @@ const settings = readConfigFile() || {};
  * is gone: config.json wins when it names the key.
  */
 export function lookup(name) {
-  if (isSecret(name) || isEnvOnly(name)) return (process.env[name] || "").trim();
+  if (isEnvFile(name) || isEnvOnly(name)) return (process.env[name] || "").trim();
   if (Object.hasOwn(settings, name)) return settings[name].trim();
   return (process.env[name] || "").trim();
 }
@@ -143,7 +166,7 @@ function required(name) {
   const value = lookup(name);
   if (!value) {
     throw new Error(
-      `Missing ${name}: no usable ${isSecret(name) ? ".env" : "config.json"} in ${instanceDir}. Run \`npm run setup -- <instance-dir>\`, then \`INSTANCE_DIR=<instance-dir> npm run ...\`.`,
+      `Missing ${name}: no usable ${isEnvFile(name) ? ".env" : "config.json"} in ${instanceDir}. Run \`npm run setup -- <instance-dir>\`, then \`INSTANCE_DIR=<instance-dir> npm run ...\`.`,
     );
   }
   return value;

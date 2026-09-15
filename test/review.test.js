@@ -484,13 +484,13 @@ test("apply of a create writes the file and seeds its period; undo removes it; d
 // ------------------------------------------------- settings (.env by DM)
 
 test("a setting is checked like setup checks it, previewed as a diff, and only the operator may change one", () => {
-  const cfg = JSON.stringify({ MONTHLY_BUDGET_USD: "20.00", TIMEZONE: "UTC", ELIXIR_MCP_URL: "https://elixir.example.com/a/x/mcp" }, null, 2);
+  const cfg = JSON.stringify({ MONTHLY_BUDGET_USD: "20.00", TIMEZONE: "UTC" }, null, 2);
   const ok = planEdit({ file: "config.json", edit: { op: "set_config", by: "owner", fields: { ASK_MONTHLY_BUDGET_USD: "15", TIMEZONE: "America/Chicago", MONTHLY_BUDGET_USD: "25.00" } }, current: cfg, by: "9" });
   assert.equal(ok.ok, true);
   assert.equal(ok.settings, true);
-  assert.deepEqual(JSON.parse(ok.next), { ASK_MONTHLY_BUDGET_USD: "15", ELIXIR_MCP_URL: "https://elixir.example.com/a/x/mcp", MONTHLY_BUDGET_USD: "25.00", TIMEZONE: "America/Chicago" });
+  assert.deepEqual(JSON.parse(ok.next), { ASK_MONTHLY_BUDGET_USD: "15", MONTHLY_BUDGET_USD: "25.00", TIMEZONE: "America/Chicago" });
   assert.equal(ok.preview, "- MONTHLY_BUDGET_USD: 20.00\n+ MONTHLY_BUDGET_USD: 25.00\n- TIMEZONE: UTC\n+ TIMEZONE: America/Chicago\n+ ASK_MONTHLY_BUDGET_USD: 15");
-  assert.match(planEdit({ file: "config.json", edit: { op: "set_config", by: "owner", fields: { ELIXIR_MCP_URL: "x" } }, current: cfg, by: "9" }).error, /not a setting the DM may change/, "wiring is in the file but not on the allowlist");
+  assert.match(planEdit({ file: "config.json", edit: { op: "set_config", by: "owner", fields: { ELIXIR_MCP_URL: "x" } }, current: cfg, by: "9" }).error, /not a setting the DM may change/, "wiring lives in .env and is not a setting");
   assert.match(planEdit({ file: "config.json", edit: { op: "set_config", by: "owner", fields: { ANTHROPIC_API_KEY: "x" } }, current: cfg, by: "9" }).error, /not a setting/);
   assert.match(planEdit({ file: "config.json", edit: { op: "set_config", by: "owner", fields: { REVIEW_AT: "sometime" } }, current: cfg, by: "9" }).error, /REVIEW_AT/);
   assert.match(planEdit({ file: "config.json", edit: { op: "set_config", by: "owner", fields: { CLAUDE_MODEL: "claude-9" } }, current: cfg, by: "9" }).error, /price|priced|claude-9/i);

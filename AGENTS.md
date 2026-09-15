@@ -93,18 +93,23 @@ are gitignored. Check `git ls-files` before assuming something is untracked. Sin
 The **instance is a directory** — the cwd, or `INSTANCE_DIR`. `.env`,
 `config.json`, `agent/` and `state/` resolve against it, never against the
 checkout (`instanceDir` in `src/config.js`, `STATE_PATH` in `src/state.js`).
-**Since 2026-09-15 `.env` holds only the three secrets** (`SECRET_KEYS` in
-`src/env-file.js`: the Elixir key, the Discord token, the Claude key) and
-`config.json` holds every other setting, flat, the same key names as
-before — so it can be versioned with the instance, backed up under
-`.history/` and edited from the DM with a diff. `lookup()` in `config.js`
-reads secrets and path overrides from the environment and everything else
-from `config.json` first, environment second (tests and deliberate shell
-overrides); a shell `CLAUDE_EFFORT` no longer silently outranks the file.
-A pre-`config.json` instance is migrated on its first boot by
-`migrateEnvToConfig`: settings out, `.env` rewritten to secrets, the old
-copy under `state/env-history/`, one `config_migrated` log line and a DM.
-`config.example.json` documents every key; `.env.example` the secrets. The live instances are
+**Since 2026-09-15 `.env` holds what the bot may not change about itself**
+— `ENV_FILE_KEYS` in `src/env-file.js`: the three secrets and the three
+wiring ids (`ELIXIR_MCP_URL`, `DISCORD_APP_ID`, `DISCORD_GUILD_ID`) — and
+`config.json` holds every setting it may change, flat, the same key names
+as before, so it can be versioned with the instance, backed up under
+`.history/` and edited from the DM with a diff. That is the rule for which
+file a key goes in ("if it isn't editable it belongs in .env" — Jamie),
+not secrecy: the ids briefly sat in `config.json` and were moved back the
+same day. `lookup()` in `config.js` reads `.env`'s keys and path overrides
+from the environment and everything else from `config.json` first,
+environment second (tests and deliberate shell overrides); a shell
+`CLAUDE_EFFORT` no longer silently outranks the file. A pre-`config.json`
+instance is migrated on its first boot by `migrateEnvToConfig` (settings
+out, `.env` rewritten, the old copy under `state/env-history/`, a
+`config_migrated` log line and a DM); a `config.json` from the wiring day
+has the ids moved back the same way (`wiring_moved_back`).
+`config.example.json` documents every setting; `.env.example` the rest. The live instances are
 
     ~/.elixir-mcp-discord/poapkings/     POAP KINGS   /pk-*   com.poapkings.elixir-mcp-discord.poapkings
     ~/.elixir-mcp-discord/shipit/        Ship It!     /si-*   com.poapkings.elixir-mcp-discord.shipit
@@ -269,10 +274,9 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
   {KEY: value}` on an ALLOWLIST (`SETTINGS`: budgets, `CLAUDE_*`,
   `REVIEW_*`, `TIMEZONE`, `EVENT_POLL_SECONDS`, `STARTUP_MESSAGE`,
   `MAX_POSTS_PER_TURN`, `COMMAND_PREFIX`, `FEEDBACK_CHANNEL`,
-  `ADMIN_USER_IDS`, plus `CHANNEL_*` resolved against the directory) — the
-  wiring keys that also live in `config.json` (`ELIXIR_MCP_URL`,
-  `DISCORD_APP_ID`, `DISCORD_GUILD_ID`) are not on it, and secrets are not
-  in the file at all. Each value is checked the way setup checks it
+  `ADMIN_USER_IDS`, plus `CHANNEL_*` resolved against the directory) —
+  which is every key `config.json` holds; secrets and wiring are in
+  `.env`, which the DM cannot reach. Each value is checked the way setup checks it
   (`checkSetting`: a priced model, an IANA zone, numbers, `parseReviewAt`;
   an admin may not remove themselves). `withSettings` changes only the
   named keys; the preview is the diff. Apply writes `config.json` with a

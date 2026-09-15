@@ -145,9 +145,11 @@ client.once(Events.ClientReady, async (ready) => {
     agent: config.agentDir,
     state: state.STATE_PATH,
   });
-  if (migrated) {
+  if (migrated?.moved) {
     log.info("config_migrated", { moved: migrated.moved.join(","), backup: migrated.backup });
-    await notify.notify("settings moved", `${migrated.moved.length} settings moved from .env to config.json (${migrated.moved.join(", ")}). .env now holds only the three secrets; the old one is backed up under state/env-history/.`, { fingerprint: "config_migrated" });
+    await notify.notify("settings moved", `${migrated.moved.length} settings moved from .env to config.json (${migrated.moved.join(", ")}). .env now holds the secrets and the wiring; the old one is backed up under state/env-history/.`, { fingerprint: "config_migrated" });
+  } else if (migrated?.movedBack) {
+    log.info("wiring_moved_back", { keys: migrated.movedBack.join(","), backup: migrated.backup });
   }
   for (const entry of provenance) {
     const shadowed = entry.source.startsWith("SHELL");

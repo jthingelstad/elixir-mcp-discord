@@ -111,8 +111,10 @@ test(".env gets the secrets and nothing else; config.json gets everything else, 
   assert.ok(env.includes("ELIXIR_MCP_TOKEN=svt_secret\n"));
   assert.ok(env.includes("ANTHROPIC_API_KEY=\n"), "an unset secret is written blank, not dropped");
   assert.ok(env.includes("STATE_PATH=state/other.json"), "a path override stays with the environment");
-  assert.doesNotMatch(env, /ELIXIR_MCP_URL|CHANNEL_|COMMAND_PREFIX|DAILY_USD_CAP/, "no setting in .env");
+  assert.ok(env.includes("ELIXIR_MCP_URL=https://x/a/1/mcp"), "wiring the bot may not change is .env's");
+  assert.ok(env.includes("DISCORD_GUILD_ID=\n"), "unset wiring is written blank");
+  assert.doesNotMatch(env, /CHANNEL_|COMMAND_PREFIX|DAILY_USD_CAP/, "no setting in .env");
   const cfg = parseConfig(renderConfig(values));
-  assert.deepEqual(cfg, { CHANNEL_ASK: "1", CHANNEL_PULSE: "2", COMMAND_PREFIX: "pk", DAILY_USD_CAP: "5.00", ELIXIR_MCP_URL: "https://x/a/1/mcp" });
-  assert.deepEqual(Object.keys(cfg), ["CHANNEL_ASK", "CHANNEL_PULSE", "COMMAND_PREFIX", "DAILY_USD_CAP", "ELIXIR_MCP_URL"], "sorted");
+  assert.deepEqual(cfg, { CHANNEL_ASK: "1", CHANNEL_PULSE: "2", COMMAND_PREFIX: "pk", DAILY_USD_CAP: "5.00" });
+  assert.deepEqual(Object.keys(cfg), ["CHANNEL_ASK", "CHANNEL_PULSE", "COMMAND_PREFIX", "DAILY_USD_CAP"], "sorted");
 });

@@ -136,9 +136,10 @@ Re-running keeps every value on Enter, so it is also how you rotate one key,
 move one channel, add a routine or change a time. `--check` runs the same
 validation with no prompts and writes nothing.
 
-Two files come out of it. **`.env` holds the three secrets and nothing
-else**; **`config.json` holds every other setting** — the same key names,
-flat, documented in `config.example.json`. That split is what lets an
+Two files come out of it. **`.env` holds what the bot may not change
+about itself** — the three secrets and the three wiring ids — and
+**`config.json` holds every setting it may** — the same key names, flat,
+documented in `config.example.json`. That split is what lets an
 instance directory be a git repository (`.env` and `state/` ignored,
 `config.json` and `agent/` committed), keeps `config.json` in `.history/`
 beside your prompts, and lets the DM change a setting with a diff you read.
@@ -231,9 +232,9 @@ nobody else sees it, and anyone else who DMs it gets one polite line:
   Saturday at 9", "use opus by default", "add @Levy as an admin", "move
   questions to #ask-bot". Each is checked the way setup checks it and shown
   as a diff; Apply rewrites `config.json` and the bot restarts itself
-  (under launchd or systemd) to pick it up. Keys and tokens live in `.env`
-  and the Elixir URL and server ids are wiring — none of those can be
-  changed this way. `settings` shows the current values.
+  (under launchd or systemd) to pick it up. Keys, tokens and the wiring
+  ids live in `.env`, which it cannot reach. `settings` shows the current
+  values.
 - **Try before posting.** `try notable-movers` runs the routine and shows
   you the post without sending it; `post it` sends it.
 - **Ask it anything** about the record, on your own behalf, without
