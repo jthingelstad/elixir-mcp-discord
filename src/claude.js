@@ -315,6 +315,11 @@ export async function ask({
   let text = "";
   let rounds = 0;
   let stopReason = null;
+  // A server tool that runs code (web_fetch's dynamic filtering does)
+  // allocates a container, and every later request in the same turn must
+  // name it or the API refuses with "container_id is required". Observed
+  // 2026-09-15 on the first DM that fetched a page and proposed an edit.
+  let container = null;
 
   for (let round = 0; round < maxRounds; round += 1) {
     rounds = round + 1;
@@ -330,6 +335,7 @@ export async function ask({
         messages: history,
         mcp_servers: mcpServers,
         tools: toolsFor(localTools, serverTools),
+        ...(container ? { container } : {}),
         // "omitted" is the default on Sonnet 5 and returns empty thinking
         // blocks. We show our work in-channel, so ask for the summary.
         thinking: { type: "adaptive", display: "summarized" },
@@ -386,6 +392,7 @@ export async function ask({
       };
     }
 
+    if (response.container?.id) container = response.container.id;
     const usd = costOf(model, response.usage);
     usdTotal += usd;
     usage = addUsage(usage, response.usage);
