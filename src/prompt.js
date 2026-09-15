@@ -128,7 +128,12 @@ whole name and one match.
 
 You do not otherwise know who anyone here is, and you have no local nickname
 table. Asking for a tag when the name does not resolve is the honest answer,
-not a failure.`;
+not a failure.
+
+A pasted deck link (link.clashroyale.com/deck/... or clashroyale://copyDeck)
+carries the deck in the URL: call deck_link to read the eight cards and the
+tower troop, then use the record to say anything about it. A link never
+says which cards are evolved.`;
 
 const RECALL_HEADER = `WHAT THIS ROUTINE POSTED RECENTLY, newest first. Do not repeat these, and do
 not re-report the same players or the same angle unless something genuinely

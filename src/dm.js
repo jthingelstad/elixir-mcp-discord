@@ -49,6 +49,12 @@ import { renderTurn } from "./turns.js";
 import { budgetReply, routinesReply } from "./commands.js";
 import { FIELDS, splitFrontMatter } from "./routines.js";
 import { SETTINGS, readConfigText, describeSettings, serviceManaged } from "./settings.js";
+import { estimateMonthly } from "./setup-catalog.js";
+import { parseRoutine } from "./routines.js";
+import { buildId } from "./build.js";
+import { callTool } from "./mcp.js";
+import * as budget from "./budget.js";
+import { deckLinkTool } from "./deck-link.js";
 import { planEdit, proposalMessage, toComponents, readAgentFiles } from "./review.js";
 import { isConversational } from "./ask.js";
 import { turnRecord } from "./run.js";
@@ -127,6 +133,14 @@ Every proposal is checked the way the bot loads the file; a refusal tells
 you what the parser said — fix it or tell them. Nothing changes until they
 press Apply; after that it is live on the next tick, no restart. They can
 say "try <key>" to rehearse it.
+
+ASK HOW YOU ARE DOING: call status — budgets, turns, the review, cursors.
+Say the numbers plainly.
+
+ASK WHAT HAPPENED: search_turns finds your earlier turns by text, lane,
+routine and date ("did anyone ask about war decks this week?"); lookup_turn
+shows one in full. estimate_cost says what a routine would cost before you
+propose creating it — include that in the summary.
 
 ASK WHY YOU SAID SOMETHING. Call lookup_turn with the turn id they gave (the
 footer under every answer shows it). Say what the trace shows, plainly —
@@ -316,6 +330,27 @@ async function postDraft(message, { postFn = post } = {}) {
   log.info("dm_posted_draft", { user: message.author.id, routine: routine.key, posts: posted.length });
 }
 
+/** What this bot has filed with Elixir's maintainer, and the answers. */
+async function showFeedback(message) {
+  const result = await callTool("elixir_my_feedback", {});
+  if (!result.ok) {
+    await send(message, `Could not read the feedback ledger: ${result.error}`);
+    return;
+  }
+  const items = result.body?.items || result.body?.feedback || [];
+  if (items.length === 0) {
+    await send(message, "Nothing filed yet.");
+    return;
+  }
+  const lines = items.slice(0, 12).map((item) => {
+    const id = item.feedback_id ?? item.id;
+    const response = item.response ?? item.maintainer_response;
+    const when = String(item.created_at ?? item.filed_at ?? "").slice(0, 10);
+    return `**#${id}** ${when} · ${item.category ?? ""} · ${item.status ?? (response ? "answered" : "open")}\n> ${String(item.message ?? "").slice(0, 240).replace(/\n/g, " ")}${response ? `\n↳ ${String(response).slice(0, 300).replace(/\n/g, " ")}` : ""}`;
+  });
+  await send(message, `**Feedback** (${items.length} filed; newest ${Math.min(12, items.length)} shown)\n\n${lines.join("\n\n")}`);
+}
+
 async function showMemory(message) {
   const files = readAgentFiles();
   const raw = files["memory.md"];
@@ -454,6 +489,95 @@ function channelsTool() {
   };
 }
 
+/** Everything an operator asks "how are you doing?" about, as data. */
+export function statusReport() {
+  const today = new Date().toISOString().slice(0, 10);
+  const turns = ledger.readTurns({ since: new Date(Date.now() - 7 * DAY_MS).toISOString().slice(0, 10) });
+  const lastBy = {};
+  for (const t of turns) if (!lastBy[t.lane] || t.at > lastBy[t.lane].at) lastBy[t.lane] = { at: t.at, routine: t.routine, turnId: t.turnId };
+  const cursors = state.get("cursors") || {};
+  const reviews = ledger.readReviews({ since: new Date(Date.now() - 90 * DAY_MS).toISOString().slice(0, 10) });
+  const last = reviews.filter((r) => r.trigger !== "dm").at(-1) ?? null;
+  const { routines, errors } = loadRoutines();
+  return {
+    instance: ledger.instanceName(),
+    build: buildId(),
+    uptime_minutes: Math.round(process.uptime() / 60),
+    elixir: { contract: state.get("contractVersion"), server: state.get("serverVersion"), subject: state.get("principal")?.subject ?? null },
+    budgets: budget.status().map((b) => ({ lane: b.lane, spent_usd: Number(b.spent.toFixed(2)), budget_usd: b.budget, state: b.state })),
+    today_usd: Number(state.todaySpend().toFixed(2)),
+    turns_last_7_days: turns.length,
+    turns_today: turns.filter((t) => t.at.startsWith(today)).length,
+    last_turn_by_lane: lastBy,
+    feed_cursors: Object.fromEntries(Object.entries(cursors).map(([k, v]) => [k, typeof v === "string" ? `${Math.round((Date.now() - Date.parse(v)) / 60000)} min ago` : String(v)])),
+    routines: { enabled: routines.filter((r) => !r.disabled).map((r) => r.key), disabled: routines.filter((r) => r.disabled).map((r) => r.key), failed_to_load: errors.map((e) => e.key) },
+    review: { enabled: config.review.enabled, at: `${config.review.at.days ? config.review.at.days.map((d) => ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][d]).join(",") : "daily"} ${String(config.review.at.hour).padStart(2, "0")}:${String(config.review.at.minute).padStart(2, "0")} ${config.timezone}`, model: config.review.model, reviewed_through: state.get("reviewedThrough"), last: last ? { reviewId: last.reviewId, at: last.at, turnsRead: last.turnsRead, proposals: last.proposals.length, decisions: last.decisions.map((d) => `${d.proposalId}:${d.decision}`) } : null },
+    service_managed: serviceManaged(),
+    timezone: config.timezone,
+  };
+}
+
+function statusTool() {
+  return {
+    name: "status",
+    description: "How this bot is doing right now: build, Elixir contract, budgets per lane and today's spend, turns this week, the last turn per lane, feed cursor age, which routines are on, the review's clock and last run.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    async handler() {
+      return { ok: true, body: statusReport() };
+    },
+  };
+}
+
+export function searchTool() {
+  return {
+    name: "search_turns",
+    description: "Find your own earlier turns: a text query over what was asked, what you answered, the tools you called and the routine, with lane/routine/date filters. Returns compact rows with turn ids; lookup_turn shows one in full.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "text to match, case-insensitive; empty for everything in the window" },
+        since: { type: "string", description: "YYYY-MM-DD; default 14 days ago" },
+        until: { type: "string", description: "YYYY-MM-DD" },
+        lane: { type: "string", enum: ["ask", "routines", "dm"] },
+        routine: { type: "string" },
+        limit: { type: "integer", minimum: 1, maximum: 50 },
+      },
+      additionalProperties: false,
+    },
+    async handler({ query, since, until, lane, routine, limit }) {
+      const rows = ledger.searchTurns({ query, since: since || new Date(Date.now() - 14 * DAY_MS).toISOString().slice(0, 10), until: until || null, lane: lane || null, routine: routine || null, limit: limit || 20 });
+      return { ok: true, body: { matches: rows.length, turns: rows } };
+    },
+  };
+}
+
+function estimateTool() {
+  return {
+    name: "estimate_cost",
+    description: "Roughly what a routine costs per month from its fields (schedule: days and at; events: about daily), at ~$0.10 a post, plus what the current set costs. A starting point, not a forecast.",
+    input_schema: {
+      type: "object",
+      properties: { fields: { type: "object", description: "front matter for the routine to estimate (trigger, at, days, ...)", additionalProperties: { type: "string" } } },
+      additionalProperties: false,
+    },
+    async handler({ fields }) {
+      const { routines } = loadRoutines();
+      const current = estimateMonthly(routines.filter((r) => !r.disabled));
+      let proposed = null;
+      if (fields && Object.keys(fields).length) {
+        try {
+          const text = `---\n${Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join("\n")}\n---\nestimate`;
+          const [line] = estimateMonthly([parseRoutine("estimate", text)]).lines;
+          proposed = line ? { posts_per_month: line.runs, usd_per_month: Number(line.usd.toFixed(2)) } : { posts_per_month: 0, usd_per_month: 0, note: "a message routine costs by the question, not the calendar" };
+        } catch (error) {
+          return { ok: false, code: "bad_fields", error: error.message };
+        }
+      }
+      return { ok: true, body: { proposed, current_set: { posts_per_month: current.runs, usd_per_month: Number(current.usd.toFixed(2)), per_post_usd: current.perPostUsd, lines: current.lines }, budget_routines_usd: config.monthlyBudgetUsd } };
+    },
+  };
+}
+
 function lookupTool() {
   return {
     name: "lookup_turn",
@@ -491,7 +615,7 @@ async function converse(message, options = {}) {
     maxTokens: routine.maxTokens,
     routineKey: "dm",
     lane: "review",
-    localTools: [proposeTool({ files, proposals, by: "owner", operatorId: message.author.id }), routinesTool(), examplesTool(), channelsTool(), lookupTool()],
+    localTools: [proposeTool({ files, proposals, by: "owner", operatorId: message.author.id }), routinesTool(), examplesTool(), channelsTool(), lookupTool(), searchTool(), statusTool(), estimateTool(), deckLinkTool()],
     maxRounds: 8,
   });
 
@@ -568,6 +692,8 @@ export async function handleDm(message, options = {}) {
   if (/^memory\s*[?]?$/i.test(text)) return showMemory(message);
   if (/^(budget|spend)\s*[?]?$/i.test(text)) return send(message, budgetReply());
   if (/^routines\s*[?]?$/i.test(text)) return send(message, routinesReply());
+  if (/^status\s*[?]?$/i.test(text)) return send(message, `**Status**\n\`\`\`json\n${JSON.stringify(statusReport(), null, 1).slice(0, 1800)}\n\`\`\``);
+  if (/^feedback\s*[?]?$/i.test(text)) return showFeedback(message);
   if (/^settings\s*[?]?$/i.test(text)) return send(message, `**Settings** (live on Apply; the ones marked restart ${serviceManaged() ? "restart me automatically" : "need you to restart me"})\n\`\`\`\n${describeSettings()}\n\`\`\``);
   if (/^(help|\?)$/i.test(text)) {
     return send(
@@ -578,6 +704,7 @@ export async function handleDm(message, options = {}) {
         "`routines` — what runs and when; or just tell me what to change, add or remove",
         "`settings` — budgets, models, the review, timezone, admins, channels; tell me what to change",
         "`memory` — what I have been told and learned · `budget` — this month's spend",
+        "`status` — how I am doing · `feedback` — what I have filed with Elixir and what came back",
       ].join("\n"),
     );
   }

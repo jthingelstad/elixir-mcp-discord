@@ -269,6 +269,31 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
   the moment it is saved; undo of a create deletes, undo of a delete
   restores from `.history/`. Front-matter comments do not survive
   `withFields`; the fields do.
+- **The clock rides every user turn** (`nowLine` in `src/prompt.js`): date,
+  time and weekday in the operator's zone, in the user message so the
+  cached prefix is untouched. Before it the model had no way to know the
+  date and spent a `game_clock` call on the weekday.
+- **`once: true`** on a schedule routine: fires at its next occurrence,
+  then `retireOnce` in `src/scheduler.js` writes it back `enabled: false`
+  (copy in `.history/`) and DMs.
+- **Try it** (`tryProposal` in `src/review.js`, a button on every
+  proposal that is not settings or a deletion): the routine's dry run on
+  the PROPOSED file — the edited routine, or a scheduled routine with the
+  proposed `identity.md`/`memory.md` as `overrides` to `runRoutine` — shown
+  in the DM, charged to the review lane, nothing applied or posted.
+- **DM tools beyond the files:** `status` (`statusReport`: build,
+  contract, budgets, turns, cursors, routines, the review), `search_turns`
+  (`ledger.searchTurns`: text over question/answer/tools/routine with
+  lane/routine/date filters; the review lane has it too, for measuring a
+  previous edit beyond the window), `estimate_cost` (`estimateMonthly` on
+  proposed fields), `deck_link`. Commands: `status`, `feedback`
+  (`elixir_my_feedback`).
+- **`deck_link`** (`src/deck-link.js`) is the one local tool a MEMBER's
+  turn gets: a pasted `link.clashroyale.com` / `clashroyale://copyDeck`
+  link carries eight card ids and the tower troop in the URL (`slots` is
+  always zero — a link never says what is evolved); resolved through
+  `cards_catalog`. Text, not the web. Its errors are ours
+  (`LOCAL_TOOLS` in `src/feedback.js`), never hub friction.
 - **The operator changes settings from the DM** (`src/settings.js`).
   `propose_change` with `file: "config.json"`, `op: set_config`, `fields:
   {KEY: value}` on an ALLOWLIST (`SETTINGS`: budgets, `CLAUDE_*`,
@@ -286,7 +311,14 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
   values; otherwise the message says a restart is needed. Undo restores
   the backup, same rule. The review lane cannot touch settings (`planEdit`
   refuses without `edit.by === "owner"`). `settings` in the DM shows the
-  current values.
+  current values. **Since the same day, settings are LIVE**: `config.js`
+  re-reads `config.json` when its mtime moves and exposes settings as
+  getters, so a change is in effect on the next use; only
+  `COMMAND_PREFIX` and `EVENT_POLL_SECONDS` (`restart: true` in
+  `SETTINGS`) restart the process, and `REVIEW=on` needs one for the slash
+  command to appear (the lane itself runs live — the clock ticks whether
+  or not it is on). Tests assign `config.x = …`; that is an override map,
+  not the file.
   `models.json` stays terminal-only on purpose: a wrong price typed in chat
   silently defeats every budget. `append` now works on `identity.md` and a
   brief too (raw text at the end) for "add a house rule".

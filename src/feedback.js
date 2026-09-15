@@ -157,7 +157,7 @@ const EXPECTED_ERROR_CODES = new Set(["no_subject", "quota_exceeded"]);
 
 /** This runner's own tools. Their refusals (a channel not in the directory,
  *  the post cap) are this consumer's behaviour, never hub friction to file. */
-const LOCAL_TOOLS = new Set(["post_message"]);
+const LOCAL_TOOLS = new Set(["post_message", "deck_link", "propose_change", "lookup_turn", "search_turns", "status", "estimate_cost", "list_routines", "list_example_routines", "list_channels", "report_mechanics"]);
 
 /** The errors worth a reader's or the maintainer's attention. */
 export function unexpectedErrors(errors) {

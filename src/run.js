@@ -122,6 +122,8 @@ export function turnRecord({ routine, lane, question, text, result, channelId })
  * @param {boolean} options.dryRun   compose and return, post nothing
  * @param {Function} options.askFn   injectable model call, for tests
  * @param {Array}  options.entries   the channel directory (default: live)
+ * @param {object} options.overrides { identity, memory } text to run on instead of the files
+ * @param {string} options.lane      which budget pays (default: the routine's own)
  */
 export async function runRoutine(routine, options = {}) {
   if (isStopping()) return { ok: false, error: "shutting_down" };
@@ -130,9 +132,8 @@ export async function runRoutine(routine, options = {}) {
 
 async function runRoutineNow(
   routine,
-  { channel = null, events = null, dryRun = false, askFn = ask, entries = directory(), resolve = resolveById } = {},
+  { channel = null, events = null, dryRun = false, askFn = ask, entries = directory(), resolve = resolveById, overrides = {}, lane = laneFor(routine) } = {},
 ) {
-  const lane = laneFor(routine);
   const blocked = spendBlock(lane);
   if (blocked) {
     // A budget that stops the bot is doing its job, so this is INFO-with-teeth
@@ -161,7 +162,9 @@ async function runRoutineNow(
   const posts = [];
   const directoryEntries = routine.trigger === "message" ? [] : entries;
   const withTool = directoryEntries.length > 0;
-  const system = systemFor(routine, { entries: directoryEntries, defaultChannelId: channel?.id ?? null });
+  // `overrides` (identity, memory) let a rehearsal run on a PROPOSED file
+  // before it is applied — src/review.js "Try it".
+  const system = systemFor(routine, { entries: directoryEntries, defaultChannelId: channel?.id ?? null, ...overrides });
   // The ledger's view of what this turn was handed. A dry run is a rehearsal
   // and is not recorded: the ledger is what Discord actually saw.
   const record = (output) => {

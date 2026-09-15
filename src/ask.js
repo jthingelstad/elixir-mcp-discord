@@ -29,6 +29,7 @@ import { log } from "./log.js";
 import * as state from "./state.js";
 import * as ledger from "./ledger.js";
 import { notify } from "./notify.js";
+import { deckLinkTool } from "./deck-link.js";
 
 /**
  * ONE THREAD PER QUESTION.
@@ -321,6 +322,9 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
           content: `${asker} (discord:${message.author.id}): ${question}\n\n${nowLine()}`,
         },
       ],
+      // The one local tool a member's turn gets: reading a pasted deck link,
+      // which is text, not the web (src/deck-link.js).
+      localTools: [deckLinkTool()],
       onEvent: (event) => {
         if (event.kind === "tool_start") toolsSoFar.push(event.name);
         else if (event.kind === "text") streamed += event.text;

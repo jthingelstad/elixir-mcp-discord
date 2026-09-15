@@ -270,7 +270,7 @@ test("the DM for a proposal carries the diff and the right buttons for its state
   const pending = proposalMessage(review, proposal, { index: 1, total: 2 });
   assert.match(pending.content, /Proposal 1 of 2/);
   assert.match(pending.content, /```diff\n\+ - 2026-09-14/);
-  assert.deepEqual(pending.buttons.map((b) => b.label), ["Apply", "Skip", "Show turns"]);
+  assert.deepEqual(pending.buttons.map((b) => b.label), ["Apply", "Try it", "Skip", "Show turns"]);
   const applied = proposalMessage(review, proposal, { index: 1, total: 2, decision: { decision: "applied", by: "9", detail: { backup: "/x/.history/memory.md.t" } } });
   assert.match(applied.content, /✅ Applied by <@9>/);
   assert.deepEqual(applied.buttons.map((b) => b.label), ["Undo", "Show turns"]);
@@ -508,4 +508,37 @@ test("a channel setting resolves a #name to an id the bot is granted in", async 
   assert.deepEqual(checkSetting("CHANNEL_ASK", "#ask-bot", { entries }), { ok: true, value: "2", shown: "#ask-bot" });
   assert.deepEqual(checkSetting("CHANNEL_ASK", "77", { entries }), { ok: true, value: "77", shown: "#news" });
   assert.match(checkSetting("CHANNEL_ASK", "#elsewhere", { entries }).error, /not a channel the bot is granted in/);
+});
+
+test("Try it rehearses a routine proposal on the proposed file, posts nothing, and charges the review lane", async (t) => {
+  fresh();
+  const dir = agentDir(t, { "routines/movers.md": MOVERS, "identity.md": "Plain.\n" });
+  ledger.append(turn({ turnId: "aaaa0001" }));
+  const { tryProposal } = await import("../src/review.js");
+  const outcome = await runReview({
+    trigger: "command",
+    agentDir: dir,
+    askFn: fakeAsk([
+      ["propose_change", { file: "routines/movers.md", rule: "brief", turn_ids: ["aaaa0001"], summary: "At most three.", edit: { op: "replace", find: "Name three movers.", replace: "Name at most three movers, fewer on a quiet day." } }],
+      ["propose_change", { file: "identity.md", rule: "voice", turn_ids: ["aaaa0001"], summary: "Shorter.", edit: { op: "replace", find: "Plain.", replace: "Plain and short." } }],
+    ]),
+  });
+  const review = findReview(outcome.reviewId);
+  const seen = [];
+  const runFn = async (routine, opts) => {
+    seen.push({ key: routine.key, prompt: routine.prompt, dryRun: opts.dryRun, lane: opts.lane, overrides: opts.overrides });
+    return { ok: true, skipped: false, text: "", posts: [{ channel: "#news", text: "**canavar** — 9-2." }], result: { usd: 0.03, trace: [], called: [], errors: [], envelopes: [], turnId: "try00001", ms: 1, rounds: 1, stopReason: "end_turn", model: "m", effort: "e" } };
+  };
+  const brief = await tryProposal({ review, proposal: review.proposals[0], agentDir: dir, runFn });
+  assert.equal(brief.ok, true);
+  assert.equal(seen[0].key, "movers");
+  assert.match(seen[0].prompt, /at most three movers, fewer on a quiet day/, "the PROPOSED brief ran");
+  assert.equal(seen[0].dryRun, true);
+  assert.equal(seen[0].lane, "review");
+  assert.equal(fs.readFileSync(path.join(dir, "routines/movers.md"), "utf8"), MOVERS, "nothing applied");
+  assert.equal(brief.posts[0].text, "**canavar** — 9-2.");
+
+  const voice = await tryProposal({ review, proposal: review.proposals[1], agentDir: dir, runFn });
+  assert.equal(voice.ok, true);
+  assert.equal(seen[1].overrides.identity, "Plain and short.", "identity.md proposals run as an override on a scheduled routine");
 });

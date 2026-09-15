@@ -81,7 +81,7 @@ test("the operator's fact becomes a memory proposal with a diff and an Apply but
   const proposal = sent.find((s) => s.components.length);
   assert.ok(proposal, "a proposal message with buttons");
   assert.match(proposal.content, /```diff\n\+ - \d{4}-\d{2}-\d{2} \(from owner\): we call war days "boat days"/);
-  assert.deepEqual(proposal.components[0].components.map((b) => b.label), ["Apply", "Skip", "Show turns"]);
+  assert.deepEqual(proposal.components[0].components.map((b) => b.label), ["Apply", "Try it", "Skip", "Show turns"]);
   const records = ledger.readRecords({ since: today() });
   assert.deepEqual(records.map((r) => r.kind), ["review", "turn"]);
   assert.equal(records[0].trigger, "dm");

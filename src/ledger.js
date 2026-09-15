@@ -278,6 +278,35 @@ export function readTurns(options = {}) {
   return [...turns.values()];
 }
 
+/**
+ * Turns matching a text query, newest first, compact. `query` is matched
+ * case-insensitively against the question or brief, the answer, the tool
+ * names and the routine key; empty matches everything in the window.
+ */
+export function searchTurns({ query = "", since = null, until = null, lane = null, routine = null, limit = 20, dir = LEDGER_DIR } = {}) {
+  const needle = String(query || "").toLowerCase().trim();
+  const hay = (t) =>
+    [t.input?.question, t.input?.brief, t.output?.text, t.routine, ...(t.trace || []).filter((s) => s.kind === "tool").map((s) => s.name)]
+      .filter(Boolean)
+      .join("\n")
+      .toLowerCase();
+  return readTurns({ dir, since, until })
+    .filter((t) => (!lane || t.lane === lane) && (!routine || t.routine === routine) && (!needle || hay(t).includes(needle)))
+    .sort((a, b) => (b.at > a.at ? 1 : -1))
+    .slice(0, limit)
+    .map((t) => ({
+      turnId: t.turnId,
+      at: t.at,
+      lane: t.lane,
+      routine: t.routine,
+      asked: (t.input?.question ?? t.input?.brief ?? "").slice(0, 160),
+      answered: (t.output?.text ?? "").slice(0, 200),
+      tools: (t.trace || []).filter((s) => s.kind === "tool").map((s) => s.name),
+      flags: [t.output?.ungrounded ? "ungrounded" : null, t.output?.error ? "failed" : null, t.reactions?.length ? "reacted" : null, t.interventions?.length ? "intervention" : null, t.findings?.length ? "finding" : null].filter(Boolean),
+      usd: t.usd,
+    }));
+}
+
 /** Reviews with their decisions folded in, oldest first. */
 export function readReviews(options = {}) {
   const records = readRecords(options);

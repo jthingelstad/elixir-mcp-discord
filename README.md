@@ -62,7 +62,9 @@ If nothing genuinely stood out, reply with exactly SKIP.
 ```
 
 Drop that in your instance's `agent/routines/`, and it runs. Delete it and it
-stops. Notice it names no channel: the bot posts **where it decides the post
+stops. `once: true` on a scheduled routine fires at its next occurrence and
+then turns itself off — "remind the clan Friday at 8" is a routine, not a
+special case. Notice it names no channel: the bot posts **where it decides the post
 belongs**, choosing among the channels you have let it into (see
 [Channels](#channels-where-it-posts)). The code is a runner: it holds the Discord connection, the model call, the run ledger,
 the cost accounting and the feedback plumbing, and it holds no opinions about
@@ -77,12 +79,15 @@ elixir-mcp-discord/          <- the code (this checkout)
   scripts/                      service installers
 
 ~/.elixir-mcp-discord/myclan/  <- an INSTANCE (yours; setup creates it)
-  .env                          keys, ids, budgets — wiring only
+  .env                          the three secrets and the wiring ids — what the bot may not change
+  config.json                   every other setting — what the DM may change; versionable
   agent/
     identity.md                 voice and house rules, prepended to every prompt
+    memory.md                   what it has been told and learned here, one dated line each
     models.json                 what each model costs, so budgets can be enforced
     routines/*.md               one file per routine, chosen and then rewritten by you
-  state/state.json              cursors, run ledger, spend. Not game data.
+    .history/                   the prior version of anything the bot changed
+  state/                        cursors, run ledger, spend, the turn ledger. Not game data.
 ```
 
 The **instance is a directory** and the checkout is only where the code is.
@@ -231,15 +236,24 @@ nobody else sees it, and anyone else who DMs it gets one polite line:
 - **Change a setting.** "Raise the ask budget to $15", "run the review
   Saturday at 9", "use opus by default", "add @Levy as an admin", "move
   questions to #ask-bot". Each is checked the way setup checks it and shown
-  as a diff; Apply rewrites `config.json` and the bot restarts itself
-  (under launchd or systemd) to pick it up. Keys, tokens and the wiring
-  ids live in `.env`, which it cannot reach. `settings` shows the current
+  as a diff; Apply rewrites `config.json` and the change is live — only
+  the command prefix and the feed poll interval restart the bot, which it
+  does itself under launchd or systemd. Keys, tokens and the wiring ids
+  live in `.env`, which it cannot reach. `settings` shows the current
   values.
 - **Try before posting.** `try notable-movers` runs the routine and shows
   you the post without sending it; `post it` sends it.
+- **Try before applying.** Every proposal that changes a routine, a house
+  rule or memory has a **Try it** button: the routine runs on the proposed
+  file and shows you the post it would have made, so you apply evidence,
+  not a diff.
 - **Ask it anything** about the record, on your own behalf, without
-  cluttering the ask channel. `memory` shows what it knows; `budget` the
-  month's spend.
+  cluttering the ask channel. Or about itself: "how am I doing on budget?",
+  "did anyone ask about war decks this week?", "what would a Friday recap
+  cost?" — it has `status`, `search_turns` and `estimate_cost` for those.
+  `memory` shows what it knows; `budget` the month's spend; `status` the
+  whole picture; `feedback` what it has filed with Elixir and what came
+  back.
 - **It tells you when something is wrong**: a routine file that failed to
   load, a lane at its budget, a channel it cannot post in, an answer that
   errored, Elixir's maintainer replying to something it filed. These used

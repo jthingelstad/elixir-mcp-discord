@@ -48,6 +48,12 @@ import { MECHANICS, MEMORY_MAX_CHARS, MEMORY_ENTRY, parseMemoryEntry } from "./p
 import { renderTurn } from "./turns.js";
 import { dueRoutines, periodKey, lastOccurrence } from "./schedule.js";
 import { chunk } from "./post.js";
+import { runRoutine } from "./run.js";
+import { renderTrace } from "./trace.js";
+import { eventsForDryRun } from "./events.js";
+import { directory, resolveById } from "./directory.js";
+import { loadRoutines } from "./routines.js";
+import { readMemory, readIdentity } from "./prompt.js";
 import { splitFrontMatter, parseRoutine, withFields, FIELDS } from "./routines.js";
 import { checkSetting, withSettings, settingsPreview, readConfigText, writeConfig, serviceManaged, restartSoon, needsRestart } from "./settings.js";
 import * as budget from "./budget.js";
@@ -441,6 +447,31 @@ function proposeTool({ files, proposals, max }) {
   };
 }
 
+/** The review's own search over the ledger: for the measurement step, the
+ *  turns a previous edit should have changed, beyond the window. */
+function searchTurnsTool() {
+  return {
+    name: "search_turns",
+    description: "Find earlier turns by text, lane, routine and date — beyond this window — with turn ids. Use it to measure a previous edit: the turns after it that touched the rule.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        since: { type: "string", description: "YYYY-MM-DD" },
+        until: { type: "string", description: "YYYY-MM-DD" },
+        lane: { type: "string", enum: ["ask", "routines", "dm"] },
+        routine: { type: "string" },
+        limit: { type: "integer", minimum: 1, maximum: 50 },
+      },
+      additionalProperties: false,
+    },
+    async handler({ query, since, until, lane, routine, limit }) {
+      const rows = ledger.searchTurns({ query, since: since || new Date(Date.now() - 30 * DAY_MS).toISOString().slice(0, 10), until: until || null, lane: lane || null, routine: routine || null, limit: limit || 20 });
+      return { ok: true, body: { matches: rows.length, turns: rows } };
+    },
+  };
+}
+
 function reportTool({ reports }) {
   return {
     name: "report_mechanics",
@@ -520,7 +551,7 @@ export async function runReview({ trigger = "schedule", dryRun = false, askFn = 
     maxTokens: 16000,
     routineKey: "review",
     lane,
-    localTools: [proposeTool({ files, proposals, max: config.review.maxProposals }), reportTool({ reports })],
+    localTools: [proposeTool({ files, proposals, max: config.review.maxProposals }), reportTool({ reports }), searchTurnsTool()],
     maxRounds: 12,
   });
   if (!result.ok) {
@@ -679,6 +710,58 @@ export function undoProposal({ review, proposal, by, agentDir = config.agentDir 
   return { ok: true };
 }
 
+/**
+ * TRY IT: run a routine's dry run on the PROPOSED file, before applying.
+ * A diff is an opinion; the post it would have produced is evidence. For a
+ * routine proposal, the routine is the edited one; for identity.md or
+ * memory.md, the routine of the first cited turn (or the first scheduled
+ * routine) runs with the proposed text in its prompt. Charged to the
+ * review lane. Nothing is applied and nothing is posted.
+ */
+export async function tryProposal({ review, proposal, agentDir = config.agentDir, runFn = runRoutine }) {
+  const current = (() => {
+    try {
+      return fs.readFileSync(path.join(agentDir, proposal.file), "utf8");
+    } catch {
+      return null;
+    }
+  })();
+  const plan = planEdit({ file: proposal.file, edit: proposal.edit, current, by: "owner" });
+  if (!plan.ok) return { ok: false, error: plan.error };
+  if (plan.next === null) return { ok: false, error: "nothing to rehearse for a deletion" };
+
+  let routine = null;
+  const overrides = {};
+  if (proposal.file.startsWith("routines/")) {
+    const key = proposal.file.replace(/^routines\//, "").replace(/\.md$/, "");
+    try {
+      routine = { ...parseRoutine(key, plan.next), disabled: false };
+    } catch (error) {
+      return { ok: false, error: error.message };
+    }
+  } else {
+    if (proposal.file === "identity.md") overrides.identity = plan.next.trim() || null;
+    if (proposal.file === "memory.md") overrides.memory = plan.next.trim() || null;
+    const { routines } = loadRoutines({ dir: agentDir });
+    const cited = ledger.readTurns({ since: new Date(Date.now() - 60 * DAY_MS).toISOString().slice(0, 10) }).find((t) => proposal.turnIds?.includes(t.turnId) && t.trigger !== "message");
+    routine = routines.find((r) => r.key === cited?.routine && r.trigger !== "message") ?? routines.find((r) => r.trigger === "schedule" && !r.disabled) ?? null;
+    if (!routine) return { ok: false, error: "no scheduled routine to rehearse this on" };
+  }
+  if (routine.trigger === "message") return { ok: false, error: `${routine.key} answers questions; ask it something in the ask channel to see the change` };
+
+  const entries = directory();
+  const defaultId = routine.channel ? config.channels.get(routine.channel) ?? entries.find((e) => e.name === routine.channel)?.id ?? null : null;
+  const channel = defaultId ? await resolveById(defaultId) : null;
+  let events = null;
+  if (routine.trigger === "events") {
+    const found = await eventsForDryRun(routine);
+    events = found.events;
+  }
+  const run = await runFn(routine, { channel, events, dryRun: true, entries, overrides, lane: "review" });
+  if (!run.ok) return { ok: false, error: run.error };
+  return { ok: true, routine: routine.key, skipped: run.skipped, posts: run.posts, text: run.text, trace: renderTrace(run.result, { label: `${routine.key} · with ${proposal.id}` }), usd: run.result.usd };
+}
+
 export function skipProposal({ review, proposal, by }) {
   ledger.append(ledger.decisionEntry({ reviewId: review.reviewId, proposalId: proposal.id, decision: "skipped", by }));
   log.info("review_skipped", { reviewId: review.reviewId, proposal: proposal.id, by });
@@ -734,6 +817,7 @@ export function proposalMessage(review, proposal, { index, total, decision = nul
     const done = decision && ["skipped", "reverted"].includes(decision.decision);
     if (!decision) {
       buttons.push({ id: buttonId(review.reviewId, proposal.id, "apply"), label: "Apply", style: "success" });
+      if (proposal.file !== "config.json" && proposal.edit?.op !== "delete") buttons.push({ id: buttonId(review.reviewId, proposal.id, "try"), label: "Try it", style: "primary" });
       buttons.push({ id: buttonId(review.reviewId, proposal.id, "skip"), label: "Skip", style: "secondary" });
     }
     if (applied) buttons.push({ id: buttonId(review.reviewId, proposal.id, "undo"), label: "Undo", style: "danger" });
@@ -823,6 +907,19 @@ export async function handleButton(interaction, { isAdmin }) {
     await interaction.reply({ content: chunk(text, 1900)[0], allowedMentions: { parse: [] } });
     for (const part of chunk(text, 1900).slice(1, 4)) await interaction.followUp({ content: part, allowedMentions: { parse: [] } });
     return { action: "show" };
+  }
+  if (parsed.action === "try") {
+    await interaction.reply({ content: `-# rehearsing with ${proposal.id} applied — nothing is posted or written…`, allowedMentions: { parse: [] } });
+    const outcome = await tryProposal({ review, proposal });
+    if (!outcome.ok) {
+      await interaction.followUp({ content: `Could not rehearse: ${outcome.error}`, allowedMentions: { parse: [] } });
+      return { action: "try", ...outcome };
+    }
+    const shown = outcome.skipped || outcome.posts.length === 0 ? `\`${outcome.routine}\` would post nothing${outcome.text && !outcome.skipped ? `:\n\n${outcome.text}` : " (SKIP)"}.` : outcome.posts.map((p) => `**${p.channel}**\n${p.text}`).join("\n\n");
+    for (const part of chunk(shown, 1900)) await interaction.followUp({ content: part, allowedMentions: { parse: [] } });
+    if (outcome.trace) for (const part of chunk(outcome.trace, 1900).slice(0, 2)) await interaction.followUp({ content: part, allowedMentions: { parse: [] } });
+    await interaction.followUp({ content: `-# $${outcome.usd.toFixed(4)} · that is what \`${outcome.routine}\` would say with ${proposal.id} applied. Apply above if it is right.`, allowedMentions: { parse: [] } });
+    return { action: "try", ok: true, routine: outcome.routine };
   }
   const existing = lastDecision(review, proposal.id);
   if (parsed.action === "apply") {

@@ -24,7 +24,7 @@ import { rateFor, UnpricedModel } from "./pricing.js";
 import { runRoutine } from "./run.js";
 import { systemFor, userMessageFor } from "./prompt.js";
 import { renderTrace } from "./trace.js";
-import { read, relevant } from "./events.js";
+import { eventsForDryRun } from "./events.js";
 import * as state from "./state.js";
 import { lastOccurrence, periodKey } from "./schedule.js";
 
@@ -80,37 +80,6 @@ function listRoutines() {
   for (const failure of errors)
     console.error(`✗ ${failure.key}: ${failure.error}`);
   if (errors.length) process.exitCode = 1;
-}
-
-/**
- * Timeline items for a dry run of an event routine.
- *
- * Its real cursor is never advanced here — a rehearsal must not consume the
- * feed. When the window since the cursor holds nothing the routine cares
- * about (or there is no cursor yet) it reads the last 24 hours instead,
- * because "nothing happened, nothing to show" is a useless answer to
- * somebody trying to improve the wording of the brief.
- */
-async function eventsForDryRun(routine) {
-  const cursor = state.cursorFor(routine.key);
-  const seeded = typeof cursor === "string";
-  const payload = (result, items) => ({ window: result.window, timeline: items, entries: result.entries });
-  if (seeded) {
-    const pending = await read(cursor, { sections: routine.sections });
-    const items = pending.ok ? relevant(pending.timeline, routine) : [];
-    if (items.length) return { events: payload(pending, items), count: items.length, note: `pending since ${cursor}` };
-  }
-  const day = await read(null, { sections: routine.sections });
-  if (!day.ok) return { events: null, count: 0, note: `feed unreadable: ${day.error}` };
-  const items = relevant(day.timeline, routine);
-  const why = seeded ? "nothing new since the cursor" : "no cursor yet (seeds on the first live poll)";
-  return {
-    events: payload(day, items),
-    count: items.length,
-    note: items.length
-      ? `${why} — showing the last 24 hours`
-      : `${why}, and nothing this routine cares about in the last 24 hours either — the live lane would not have fired`,
-  };
 }
 
 /** Values coming from the shell rather than .env, which is the trap this

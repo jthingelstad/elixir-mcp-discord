@@ -73,6 +73,37 @@ export async function read(from, { sections = null, verbosity = "full" } = {}) {
  * names no kinds fires on every `battle_session`. The shipped clan-feed
  * names the roster, war and presence kinds.
  */
+/**
+ * Timeline items for a dry run of an event routine.
+ *
+ * Its real cursor is never advanced here — a rehearsal must not consume the
+ * feed. When the window since the cursor holds nothing the routine cares
+ * about (or there is no cursor yet) it reads the last 24 hours instead,
+ * because "nothing happened, nothing to show" is a useless answer to
+ * somebody trying to improve the wording of the brief.
+ */
+export async function eventsForDryRun(routine) {
+  const cursor = state.cursorFor(routine.key);
+  const seeded = typeof cursor === "string";
+  const payload = (result, items) => ({ window: result.window, timeline: items, entries: result.entries });
+  if (seeded) {
+    const pending = await read(cursor, { sections: routine.sections });
+    const items = pending.ok ? relevant(pending.timeline, routine) : [];
+    if (items.length) return { events: payload(pending, items), count: items.length, note: `pending since ${cursor}` };
+  }
+  const day = await read(null, { sections: routine.sections });
+  if (!day.ok) return { events: null, count: 0, note: `feed unreadable: ${day.error}` };
+  const items = relevant(day.timeline, routine);
+  const why = seeded ? "nothing new since the cursor" : "no cursor yet (seeds on the first live poll)";
+  return {
+    events: payload(day, items),
+    count: items.length,
+    note: items.length
+      ? `${why} — showing the last 24 hours`
+      : `${why}, and nothing this routine cares about in the last 24 hours either — the live lane would not have fired`,
+  };
+}
+
 export function relevant(timeline, { kinds = null, sections = null } = {}) {
   return (timeline ?? []).filter((item) => {
     if (kinds?.length && !kinds.includes(item.kind)) return false;
