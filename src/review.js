@@ -49,6 +49,7 @@ import { renderTurn } from "./turns.js";
 import { dueRoutines, periodKey, lastOccurrence } from "./schedule.js";
 import { chunk } from "./post.js";
 import { splitFrontMatter, parseRoutine, FIELDS } from "./routines.js";
+import { checkSetting, withSettings, settingsPreview, readEnv, writeEnv, serviceManaged, restartSoon } from "./settings.js";
 import * as budget from "./budget.js";
 import * as ledger from "./ledger.js";
 import { log } from "./log.js";
@@ -142,12 +143,39 @@ function fieldDiff(before, after) {
  * `{ ok: false, error }`. The same check runs at proposal time and again at
  * apply time, so a file edited by hand in between refuses cleanly.
  */
-export function planEdit({ file, edit, current }) {
-  if (!EDITABLE.test(file)) return { ok: false, error: `${file} is not editable; only memory.md, identity.md and routines/<key>.md are` };
-  const text = current ?? "";
+export function planEdit({ file, edit, current, by = null }) {
   const op = edit?.op;
+  // SETTINGS. The operator's .env keys, on an allowlist, each value checked
+  // the way setup checks it (src/settings.js). Never the review's.
+  if (file === ".env" || op === "set_env") {
+    if (file !== ".env" || op !== "set_env") return { ok: false, error: "settings are changed with file \".env\" and op set_env" };
+    if (edit?.by !== "owner") return { ok: false, error: "settings are the operator's; the review edits only the text under agent/" };
+    if (!edit.fields || typeof edit.fields !== "object" || Object.keys(edit.fields).length === 0) return { ok: false, error: "fields is empty" };
+    const changes = {};
+    const shown = [];
+    for (const [key, value] of Object.entries(edit.fields)) {
+      const checked = checkSetting(String(key).toUpperCase(), value, { by });
+      if (!checked.ok) return { ok: false, error: checked.error };
+      changes[String(key).toUpperCase()] = checked.value;
+      if (checked.shown) shown.push(`${String(key).toUpperCase()} → ${checked.shown}`);
+    }
+    const text = current ?? "";
+    const next = withSettings(text, changes);
+    const preview = settingsPreview(text, next);
+    if (!preview) return { ok: false, error: "nothing would change" };
+    return { ok: true, next, preview: shown.length ? `${preview}\n${shown.map((l) => `# ${l}`).join("\n")}` : preview, settings: true };
+  }
+  if (!EDITABLE.test(file)) return { ok: false, error: `${file} is not editable; only memory.md, identity.md, routines/<key>.md and (from the DM) .env are` };
+  const text = current ?? "";
+  if (op === "append" && file !== "memory.md") {
+    // A house rule, a line for a brief: raw text at the end, below a
+    // routine's front matter by construction.
+    const added = String(edit.text ?? "").trim();
+    if (!added) return { ok: false, error: "text is empty" };
+    const next = `${text.replace(/\s*$/, "")}\n\n${added}\n`;
+    return { ok: true, next, preview: added.split("\n").map((l) => `+ ${l}`).join("\n") };
+  }
   if (op === "append") {
-    if (file !== "memory.md") return { ok: false, error: "append is only for memory.md; use replace for the other files" };
     const entry = String(edit.text ?? "").trim();
     if (entry.includes("\n")) return { ok: false, error: "a memory entry is one line" };
     if (!MEMORY_ENTRY.test(entry)) return { ok: false, error: 'a memory entry is one line: "- YYYY-MM-DD (turns a1b2c3d4, ...): ..." or "- YYYY-MM-DD (from owner): ..." with an optional " until YYYY-MM-DD" before the colon' };
@@ -581,6 +609,7 @@ export function lastDecision(review, proposalId, { ignore = [] } = {}) {
  * NOW, so a hand edit since the review refuses instead of clobbering.
  */
 export function applyProposal({ review, proposal, by, agentDir = config.agentDir }) {
+  if (proposal.file === ".env") return applySettings({ review, proposal, by });
   const target = path.join(agentDir, proposal.file);
   let current = null;
   try {
@@ -588,7 +617,7 @@ export function applyProposal({ review, proposal, by, agentDir = config.agentDir
   } catch {
     current = null;
   }
-  const plan = planEdit({ file: proposal.file, edit: proposal.edit, current });
+  const plan = planEdit({ file: proposal.file, edit: proposal.edit, current, by });
   if (!plan.ok) {
     log.warn("review_apply_refused", { reviewId: review.reviewId, proposal: proposal.id, error: plan.error });
     ledger.append(ledger.decisionEntry({ reviewId: review.reviewId, proposalId: proposal.id, decision: "refused", by, detail: plan.error }));
@@ -613,8 +642,36 @@ export function applyProposal({ review, proposal, by, agentDir = config.agentDir
   return { ok: true, file: proposal.file, backup };
 }
 
+/** Settings: re-checked against .env as it is NOW, written with a backup
+ *  under state/, then a restart when a supervisor will bring the bot back. */
+function applySettings({ review, proposal, by }) {
+  const current = readEnv();
+  const plan = planEdit({ file: ".env", edit: proposal.edit, current, by });
+  if (!plan.ok) {
+    log.warn("review_apply_refused", { reviewId: review.reviewId, proposal: proposal.id, error: plan.error });
+    ledger.append(ledger.decisionEntry({ reviewId: review.reviewId, proposalId: proposal.id, decision: "refused", by, detail: plan.error }));
+    return { ok: false, error: plan.error };
+  }
+  const backup = writeEnv(plan.next);
+  const managed = serviceManaged();
+  ledger.append(ledger.decisionEntry({ reviewId: review.reviewId, proposalId: proposal.id, decision: "applied", by, detail: { backup, afterSha: ledger.sha(plan.next), settings: true, restart: managed ? "automatic" : "needed" } }));
+  log.info("settings_applied", { reviewId: review.reviewId, proposal: proposal.id, keys: Object.keys(proposal.edit.fields || {}).join(","), by, restart: managed ? "automatic" : "needed" });
+  if (managed) restartSoon();
+  return { ok: true, file: ".env", backup, restart: managed ? "automatic" : "needed" };
+}
+
 /** Put the file back as it was before this proposal, if nothing else has touched it since. */
 export function undoProposal({ review, proposal, by, agentDir = config.agentDir }) {
+  if (proposal.file === ".env") {
+    const decision = lastDecision(review, proposal.id, { ignore: ["refused"] });
+    if (!decision || decision.decision !== "applied") return { ok: false, error: "not applied" };
+    if (ledger.sha(readEnv()) !== decision.detail?.afterSha) return { ok: false, error: `.env has changed since; restore by hand from ${decision.detail?.backup}` };
+    writeEnv(fs.readFileSync(decision.detail.backup, "utf8"));
+    ledger.append(ledger.decisionEntry({ reviewId: review.reviewId, proposalId: proposal.id, decision: "reverted", by }));
+    log.info("settings_reverted", { reviewId: review.reviewId, proposal: proposal.id, by });
+    if (serviceManaged()) restartSoon();
+    return { ok: true, restart: serviceManaged() ? "automatic" : "needed" };
+  }
   // A refused re-apply does not un-apply anything: look past it.
   const decision = lastDecision(review, proposal.id, { ignore: ["refused"] });
   if (!decision || !["applied", "auto"].includes(decision.decision)) return { ok: false, error: "not applied" };
@@ -680,7 +737,7 @@ export function proposalMessage(review, proposal, { index, total, decision = nul
     "```diff",
     proposal.preview,
     "```",
-    status ? `${status}${decision?.by && decision.by !== "auto" ? ` by <@${decision.by}>` : ""}${decision?.detail?.backup ? `\n-# backup: ${path.basename(decision.detail.backup)}` : ""}${decision?.decision === "refused" ? `\n-# ${decision.detail}` : ""}` : null,
+    status ? `${status}${decision?.by && decision.by !== "auto" ? ` by <@${decision.by}>` : ""}${decision?.detail?.restart === "automatic" ? " · restarting to apply, back in under a minute" : decision?.detail?.restart === "needed" ? " · **restart the bot to apply**" : ""}${decision?.detail?.backup ? `\n-# backup: ${path.basename(decision.detail.backup)}` : ""}${decision?.decision === "refused" ? `\n-# ${decision.detail}` : ""}` : null,
   ]
     .filter(Boolean)
     .join("\n");

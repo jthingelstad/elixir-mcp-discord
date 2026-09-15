@@ -78,7 +78,7 @@ const turn = (overrides = {}) => {
 
 // ------------------------------------------------------------ planEdit
 
-test("a memory entry appends as one dated line with its provenance, and memory.md is the only file that appends", () => {
+test("a memory entry appends as one dated line with its provenance; other files append raw text", () => {
   const ok = planEdit({ file: "memory.md", edit: { op: "append", text: "- 2026-09-14 (turns a1b2c3d4): pass segment to battles_meta_cards" }, current: "# Memory\n" });
   assert.equal(ok.ok, true);
   assert.match(ok.next, /\n- 2026-09-14 \(turns a1b2c3d4\): pass segment/);
@@ -90,7 +90,10 @@ test("a memory entry appends as one dated line with its provenance, and memory.m
   const owned = "- 2026-09-14 (from owner): we call war days boat days\n";
   assert.match(planEdit({ file: "memory.md", edit: { op: "remove", find: "- 2026-09-14 (from owner): we call war days boat days" }, current: owned }).error, /came from the operator/);
   assert.equal(planEdit({ file: "memory.md", edit: { op: "remove", find: "- 2026-09-14 (from owner): we call war days boat days", by: "owner" }, current: owned }).ok, true);
-  assert.equal(planEdit({ file: "identity.md", edit: { op: "append", text: "- 2026-09-14 x" }, current: "" }).ok, false, "append is lessons-only");
+  const rule = planEdit({ file: "identity.md", edit: { op: "append", text: "- Never names a member's losses in a channel the clan reads." }, current: "## What it never does\n\n- Never guesses.\n" });
+  assert.equal(rule.ok, true, "a house rule appends as raw text");
+  assert.match(rule.next, /- Never guesses\.\n\n- Never names a member's losses/);
+  assert.equal(rule.preview, "+ - Never names a member's losses in a channel the clan reads.");
 });
 
 test("replace needs the text to occur exactly once, and never inside a routine's front matter", () => {
@@ -476,4 +479,32 @@ test("apply of a create writes the file and seeds its period; undo removes it; d
   const restored = undoProposal({ review: findReview(outcome.reviewId), proposal: del, by: "9", agentDir: dir });
   assert.equal(restored.ok, true);
   assert.equal(fs.readFileSync(path.join(dir, "routines/movers.md"), "utf8"), MOVERS);
+});
+
+// ------------------------------------------------- settings (.env by DM)
+
+test("a setting is checked like setup checks it, previewed as a diff, and only the operator may change one", () => {
+  const env = "ELIXIR_MCP_TOKEN=secret\nMONTHLY_BUDGET_USD=20.00\nTIMEZONE=UTC\n";
+  const ok = planEdit({ file: ".env", edit: { op: "set_env", by: "owner", fields: { ASK_MONTHLY_BUDGET_USD: "15", TIMEZONE: "America/Chicago", MONTHLY_BUDGET_USD: "25.00" } }, current: env, by: "9" });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.settings, true);
+  assert.match(ok.next, /^ELIXIR_MCP_TOKEN=secret\nMONTHLY_BUDGET_USD=25\.00\nTIMEZONE=America\/Chicago\n\n# --- Set from the DM\nASK_MONTHLY_BUDGET_USD=15\n$/);
+  assert.equal(ok.preview, "- MONTHLY_BUDGET_USD=20.00\n+ MONTHLY_BUDGET_USD=25.00\n- TIMEZONE=UTC\n+ TIMEZONE=America/Chicago\n+ ASK_MONTHLY_BUDGET_USD=15");
+  assert.doesNotMatch(ok.preview, /secret/, "secrets never appear in a preview");
+  assert.match(planEdit({ file: ".env", edit: { op: "set_env", by: "owner", fields: { ELIXIR_MCP_TOKEN: "x" } }, current: env, by: "9" }).error, /not a setting the DM may change/);
+  assert.match(planEdit({ file: ".env", edit: { op: "set_env", by: "owner", fields: { REVIEW_AT: "sometime" } }, current: env, by: "9" }).error, /REVIEW_AT/);
+  assert.match(planEdit({ file: ".env", edit: { op: "set_env", by: "owner", fields: { CLAUDE_MODEL: "claude-9" } }, current: env, by: "9" }).error, /price|priced|claude-9/i);
+  assert.match(planEdit({ file: ".env", edit: { op: "set_env", by: "owner", fields: { TIMEZONE: "CST" } }, current: env, by: "9" }).error, /IANA/);
+  assert.match(planEdit({ file: ".env", edit: { op: "set_env", by: "owner", fields: { ADMIN_USER_IDS: "12345678" } }, current: env, by: "9" }).error, /remove you as an admin/);
+  assert.equal(planEdit({ file: ".env", edit: { op: "set_env", by: "owner", fields: { ADMIN_USER_IDS: "9, 12345678" } }, current: env, by: "9" }).ok, false, "9 is too short to be a Discord id; the check is numeric ids");
+  assert.match(planEdit({ file: ".env", edit: { op: "set_env", fields: { MONTHLY_BUDGET_USD: "1" } }, current: env }).error, /operator's/, "the review cannot touch settings");
+  assert.match(planEdit({ file: ".env", edit: { op: "set_env", by: "owner", fields: { MONTHLY_BUDGET_USD: "20.00" } }, current: env, by: "9" }).error, /nothing would change/);
+});
+
+test("a channel setting resolves a #name to an id the bot is granted in", async () => {
+  const { checkSetting } = await import("../src/settings.js");
+  const entries = [{ id: "77", name: "news", role: "post" }, { id: "2", name: "ask-bot", role: "ask" }];
+  assert.deepEqual(checkSetting("CHANNEL_ASK", "#ask-bot", { entries }), { ok: true, value: "2", shown: "#ask-bot" });
+  assert.deepEqual(checkSetting("CHANNEL_ASK", "77", { entries }), { ok: true, value: "77", shown: "#news" });
+  assert.match(checkSetting("CHANNEL_ASK", "#elsewhere", { entries }).error, /not a channel the bot is granted in/);
 });

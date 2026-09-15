@@ -48,6 +48,7 @@ import { renderTrace } from "./trace.js";
 import { renderTurn } from "./turns.js";
 import { budgetReply, routinesReply } from "./commands.js";
 import { FIELDS, splitFrontMatter } from "./routines.js";
+import { SETTINGS, readEnv, describeSettings, serviceManaged } from "./settings.js";
 import { planEdit, proposalMessage, toComponents, readAgentFiles } from "./review.js";
 import { isConversational } from "./ask.js";
 import { turnRecord } from "./run.js";
@@ -93,6 +94,19 @@ what makes the ask channel answer. Three proposals per message; say what
 else is on offer. Then ask about the clan: what they call things, what to
 keep in mind — memory.md lines. This is also how a new routine is written
 later: start from the nearest example's brief and change what differs.
+
+CHANGE A SETTING — a budget, the default model or effort, the review's
+day and time or whether it is on, the timezone, how often the feed is
+read, the ask channel, who is an admin. propose_change with file ".env",
+op set_env and fields {KEY: value}: the keys and what each means are in
+the tool's description; "settings" shows the current values. A channel
+may be given as #name. Each value is checked the way setup checks it.
+Applying rewrites .env and restarts the bot (it says so; it is back in
+under a minute); if it is not running as a service the operator restarts
+it. Never a token, a key, a URL or a server id — those are not settings.
+
+ADD TO A FILE: op append works on identity.md and a routine's brief too —
+raw text at the end — for "add a house rule" or "also mention X".
 
 MANAGE THE ROUTINES — what runs, when, where, and what it says. Call
 list_routines first; it returns every routine with its fields and its
@@ -319,7 +333,7 @@ async function showMemory(message) {
 
 // ---------------------------------------------------------- the model
 
-function proposeTool({ files, proposals, by }) {
+function proposeTool({ files, proposals, by, operatorId = null }) {
   return {
     name: "propose_change",
     description:
@@ -327,18 +341,18 @@ function proposeTool({ files, proposals, by }) {
     input_schema: {
       type: "object",
       properties: {
-        file: { type: "string", description: "memory.md, identity.md, or routines/<key>.md (key: lowercase letters, digits, hyphens)" },
+        file: { type: "string", description: "memory.md, identity.md, routines/<key>.md (key: lowercase letters, digits, hyphens), or .env for settings" },
         summary: { type: "string", description: "One line for the operator: what this remembers or changes." },
         edit: {
           type: "object",
           properties: {
-            op: { type: "string", enum: ["append", "replace", "remove", "set_fields", "create", "delete"] },
-            text: { type: "string", description: "append: '- YYYY-MM-DD (from owner)[ until YYYY-MM-DD]: their words'. create: the routine's brief." },
+            op: { type: "string", enum: ["append", "replace", "remove", "set_fields", "create", "delete", "set_env"] },
+            text: { type: "string", description: "append to memory.md: '- YYYY-MM-DD (from owner)[ until YYYY-MM-DD]: their words'; append elsewhere: the text. create: the routine's brief." },
             find: { type: "string", description: "replace/remove: exact text occurring once" },
             replace: { type: "string" },
             fields: {
               type: "object",
-              description: `set_fields/create: front matter as strings. Fields: ${[...FIELDS].join(", ")}. An empty string removes a field.`,
+              description: `set_fields/create: front matter as strings — ${[...FIELDS].join(", ")}; an empty string removes a field. set_env: settings — ${Object.entries(SETTINGS).map(([k, v]) => `${k} (${v.about})`).join("; ")}; CHANNEL_<NAME> (a #name or id the bot is granted in); empty string unsets.`,
               additionalProperties: { type: "string" },
             },
           },
@@ -354,10 +368,10 @@ function proposeTool({ files, proposals, by }) {
       if (file === "memory.md" && edit?.op === "append" && !/\(from owner\)/.test(String(edit.text ?? ""))) {
         return { ok: false, code: "provenance", error: 'a memory entry from this conversation is "- YYYY-MM-DD (from owner): ..."' };
       }
-      const current = proposals.filter((p) => p.file === file).at(-1)?.next ?? files[file] ?? null;
-      const plan = planEdit({ file, edit: { ...edit, by }, current });
+      const current = proposals.filter((p) => p.file === file).at(-1)?.next ?? (file === ".env" ? readEnv() : files[file] ?? null);
+      const plan = planEdit({ file, edit: { ...edit, by }, current, by: operatorId });
       if (!plan.ok) return { ok: false, code: "refused", error: plan.error };
-      const proposal = { id: `p${proposals.length + 1}`, class: "prompt", file, rule: "from the operator", turnIds: [], summary: String(summary ?? "").slice(0, 300), edit: { ...edit, by }, preview: plan.preview.slice(0, 1500), next: plan.next };
+      const proposal = { id: `p${proposals.length + 1}`, class: file === ".env" ? "settings" : "prompt", file, rule: file === ".env" ? "settings" : "from the operator", turnIds: [], summary: String(summary ?? "").slice(0, 300), edit: { ...edit, by }, preview: plan.preview.slice(0, 1500), next: plan.next };
       proposals.push(proposal);
       return { ok: true, body: { proposal_id: proposal.id, diff: proposal.preview } };
     },
@@ -475,7 +489,7 @@ async function converse(message, options = {}) {
     maxTokens: routine.maxTokens,
     routineKey: "dm",
     lane: "review",
-    localTools: [proposeTool({ files, proposals, by: "owner" }), routinesTool(), examplesTool(), channelsTool(), lookupTool()],
+    localTools: [proposeTool({ files, proposals, by: "owner", operatorId: message.author.id }), routinesTool(), examplesTool(), channelsTool(), lookupTool()],
     maxRounds: 8,
   });
 
@@ -552,6 +566,7 @@ export async function handleDm(message, options = {}) {
   if (/^memory\s*[?]?$/i.test(text)) return showMemory(message);
   if (/^(budget|spend)\s*[?]?$/i.test(text)) return send(message, budgetReply());
   if (/^routines\s*[?]?$/i.test(text)) return send(message, routinesReply());
+  if (/^settings\s*[?]?$/i.test(text)) return send(message, `**Settings** (${serviceManaged() ? "a change restarts me automatically" : "not running as a service: a change needs you to restart me"})\n\`\`\`\n${describeSettings()}\n\`\`\``);
   if (/^(help|\?)$/i.test(text)) {
     return send(
       message,
@@ -559,6 +574,7 @@ export async function handleDm(message, options = {}) {
         "Tell me something to remember, ask me why I said something (`why <turn id>` or paste a message link), or ask me anything about the record.",
         "`try <routine>` — rehearse a post here; `post it` — send it",
         "`routines` — what runs and when; or just tell me what to change, add or remove",
+        "`settings` — budgets, models, the review, timezone, admins, channels; tell me what to change",
         "`memory` — what I have been told and learned · `budget` — this month's spend",
       ].join("\n"),
     );

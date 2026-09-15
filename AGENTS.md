@@ -252,6 +252,27 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
   the moment it is saved; undo of a create deletes, undo of a delete
   restores from `.history/`. Front-matter comments do not survive
   `withFields`; the fields do.
+- **The operator changes settings from the DM** (`src/settings.js`).
+  `propose_change` with `file: ".env"`, `op: set_env`, `fields: {KEY:
+  value}` on an ALLOWLIST (`SETTINGS`: budgets, `CLAUDE_*`, `REVIEW_*`,
+  `TIMEZONE`, `EVENT_POLL_SECONDS`, `STARTUP_MESSAGE`, `MAX_POSTS_PER_TURN`,
+  `COMMAND_PREFIX`, `FEEDBACK_CHANNEL`, `ADMIN_USER_IDS`, plus `CHANNEL_*`
+  resolved against the directory) — never a token, key, URL, app/guild id,
+  `STATE_PATH` or `AGENT_DIR`. Each value is checked the way setup checks
+  it (`checkSetting`: a priced model, an IANA zone, numbers, `parseReviewAt`;
+  an admin may not remove themselves). `withSettings` rewrites only the
+  changed keys and leaves every other line of `.env` alone; the preview is
+  the diff of settings and never shows a secret. Apply writes `.env` with a
+  backup under `state/env-history/` (NOT `agent/.history/` — a copy of a
+  secrets file is a secrets file), then, when `serviceManaged()` (launchd or
+  systemd is the parent, or `SERVICE_MANAGED=1`), sends itself SIGTERM after
+  the reply so the supervisor brings it back on the new values; otherwise
+  the message says a restart is needed. Undo restores the backup, same
+  rule. The review lane cannot touch `.env` (`planEdit` refuses without
+  `edit.by === "owner"`). `settings` in the DM shows the current values.
+  `models.json` stays terminal-only on purpose: a wrong price typed in chat
+  silently defeats every budget. `append` now works on `identity.md` and a
+  brief too (raw text at the end) for "add a house rule".
 - **A long paste is an attachment.** Over 2,000 characters Discord sends
   `message.txt` instead of text, and the first pasted FAQ arrived as an
   empty message. `attachedText` reads text attachments (text/* or

@@ -221,6 +221,13 @@ nobody else sees it, and anyone else who DMs it gets one polite line:
   recap in #war that skips quiet weeks", "make the meta report shorter" —
   each becomes a proposal on the routine's file, checked the way the bot
   loads it, live on Apply with no restart.
+- **Change a setting.** "Raise the ask budget to $15", "run the review
+  Saturday at 9", "use opus by default", "add @Levy as an admin", "move
+  questions to #ask-bot". Each is checked the way setup checks it and shown
+  as a diff; Apply rewrites `.env` and the bot restarts itself (under
+  launchd or systemd) to pick it up. Keys, tokens and server ids are not
+  settings and can't be changed this way. `settings` shows the current
+  values.
 - **Try before posting.** `try notable-movers` runs the routine and shows
   you the post without sending it; `post it` sends it.
 - **Ask it anything** about the record, on your own behalf, without
