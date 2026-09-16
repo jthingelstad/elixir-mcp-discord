@@ -15,7 +15,7 @@
 import { ask, spendBlock, cacheShare } from "./claude.js";
 import { laneFor } from "./budget.js";
 import { detectFriction, sweepFriction, looksUngrounded } from "./feedback.js";
-import { systemFor, userMessageFor, isSkip } from "./prompt.js";
+import { systemFor, userMessageFor, isSkip, notDelivered } from "./prompt.js";
 import { post, recentPosts } from "./post.js";
 import { renderTrace, errorFooter, UNGROUNDED_FOOTER } from "./trace.js";
 import { directory, resolveById } from "./directory.js";
@@ -299,6 +299,20 @@ export async function runRoutine(routine, options = {}) {
   return track(() => runRoutineNow(routine, options));
 }
 
+/**
+ * Is this reply a finished turn? A routine turn with the post tool is done when
+ * it posted or declined; prose with neither is a post that was never delivered,
+ * and the answer is to ask once more (src/claude.js `nudge`), not to drop $0.10
+ * of tool calls on the floor. Null accepts the reply.
+ */
+export function deliveryNudge(routine, { text, posts }) {
+  if (posts.length > 0) return null;
+  const reply = (text || "").trim();
+  if (!reply) return null;
+  if (routine.maySkip && isSkip(reply)) return null;
+  return notDelivered(routine);
+}
+
 async function runRoutineNow(
   routine,
   {
@@ -384,6 +398,7 @@ async function runRoutineNow(
           roomTool({ entries: directoryEntries, resolve }),
         ]
       : [],
+    nudge: withTool ? ({ text }) => deliveryNudge(routine, { text, posts }) : null,
   });
 
   if (!result.ok) {
@@ -434,14 +449,14 @@ async function runRoutineNow(
         routine: routine.key,
         turnId: result.turnId,
         hint: withTool
-          ? "the model replied in prose instead of calling post_message and the routine names no channel:"
+          ? "the model replied in prose instead of calling post_message, even when nudged, and the routine names no channel:"
           : "the routine names no channel: and there is no directory",
         chars: text.length,
       });
       record({ text, posts: [], error: "no_destination" });
       await notify(
         "routine had nowhere to post",
-        `${routine.key} wrote ${text.length} characters but called no post tool and names no channel; the turn was paid for and nothing was posted.`,
+        `${routine.key} wrote ${text.length} characters but called no post tool${result.nudged ? " (even after a second ask)" : ""} and names no channel; the turn was paid for and nothing was posted.`,
         { fingerprint: `no_destination:${routine.key}` },
       );
       return { ok: false, error: "no_destination", text, result };

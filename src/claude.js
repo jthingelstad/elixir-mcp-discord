@@ -268,6 +268,12 @@ export async function ask({
   // A member's answer is done in five rounds or it is looping. A review
   // (src/review.js) proposes edits one tool call at a time and needs more.
   maxRounds = MAX_ROUNDS,
+  // `nudge({ text, called })` is asked ONCE when the model ends the turn in
+  // prose. Return a user message to send back and the turn gets one more
+  // round; return null to accept the reply. The caller knows what "done"
+  // means (a routine turn is done when post_message was called or the reply
+  // is SKIP); this loop only knows how to ask again. See src/run.js.
+  nudge = null,
 }) {
   const history = [...messages];
   const started = Date.now();
@@ -286,6 +292,7 @@ export async function ask({
   let text = "";
   let rounds = 0;
   let stopReason = null;
+  let nudged = false;
 
   for (let round = 0; round < maxRounds; round += 1) {
     rounds = round + 1;
@@ -481,6 +488,23 @@ export async function ask({
       history.push({ role: "assistant", content: response.content });
       continue;
     }
+    // The model ended in prose when the caller needed a tool call. One more
+    // round, once, with the caller's nudge as the user turn. The case that
+    // paid for this: a scheduled turn that did nine tool calls, wrote its
+    // post, and never called post_message — Sonnet 5 did that on one turn in
+    // four with the posting rule first and DELIVER last (2026-09-14..16, all
+    // three instances). The work is done and cached; asking again costs a
+    // cache read, dropping it cost the whole turn.
+    if (stopReason === "end_turn" && nudge && !nudged) {
+      const message = nudge({ text, called });
+      if (message) {
+        nudged = true;
+        log.info("turn_nudged", { turnId, routine: routineKey, chars: text.length });
+        history.push({ role: "assistant", content: response.content });
+        history.push({ role: "user", content: message });
+        continue;
+      }
+    }
     break;
   }
 
@@ -497,6 +521,7 @@ export async function ask({
     ms: Date.now() - started,
     rounds,
     stopReason,
+    nudged,
     // A max_tokens cutoff otherwise reads as a complete answer.
     truncated: stopReason === "max_tokens" || rounds >= maxRounds,
     model,

@@ -194,6 +194,7 @@ export function renderTurn(turn, { full = false } = {}) {
       cache,
       turn.ms ? `${(turn.ms / 1000).toFixed(1)}s` : null,
       turn.rounds > 1 ? `${turn.rounds} rounds` : null,
+      turn.nudged ? "nudged" : null,
       turn.stopReason,
       turn.serverVersion,
       turn.prompt?.system ? `prompt ${turn.prompt.system}` : null,

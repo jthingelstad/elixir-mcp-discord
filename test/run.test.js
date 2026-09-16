@@ -486,3 +486,61 @@ test("the operator can study a channel: whole messages, read-only channels inclu
   assert.match(end.body.note, /Nothing further back/);
   assert.equal((await tool.handler({ channel_id: "99" })).ok, false, "only directory channels");
 });
+
+/**
+ * The second ask. A turn that wrote its post and never called post_message
+ * used to end as `no_destination` — one substantive turn in four did that on
+ * Sonnet 5 (2026-09-14..16). The runner now hands ask() a nudge: prose with
+ * no post and no SKIP gets one more round; a post, a SKIP, or an empty reply
+ * is accepted as it is.
+ */
+test("prose with no post and no SKIP is nudged once; a post or a SKIP is not", async () => {
+  const { deliveryNudge } = await import("../src/run.js");
+  const entries = [{ id: "11", name: "news", topic: "", visibility: "everyone", threads: false, role: null }];
+  const channel = fakeChannel();
+  channel.id = "11";
+
+  let handed = null;
+  await runRoutine(routine({ trigger: "schedule", at: "01:00", may_skip: true }), {
+    channel: null,
+    entries,
+    resolve: async () => channel,
+    askFn: async ({ nudge }) => {
+      handed = nudge;
+      return answer("SKIP", { called: [], trace: [] });
+    },
+  });
+  assert.equal(typeof handed, "function", "a turn with the directory is handed a nudge");
+  assert.match(
+    handed({ text: "Two joined today.", called: ["clans_roster"] }),
+    /NOT DELIVERED[\s\S]*post_message[\s\S]*reply SKIP/,
+  );
+  assert.equal(handed({ text: "SKIP", called: [] }), null, "declining is a finished turn");
+  assert.equal(handed({ text: "", called: [] }), null, "silence is a finished turn");
+
+  const may = routine({ trigger: "schedule", at: "01:00", may_skip: true });
+  const must = routine({ trigger: "schedule", at: "01:00" });
+  assert.equal(
+    deliveryNudge(may, { text: "Posted above.", posts: [{ channelId: "11" }] }),
+    null,
+    "a post is a finished turn",
+  );
+  assert.equal(
+    deliveryNudge(must, { text: "SKIP", posts: [] }) !== null,
+    true,
+    "a routine that may not skip is nudged on SKIP",
+  );
+  assert.doesNotMatch(deliveryNudge(must, { text: "Prose.", posts: [] }), /reply SKIP/, "and is not offered SKIP");
+
+  let legacy = "unset";
+  await runRoutine(routine({ trigger: "schedule", at: "01:00" }), {
+    channel,
+    entries: [],
+    resolve: async () => channel,
+    askFn: async ({ nudge }) => {
+      legacy = nudge;
+      return answer("Plain reply.");
+    },
+  });
+  assert.equal(legacy, null, "no directory, no tool, nothing to nudge toward");
+});

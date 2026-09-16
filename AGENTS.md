@@ -469,6 +469,20 @@ hint (bound in `.env` or matched by channel name); no `post_message` call =
 skip; prose with no call still goes to the default (legacy), or is
 `post_without_destination` if there is none.
 
+- **Prose with no call is asked again, once (2026-09-16).** With the
+  posting rule first and `DELIVER` last, Sonnet 5 still ended one
+  substantive turn in four in prose — the post written, nine tool calls
+  behind it, no `post_message` (3 of 12 across the three instances,
+  2026-09-14..16; `notable-movers` and `capability-spotlight`). Each was a
+  paid turn and a "routine had nowhere to post" alert. `ask()` now takes a
+  `nudge({ text, called })` hook; the runner's `deliveryNudge` returns
+  `notDelivered(routine)` when the reply is neither a post nor (for a
+  `may_skip` routine) SKIP, and the turn gets ONE more round with that as
+  the user message — same turn id, cached prefix, `nudged: true` in the
+  ledger and `nudged` in the `turns` footer. A turn that still will not
+  call the tool ends as before. The nudge is a mechanics fix, not a prompt
+  fix: do not answer this failure by making `DELIVER` longer.
+
 - **The directory rule: EXPLICIT grants only.** A channel is in the
   directory when an overwrite for the bot's role or the bot itself allows
   Send Messages. Inherited @everyone permission does not count — on POAP

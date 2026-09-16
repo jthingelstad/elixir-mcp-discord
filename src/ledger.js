@@ -189,6 +189,7 @@ export function turnEntry({ routine, lane, result, system, input, output, contra
     ms: result?.ms ?? null,
     rounds: result?.rounds ?? null,
     stopReason: result?.stopReason ?? null,
+    nudged: result?.nudged ?? false,
     truncated: result?.truncated ?? false,
   };
 }

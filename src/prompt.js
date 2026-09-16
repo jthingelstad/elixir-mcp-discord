@@ -299,6 +299,20 @@ export const DELIVER = `Deliver your post by calling post_message. If there is n
 call and reply SKIP.`;
 
 /**
+ * The second chance. Sent as the user turn when a routine turn ended in prose
+ * with no post_message call and no SKIP: the model wrote the post and
+ * forgot to deliver it (one turn in four on Sonnet 5, 2026-09-14..16, with
+ * DELIVER at the end of the brief). Short, because everything it needs is
+ * already in the turn; it just has to make the call.
+ */
+export function notDelivered(routine) {
+  const skip = routine.maySkip ? " If there is nothing to post after all, reply SKIP." : "";
+  return `NOT DELIVERED. That reply is not a post; nothing reaches Discord except a
+post_message call. If it is the post, call post_message now with a channel_id
+from the directory and the text as content.${skip}`;
+}
+
+/**
  * The clock, in the operator's zone, on every user turn. The model has no
  * other way to know the date: it was spending a game_clock call to learn
  * the weekday, and writing "until Friday" as a date it had to guess. In
