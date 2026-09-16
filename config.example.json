@@ -39,5 +39,8 @@
 
   "_misc": "FEEDBACK_CHANNEL: logical channel for Elixir's replies to filed feedback (default: the first event routine's channel, else the first in the directory). MAX_POSTS_PER_TURN: how many post_message calls one routine turn may make (3). STARTUP_MESSAGE: the one-line hello on boot (on). ROUTINES_DISABLED: comma-separated keys kept off; a routine's own enabled: false does the same.",
   "STARTUP_MESSAGE": "on",
-  "MAX_POSTS_PER_TURN": "3"
+  "MAX_POSTS_PER_TURN": "3",
+
+  "_voice": "How long a channel may go without a post from the bot before it leans toward saying the smaller true thing rather than nothing. Every routine turn is told the hours of silence per channel; VOICE sets the threshold past which that lowers the bar for a may_skip routine: quiet = 72h (a bot that speaks rarely), normal = 12h, chatty = 4h (a clan that wants to hear from it through the day). It never invents and never repeats itself at any level; a truly dead day is still a SKIP.",
+  "VOICE": "normal"
 }

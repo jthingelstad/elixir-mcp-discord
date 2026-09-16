@@ -96,3 +96,72 @@ test("SKIP is recognised even when the model explains itself first", () => {
   assert.ok(!isSkip("**War decks** — 9 untouched, 4 partial."));
   assert.ok(!isSkip("Nobody should skip their war decks today."));
 });
+
+/**
+ * How much to say. The SKIP rule points one way; the silence clock and the
+ * VOICE setting are the counterweight. The lean lives in the cached system
+ * block, the reading lives in the user turn, and neither reaches a routine
+ * that cannot skip or a turn without the directory.
+ */
+test("the voice block rides with the skip rule and the directory; the silence line names who is past the line", async () => {
+  const { VOICES, silenceLine } = await import("../src/prompt.js");
+  const entries = [{ id: "11", name: "news", topic: "", visibility: "everyone", threads: false, role: null }];
+  const may = routine({ trigger: "schedule", at: "01:00", may_skip: true });
+  const must = routine({ trigger: "schedule", at: "01:00" });
+
+  assert.equal(VOICES.quiet.hours, 72);
+  assert.equal(VOICES.normal.hours, 12);
+  assert.equal(VOICES.chatty.hours, 4);
+  assert.match(systemFor(may, { entries, voice: "chatty" }), /HOW MUCH TO SAY: chatty/);
+  assert.match(systemFor(may, { entries, voice: "nonsense" }), /HOW MUCH TO SAY: normal/, "an unknown level is normal");
+  assert.doesNotMatch(systemFor(must, { entries }), /HOW MUCH TO SAY/, "a routine that cannot skip has no lean");
+  assert.doesNotMatch(systemFor(may, { entries: [] }), /HOW MUCH TO SAY/, "no directory, no clock, no lean");
+
+  const now = new Date("2026-09-16T17:30:00Z");
+  const silence = [
+    {
+      channelId: "11",
+      name: "news",
+      hours: 29,
+      at: new Date("2026-09-15T12:31:00Z"),
+      atLeast: false,
+      routine: "notable-movers",
+    },
+    {
+      channelId: "12",
+      name: "leaders",
+      hours: 150,
+      at: new Date("2026-09-10T12:00:00Z"),
+      atLeast: true,
+      routine: null,
+    },
+    {
+      channelId: "13",
+      name: "fresh",
+      hours: 2,
+      at: new Date("2026-09-16T15:30:00Z"),
+      atLeast: false,
+      routine: "clan-feed",
+    },
+  ];
+  const line = silenceLine(silence, { level: "normal", timezone: "UTC" });
+  assert.match(line, /^\[silence, your line is 12h: #news 29h \(last: notable-movers, Tue 12:31\) — past the line;/);
+  assert.match(line, /#leaders ≥6d \(no post since the clock started\) — past the line;/);
+  assert.match(line, /#fresh 2h \(last: clan-feed, Wed 15:30\)\]$/, "under the line is a fact, not a lean");
+  assert.doesNotMatch(
+    silenceLine(silence, { level: "chatty", timezone: "UTC" }),
+    /#fresh 2h[^;]*past/,
+    "chatty: 2h is still under 4h",
+  );
+  assert.doesNotMatch(
+    silenceLine(silence, { level: "quiet", timezone: "UTC" }),
+    /#news 29h[^;]*past your line/,
+    "quiet: 29h is under 72h",
+  );
+  assert.equal(silenceLine([], {}), null);
+
+  const user = userMessageFor(may, { withTool: true, silence, now, voice: "normal" });
+  assert.match(user, /^\[now: [^\n]*\]\n\n\[silence, your line is 12h: #news 29h/, "the clock sits beside the date");
+  assert.doesNotMatch(userMessageFor(must, { withTool: true, silence, now }), /\[silence:/);
+  assert.doesNotMatch(userMessageFor(may, { withTool: false, silence, now }), /\[silence:/);
+});

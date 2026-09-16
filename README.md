@@ -384,6 +384,18 @@ still marks the run done. A channel that manufactures content on a quiet day
 teaches people to mute it. Routines that may *not* skip post what they said, so
 a prompt bug is visible rather than looking like a quiet week.
 
+The counterweight is the **silence clock**. Every such turn is told, beside
+the date, how long each channel it may post in has gone without a post from
+this bot (`[silence, your line is 12h: #poap-kings 29h (last: notable-movers,
+Tue 12:31) — past the line]`), and `VOICE` in `config.json` sets the line past
+which that lowers the bar for a skip: `quiet` (72h, a bot that speaks rarely),
+`normal` (12h, the default) or `chatty` (4h, a clan that wants to hear from it
+through the day). Past the line the bot prefers the smaller true thing — one
+line, one number that moved — over nothing. The bar never disappears: it
+still never invents and never repeats itself, and a truly dead day is still a
+SKIP. Only routine posts reset the clock; answering a question in the ask
+channel is not sharing. "Make it chattier" in the DM changes it.
+
 ## Budgets
 
 Three monthly pots in `config.json`, because three different things spend

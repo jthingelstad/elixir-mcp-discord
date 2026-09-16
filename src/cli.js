@@ -158,7 +158,13 @@ async function tryRoutine() {
       }),
     );
     console.log("\n=== USER ===\n");
-    console.log(userMessageFor(routine, { events }));
+    console.log(
+      userMessageFor(routine, {
+        events,
+        withTool: entries.length > 0,
+        silence: entries.length > 0 && routine.maySkip ? state.silence(entries.filter((e) => !e.role)) : null,
+      }),
+    );
     console.log("\n=== ANSWER ===\n");
   }
 

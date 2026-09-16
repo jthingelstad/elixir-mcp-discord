@@ -131,6 +131,81 @@ export function recentOwnPosts(routineKey, count) {
   return (read().lastPosts?.[routineKey] || []).slice(0, count);
 }
 
+/**
+ * THE SILENCE CLOCK. When this bot last posted in each channel, so a turn
+ * can be told how long the room has gone without hearing from it. Only
+ * routine posts count — an answer in the ask thread is answering, not
+ * sharing — and a channel the bot has never posted in (or not since this
+ * clock existed) is anchored on the first time the directory showed it,
+ * reported as "at least" that long. The clock is a fact handed to the
+ * model (src/prompt.js `silenceLine`); the lean it puts on a SKIP decision
+ * is the instance's VOICE setting.
+ */
+export function rememberPostAt(channelId, { name = null, routine = null, at = new Date() } = {}) {
+  if (!channelId) return;
+  const state = read();
+  write({
+    ...state,
+    lastPostAt: { ...state.lastPostAt, [String(channelId)]: { at: at.toISOString(), name, routine, seeded: false } },
+  });
+}
+
+/**
+ * Seed the clock once, at boot, from the turn ledger's post timestamps —
+ * channels with no stamp yet only. Without this, the first days after the
+ * clock shipped would read "≥0h since the clock started" in a channel the
+ * ledger knows went quiet yesterday. A timestamp and a channel id are all
+ * that is read: this is the audit record's WHEN, never its content, and it
+ * happens at boot, not in a member-facing turn (the two rules in ledger.js).
+ */
+export function seedPostTimes(turns) {
+  const state = read();
+  const lastPostAt = { ...state.lastPostAt };
+  let changed = false;
+  for (const turn of turns) {
+    if (turn.lane !== "routines") continue;
+    for (const p of turn.output?.posts ?? []) {
+      const id = String(p.channelId ?? "");
+      if (!id || !turn.at) continue;
+      const have = lastPostAt[id];
+      if (have?.seeded === false || (have && have.at >= turn.at)) continue;
+      lastPostAt[id] = { at: turn.at, name: p.channelName ?? null, routine: turn.routine ?? null, seeded: true };
+      changed = true;
+    }
+  }
+  if (changed) write({ ...state, lastPostAt });
+  return Object.values(lastPostAt).filter((v) => v.seeded).length;
+}
+
+/** Per directory channel: hours since this bot last posted there, or since it
+ *  first saw the channel (`atLeast: true`). Anchors first sightings. */
+export function silence(entries, now = new Date()) {
+  const state = read();
+  const lastPostAt = { ...state.lastPostAt };
+  const firstSeen = { ...state.channelFirstSeen };
+  let changed = false;
+  const out = [];
+  for (const entry of entries) {
+    const id = String(entry.id);
+    const last = lastPostAt[id];
+    if (!last && !firstSeen[id]) {
+      firstSeen[id] = now.toISOString();
+      changed = true;
+    }
+    const since = last ? new Date(last.at) : new Date(firstSeen[id]);
+    out.push({
+      channelId: id,
+      name: entry.name,
+      hours: Math.max(0, (now - since) / 3600000),
+      at: since,
+      atLeast: !last,
+      routine: last?.routine ?? null,
+    });
+  }
+  if (changed) write({ ...state, channelFirstSeen: firstSeen });
+  return out;
+}
+
 /** Record a turn and the message ids it produced, pruning the oldest. */
 export function rememberTurn(turnId, record, messageIds = []) {
   if (!turnId) return;

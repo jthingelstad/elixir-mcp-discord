@@ -385,7 +385,7 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
   `propose_change` with `file: "config.json"`, `op: set_config`, `fields:
   {KEY: value}` on an ALLOWLIST (`SETTINGS`: budgets, `CLAUDE_*`,
   `REVIEW_*`, `TIMEZONE`, `EVENT_POLL_SECONDS`, `STARTUP_MESSAGE`,
-  `MAX_POSTS_PER_TURN`, `COMMAND_PREFIX`, `FEEDBACK_CHANNEL`,
+  `MAX_POSTS_PER_TURN`, `VOICE`, `COMMAND_PREFIX`, `FEEDBACK_CHANNEL`,
   `ADMIN_USER_IDS`, plus `CHANNEL_*` resolved against the directory) —
   which is every key `config.json` holds; secrets and wiring are in
   `.env`, which the DM cannot reach. Each value is checked the way setup checks it
@@ -482,6 +482,24 @@ skip; prose with no call still goes to the default (legacy), or is
   ledger and `nudged` in the `turns` footer. A turn that still will not
   call the tool ends as before. The nudge is a mechanics fix, not a prompt
   fix: do not answer this failure by making `DELIVER` longer.
+- **The silence clock and VOICE (2026-09-16).** The SKIP rule points one
+  way, and a bot judging "worth saying?" against the same bar an hour after
+  its last post and a day after had no idea POAP KINGS heard nothing for
+  ~29h (five SKIPs in a row plus the lost post above). Now
+  `state.silence(entries)` gives hours since THIS bot last posted in each
+  directory channel it may post in (`rememberPostAt` on every routine post,
+  including the DM's "post it"; ask-lane answers do not count; a channel
+  with no stamp is anchored on first sight and shown as `≥`; at boot
+  `seedPostTimes` fills missing stamps from the ledger's last 14 days —
+  timestamps and channel ids only, never content). `silenceLine` puts it in
+  the USER turn beside the date, naming which channels are past the line,
+  so the cached prefix is untouched; the lean is `VOICES[config.voice]` in
+  the system block, after the SKIP rule, only for a `may_skip` routine with
+  the directory. Jamie set the lines: `quiet` 72h, `normal` 12h (default),
+  `chatty` 4h. It is a lean on a skip decision, never a scheduler change:
+  no extra turns fire because a channel is quiet, and grounding and "do not
+  repeat" hold at every level. The ledger's `input.silence` records what
+  the turn was told.
 
 - **The directory rule: EXPLICIT grants only.** A channel is in the
   directory when an overwrite for the bot's role or the bot itself allows

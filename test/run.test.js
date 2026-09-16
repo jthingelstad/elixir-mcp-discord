@@ -544,3 +544,97 @@ test("prose with no post and no SKIP is nudged once; a post or a SKIP is not", a
   });
   assert.equal(legacy, null, "no directory, no tool, nothing to nudge toward");
 });
+
+/**
+ * The silence clock: every routine post stamps its channel; a channel with
+ * no stamp is anchored on first sight and reported as "at least"; the
+ * runner hands the reading to a may_skip turn and records it in the ledger.
+ */
+test("a post resets the channel's silence clock; an unposted channel counts from first sight", async () => {
+  const state = await import("../src/state.js");
+  const entries = [
+    { id: "21", name: "news", topic: "", visibility: "everyone", threads: false, role: null },
+    { id: "22", name: "leaders", topic: "", visibility: "restricted", threads: false, role: null },
+    { id: "23", name: "ask", topic: "", visibility: "everyone", threads: true, role: "ask" },
+  ];
+  const news = fakeChannel();
+  const resolve = async (id) => ({ 21: news })[id] ?? null;
+  const { POST_TOOL } = await import("../src/run.js");
+
+  let userTurn = null;
+  const run = await runRoutine(routine({ trigger: "schedule", at: "01:00", may_skip: true }), {
+    channel: null,
+    entries,
+    resolve,
+    askFn: async ({ messages, localTools }) => {
+      userTurn = messages[0].content;
+      const tool = localTools.find((t) => t.name === POST_TOOL.name);
+      await tool.handler({ channel_id: "21", content: "One true line." });
+      return answer("", { called: ["clans_roster", "post_message"], trace: [] });
+    },
+  });
+  assert.equal(run.ok, true);
+  assert.match(
+    userTurn,
+    /\[silence, your line is \d+h: #news ≥0h \(no post since the clock started\); #leaders ≥0h/,
+    "first sight anchors both",
+  );
+  assert.doesNotMatch(userTurn, /#ask/, "the ask channel is not on the clock");
+
+  const later = new Date(Date.now() + 30 * 3600000);
+  const reading = state.silence(
+    entries.filter((e) => !e.role),
+    later,
+  );
+  const byName = Object.fromEntries(reading.map((s) => [s.name, s]));
+  assert.equal(byName.news.atLeast, false, "the post stamped #news");
+  assert.equal(byName.news.routine, "war-deck-check");
+  assert.equal(Math.round(byName.news.hours), 30);
+  assert.equal(byName.leaders.atLeast, true, "#leaders is still counting from first sight");
+  assert.equal(Math.round(byName.leaders.hours), 30);
+});
+
+test("the clock is seeded from the ledger at boot, and a real stamp is never overwritten by a seed", async () => {
+  const state = await import("../src/state.js");
+  const turns = [
+    {
+      lane: "routines",
+      routine: "clan-feed",
+      at: "2026-09-14T02:00:00.000Z",
+      output: { posts: [{ channelId: "31", channelName: "news" }] },
+    },
+    {
+      lane: "routines",
+      routine: "notable-movers",
+      at: "2026-09-15T17:31:00.000Z",
+      output: { posts: [{ channelId: "31", channelName: "news" }] },
+    },
+    {
+      lane: "ask",
+      routine: "ask",
+      at: "2026-09-16T10:00:00.000Z",
+      output: { posts: [{ channelId: "31", channelName: "news" }] },
+    },
+    {
+      lane: "routines",
+      routine: "war-deck-check",
+      at: "2026-09-16T06:00:00.000Z",
+      output: { posts: [], error: "no_destination" },
+    },
+  ];
+  assert.equal(state.seedPostTimes(turns), 1);
+  const [news] = state.silence([{ id: "31", name: "news" }], new Date("2026-09-16T17:31:00Z"));
+  assert.equal(news.routine, "notable-movers", "the newest routine post wins; the ask lane does not count");
+  assert.equal(Math.round(news.hours), 24);
+  state.rememberPostAt("31", { name: "news", routine: "clan-feed", at: new Date("2026-09-16T12:00:00Z") });
+  state.seedPostTimes([
+    {
+      lane: "routines",
+      routine: "x",
+      at: "2026-09-16T15:00:00.000Z",
+      output: { posts: [{ channelId: "31", channelName: "news" }] },
+    },
+  ]);
+  const [again] = state.silence([{ id: "31", name: "news" }], new Date("2026-09-16T17:31:00Z"));
+  assert.equal(again.routine, "clan-feed", "a stamp the runtime set outranks any later seed");
+});

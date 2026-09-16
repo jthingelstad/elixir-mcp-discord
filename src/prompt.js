@@ -115,6 +115,75 @@ no post_message call and reply with SKIP on a line by itself. A quiet day is
 allowed to be quiet, and a channel that manufactures content on one teaches
 people to mute it. Do not pad.`;
 
+/**
+ * HOW MUCH TO SAY. The SKIP rule alone points one way — silence is valid,
+ * do not pad — and a bot judging "worth saying?" against the same bar an
+ * hour after its last post and two days after it goes quiet without
+ * knowing (POAP KINGS, 2026-09-15..16: five SKIPs in a row and one lost
+ * post; ~29 hours with nothing in the channel). The counterweight is a
+ * fact and a lean: the silence line in every routine's user turn says how
+ * long each channel has gone without a post from THIS bot, and the
+ * instance's VOICE says past how many hours that should lower the bar.
+ * The bar never disappears — grounding and "do not repeat" hold at every
+ * level — it drops to "one true line beats nothing".
+ */
+export const VOICES = {
+  quiet: {
+    hours: 72,
+    text: `HOW MUCH TO SAY: quiet. This clan prefers a bot that speaks rarely. The
+silence line in your brief says how long each channel has gone without a post
+from you. Only past 72 hours should that lower the bar at all, and then only
+for something a member would be glad to have read.`,
+  },
+  normal: {
+    hours: 12,
+    text: `HOW MUCH TO SAY: normal. The silence line in your brief says how long each
+channel has gone without a post from you. Under 12 hours the bar is unchanged.
+Past it, prefer the smaller true thing — one line, one number that moved —
+over nothing: a channel that hears nothing all day stops being read. Never
+invent and never restate what you already posted; if the record truly has
+nothing new, SKIP still.`,
+  },
+  chatty: {
+    hours: 4,
+    text: `HOW MUCH TO SAY: chatty. This clan wants to hear from you through the day.
+The silence line in your brief says how long each channel has gone without a
+post from you. Past 4 hours, SKIP only if the record has nothing new since
+your last post there — a single true line is better than silence. Never
+invent and never restate what you already posted.`,
+  },
+};
+
+export function voiceFor(level = config.voice) {
+  return VOICES[level] ?? VOICES.normal;
+}
+
+/**
+ * The clock's reading for this turn, one line in the user turn so the cached
+ * system prefix is untouched. Says which channels are past the VOICE line so
+ * the model does not do arithmetic; "≥" marks a channel with no post since
+ * the clock started (anchored on first sight, src/state.js `silence`).
+ */
+export function silenceLine(silences, { level = config.voice, timezone = config.timezone } = {}) {
+  if (!silences?.length) return null;
+  const { hours: line } = voiceFor(level);
+  const when = (at) =>
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(at);
+  const span = (h) => (h < 48 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`);
+  const parts = silences.map((s) => {
+    const past = s.hours >= line ? " — past the line" : "";
+    const last = s.atLeast ? "no post since the clock started" : `last: ${s.routine ?? "a post"}, ${when(s.at)}`;
+    return `#${s.name} ${s.atLeast ? "≥" : ""}${span(s.hours)} (${last})${past}`;
+  });
+  return `[silence, your line is ${line}h: ${parts.join("; ")}]`;
+}
+
 const WHO_IS_ASKING = `Each message names its author and their id from this surface, like
 "Raquaza (discord:12345): how am I doing?". When a question is about the person
 asking — "my stats", "how am I playing", "my deck" — pass that id as
@@ -270,6 +339,7 @@ export function systemFor(
     subject = subjectBlock(),
     entries = [],
     defaultChannelId = null,
+    voice = config.voice,
   } = {},
 ) {
   const withTool = entries.length > 0;
@@ -281,6 +351,9 @@ export function systemFor(
   if (routine.trigger === "message") blocks.push(WHO_IS_ASKING);
   blocks.push(QUOTA);
   if (routine.maySkip) blocks.push(withTool ? SKIP_WITH_TOOL : SKIP);
+  // The lean applies to a decision to skip, and the clock is per directory
+  // channel, so it rides with the tool. `voice` is injectable for tests.
+  if (routine.maySkip && withTool) blocks.push(voiceFor(voice).text);
   if (identity) blocks.push(`HOUSE RULES\n\n${identity}`);
   if (memory) blocks.push(`${MEMORY_HEADER}\n\n${memory}`);
   // A message routine's own prompt is a standing brief for the channel, so it
@@ -293,7 +366,18 @@ export function systemFor(
 
 /** The code-level rules, by name, for the review lane to show the model as
  *  the part of the rubric it cannot edit. */
-export const MECHANICS = { GROUNDING, DISCORD_FORMAT, POSTING, WHO_IS_ASKING, QUOTA, SKIP, FEEDBACK_PROMPT };
+export const MECHANICS = {
+  GROUNDING,
+  DISCORD_FORMAT,
+  POSTING,
+  WHO_IS_ASKING,
+  QUOTA,
+  SKIP,
+  get VOICE() {
+    return voiceFor().text;
+  },
+  FEEDBACK_PROMPT,
+};
 
 export const DELIVER = `Deliver your post by calling post_message. If there is nothing to post, make no
 call and reply SKIP.`;
@@ -334,8 +418,15 @@ export function nowLine(now = new Date(), timezone = config.timezone) {
 }
 
 /** The routine's own prompt, plus whatever its trigger handed it. */
-export function userMessageFor(routine, { events, recent, withTool = false, now = new Date() } = {}) {
-  const parts = [nowLine(now), routine.prompt];
+export function userMessageFor(
+  routine,
+  { events, recent, withTool = false, silence = null, now = new Date(), voice = config.voice } = {},
+) {
+  const parts = [nowLine(now)];
+  // The clock beside the date: a fact about every channel it may post in.
+  const quiet = routine.maySkip && withTool ? silenceLine(silence, { level: voice }) : null;
+  if (quiet) parts.push(quiet);
+  parts.push(routine.prompt);
   if (events && (Array.isArray(events) ? events.length : true)) {
     parts.push(
       `FROM THE ELIXIR MCP TIMELINE — \`timeline\` is what happened in the window, oldest first, one item each with a sentence and its facts; \`entries\` is the window's context per subject, sections null when nothing happened. Facts with their own timestamps, not a report: drill with the tools where it earns its place, and never announce the time from them.\n\n${JSON.stringify(events, null, 2)}`,

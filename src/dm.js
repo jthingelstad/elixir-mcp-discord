@@ -410,6 +410,7 @@ async function postDraft(message, { postFn = post } = {}) {
       text: p.text,
     });
     state.rememberPost(routine.key, run.posts.length > 1 ? `[${p.channel}] ${p.text}` : p.text);
+    state.rememberPostAt(entry.id, { name: entry.name, routine: routine.key });
   }
   drafts.delete(message.author.id);
   if (posted.length) {

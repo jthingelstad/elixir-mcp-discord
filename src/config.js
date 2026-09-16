@@ -364,6 +364,12 @@ export const config = {
   get maxPostsPerTurn() {
     return num("MAX_POSTS_PER_TURN", "3");
   },
+  // How much silence before the bot leans toward posting: quiet, normal or
+  // chatty (src/prompt.js VOICES holds the hours). The bar for a post never
+  // goes away; past the threshold it drops to "one true line beats nothing".
+  get voice() {
+    return optional("VOICE", "normal").toLowerCase();
+  },
   // The boot hello: one line in the first channel of the directory saying
   // the bot is up and what build it is. STARTUP_MESSAGE=off to silence it.
   get startupMessage() {

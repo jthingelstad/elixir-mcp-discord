@@ -28,6 +28,7 @@ import * as budget from "./budget.js";
 import { initialize, describePrincipal } from "./mcp.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
+import * as ledger from "./ledger.js";
 
 const client = new Client({
   intents: [
@@ -290,6 +291,12 @@ client.once(Events.ClientReady, async (ready) => {
 
   await registerCommands(client);
   await postHello({ handshake, routines });
+  // The silence clock (state.js): stamps not yet set come from the ledger's
+  // last few days, so the first turn after a restart knows how long the
+  // channels have been quiet.
+  const since = new Date(Date.now() - 14 * 24 * 3600000).toISOString().slice(0, 10);
+  const seeded = state.seedPostTimes(ledger.readTurns({ since }));
+  if (seeded) log.info("silence_clock_seeded", { channels: seeded, since });
   timers.push(startEventLoop(() => routinesFor("events"), resolveChannel));
   timers.push(startScheduler(() => routinesFor("schedule"), resolveChannel));
   // After the scheduler: both seed the same run ledger, and the scheduler's

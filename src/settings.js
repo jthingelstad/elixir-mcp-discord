@@ -120,6 +120,11 @@ export const SETTINGS = {
   },
   STARTUP_MESSAGE: { about: "the one-line hello on boot: on or off", check: onOff },
   MAX_POSTS_PER_TURN: { about: "how many posts one routine turn may make", check: intAtLeast(1, "MAX_POSTS_PER_TURN") },
+  VOICE: {
+    about:
+      "how long a channel may go quiet before the bot leans toward posting: quiet (72h), normal (12h), chatty (4h)",
+    check: (v) => (["quiet", "normal", "chatty"].includes(v.toLowerCase()) ? null : "quiet, normal or chatty"),
+  },
   COMMAND_PREFIX: {
     about: "slash-command prefix (/<prefix>-run); empty for plain /run (restart)",
     check: (v) => (/^[a-z0-9_-]*$/.test(v) ? null : "letters, digits, - and _ only"),
