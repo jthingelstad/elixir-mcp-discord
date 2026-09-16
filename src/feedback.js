@@ -360,14 +360,40 @@ ${CLASSIFY_RULES}`;
  * the point: a member watching their complaint get answered is the strongest
  * argument for the product there is.
  */
+export async function readFeedbackPages(readPage = (args) => callTool("elixir_my_feedback", args)) {
+  const items = [];
+  let offset = 0;
+
+  for (let page = 0; ; page += 1) {
+    // The first call deliberately omits offset so this reader remains callable
+    // against a pre-3.8.0 server. Follow only a cursor the server published.
+    const args = page === 0 ? { limit: 50 } : { limit: 50, offset };
+    const result = await readPage(args);
+    if (!result.ok) return result;
+
+    const rows = result.body?.items || result.body?.feedback || [];
+    if (!Array.isArray(rows)) {
+      return { ok: false, error: "feedback page did not contain a list" };
+    }
+    items.push(...rows);
+
+    const next = result.body?.next_offset;
+    if (next === null || next === undefined) return { ok: true, items };
+    if (!Number.isSafeInteger(next) || next <= offset) {
+      return { ok: false, error: `feedback page did not advance: ${next}` };
+    }
+    offset = next;
+  }
+}
+
 export async function newFeedbackResponses({ seedOnly = false } = {}) {
-  const result = await callTool("elixir_my_feedback", {});
+  const result = await readFeedbackPages();
   if (!result.ok) {
     log.warn("feedback_read_failed", { error: result.error });
     return [];
   }
 
-  const items = result.body?.items || result.body?.feedback || [];
+  const items = result.items;
   const seen = new Set(state.get("answeredFeedbackIds") || []);
   const fresh = [];
 

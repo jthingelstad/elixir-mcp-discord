@@ -580,13 +580,15 @@ cannot be enforced is worse than none, because it looks like it works.
   answers `no_subject` again, that is a server regression to file, not a reason
   to teach the model the tag.
 - **The feedback ledger is read on the hint, not on the clock.** Since 1.0.0
-  every response — `elixir_events` included — carries
+  every response — `elixir_timeline` included — carries
   `meta.feedback_responses_pending`; `startEventLoop` reads
   `elixir_my_feedback` only when the last feed poll said it is non-zero, and
   always on the seeding run. Before that gate the bot re-read its whole ledger
   every 300 s: 761 metered calls a week to learn nothing. A tick with no hint
   at all (no event routine, or a pre-1.0.0 server) reads as it used to, so a
-  missing signal never turns into silence.
+  missing signal never turns into silence. Since contract 3.8.0 the read follows
+  each `next_offset` page; the first request omits offset so the reader remains
+  callable against an older server that does not declare pagination.
 - **Recall is per ROUTINE, from its own ledger — since 2026-09-13.** Before
   that `recall: N` fetched the channel's last N bot messages, which in a
   shared channel were the feed's and the movers' posts and never the
@@ -685,10 +687,10 @@ cannot be enforced is worse than none, because it looks like it works.
   war-day-open item; a war-day post is a schedule routine's job
   (`game_clock` says when).
 - **The seen bookmark is per ACCOUNT (an agent is its own account).** Every
-  event routine polls with `mark_seen: false` and keeps its own ISO cursor
+  event routine polls with `mark_read: false` and keeps its own ISO cursor
   in `state/state.json`; a pre-2.0.0 integer cursor re-seeds from now. Never
   flip that to `true` as a "simplification".
-- **Seed, don't drain.** First run reads the newest event id and starts there;
+- **Seed, don't drain.** First run saves the timeline window's end and starts there;
   the scheduler marks every routine's current period as done; the feedback
   ledger marks history as shown. All three have posted a backlog into a channel
   at least once. Do not "helpfully" replay.

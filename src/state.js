@@ -10,10 +10,10 @@
  * CURSORS ARE PER ROUTINE, not per bot. Two event routines watching different
  * topics are two independent readers, and a shared position would let the
  * quiet one skip what the busy one already consumed. They are also kept here
- * rather than acknowledged server-side: `elixir_events` advances a single
- * per-ACCOUNT `events_seen_through` marker, so anything else polling the same
+ * rather than acknowledged server-side: `elixir_timeline` advances a single
+ * per-ACCOUNT `activity_seen_at` marker, so anything else polling the same
  * account would eat notifications this bot never showed anybody. We poll with
- * `mark_seen: false` and leave that marker exactly where it was.
+ * `mark_read: false` and leave that marker exactly where it was.
  */
 
 import fs from "node:fs";

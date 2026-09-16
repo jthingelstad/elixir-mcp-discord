@@ -3,7 +3,7 @@
  * whichever routines find something in it worth a post.
  *
  * This is the routine recipe from Elixir MCP's own docs running as a real
- * thing instead of a worked example: read `elixir_events` from a saved cursor,
+ * thing instead of a worked example: read `elixir_timeline` from a saved cursor,
  * drill with the data tools when something moved, write the brief. It is built
  * out of the same documented tools anyone else would use, on purpose — if this
  * lane needed a private hook, the recipe would be a promise the product could
@@ -14,7 +14,7 @@
  * something to write about — and since contract 2.0.0 (2026-09-13) deciding
  * THAT is this file's job too, see `relevant`.
  *
- * CURSORS: we pass `mark_seen: false` on every poll and keep our own position
+ * CURSORS: we pass `mark_read: false` on every poll and keep our own position
  * per routine in state.json. The seen bookmark is a single per-account
  * instant, so acknowledging would move the window for anything else polling
  * this account — and with two event routines here, each other's. The local
@@ -131,7 +131,7 @@ async function seedCursor() {
   return result.ok ? { cursor: result.cursor ?? now, meta: result.meta } : null;
 }
 
-/** Polls one routine. Returns the envelope of the last `elixir_events`
+/** Polls one routine. Returns the envelope of the last `elixir_timeline`
  *  response it read (or null when it read none), so the tick can act on the
  *  hints without a call of its own. */
 async function pollRoutine(routine, channel) {
@@ -195,7 +195,7 @@ async function pollRoutine(routine, channel) {
 /**
  * Whether a tick should read `elixir_my_feedback` at all.
  *
- * Since contract 1.0.0 every response — `elixir_events` included — carries
+ * Since contract 1.0.0 every response — now `elixir_timeline` included — carries
  * `meta.feedback_responses_pending`, so the feed poll the loop already makes
  * says whether there is anything to read. Before that hint reached the feed,
  * this bot re-read its whole feedback ledger every tick to find out: 761 calls

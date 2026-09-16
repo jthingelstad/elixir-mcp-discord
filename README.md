@@ -295,7 +295,7 @@ and the boot log says so.
 Discord ──▶ ask ─────▶ Claude (MCP connector) ═══▶ Elixir MCP
                                                         │
 Discord ◀── runner ◀── Claude ◀── events.js ────────────┘
-                                  elixir_events
+                                 elixir_timeline
 ```
 
 **Answers use the Claude API's MCP connector.** We hand the API the server URL
@@ -437,10 +437,10 @@ budgets, because they look like they work.
 
 ## Operating notes
 
-- **Cursors are per routine, and local.** `elixir_events` advances one
-  `events_seen_through` marker per *account* (an agent is its own account),
+- **Cursors are per routine, and local.** `elixir_timeline` advances one
+  `activity_seen_at` marker per *account* (an agent is its own account),
   so two consumers on one key eat each other's notifications. Every routine
-  polls with `mark_seen: false` and keeps its own position. On first run each
+  polls with `mark_read: false` and keeps its own position. On first run each
   seeds from the newest event rather than draining the backlog into your
   channel.
 - **A routine remembers what it posted.** `recall: 3` hands the model that
@@ -455,7 +455,9 @@ budgets, because they look like they work.
 - **Maintainer replies are read on the server's hint.** Every Elixir MCP
   response carries `meta.feedback_responses_pending` (contract 1.0.0), so the
   bot reads `elixir_my_feedback` only when a feed poll says there is something
-  new — not every tick.
+  new — not every tick. Since contract 3.8.0 it follows `next_offset` until the
+  bounded feedback ledger is complete, so long histories do not strand older
+  replies.
 - **Times are yours.** `TIMEZONE` decides what `at: 22:00` means, DST included.
 - **Cost.** Roughly $0.03–0.15 per post. The tool surface and the system
   block are cache breakpoints, so a turn that follows another within the

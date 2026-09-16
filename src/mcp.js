@@ -1,6 +1,6 @@
 /**
  * A direct MCP client, used for the calls this bot makes on its OWN behalf
- * rather than through the model: polling `elixir_events`, reading
+ * rather than through the model: polling `elixir_timeline`, reading
  * `elixir_my_feedback`, and the startup probe.
  *
  * The ask lane does NOT go through here — it uses the Claude API's MCP

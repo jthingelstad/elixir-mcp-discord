@@ -6,7 +6,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { detectFriction, claimsFiling } from "../src/feedback.js";
+import { claimsFiling, detectFriction, readFeedbackPages } from "../src/feedback.js";
 import { shouldReadFeedback } from "../src/events.js";
 
 const turn = (errors, text = "Here is the answer.") => ({
@@ -72,6 +72,33 @@ test("the feedback ledger is read on the hint, always on the seeding run, and wh
   assert.equal(shouldReadFeedback({ seeded: true, pending: 2 }), true);
   assert.equal(shouldReadFeedback({ seeded: true, pending: undefined }), true, "pre-1.0.0 feed envelope");
   assert.equal(shouldReadFeedback({ seeded: true, pending: null }), true);
+});
+
+test("the feedback reader follows every bounded page and keeps the first call compatible", async () => {
+  const calls = [];
+  const result = await readFeedbackPages(async (args) => {
+    calls.push(args);
+    if (args.offset === undefined) {
+      return {
+        ok: true,
+        body: { feedback: [{ feedback_id: 3 }], next_offset: 1 },
+      };
+    }
+    return {
+      ok: true,
+      body: {
+        feedback: [{ feedback_id: 2 }, { feedback_id: 1 }],
+        next_offset: null,
+      },
+    };
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    result.items.map((item) => item.feedback_id),
+    [3, 2, 1],
+  );
+  assert.deepEqual(calls, [{ limit: 50 }, { limit: 50, offset: 1 }]);
 });
 
 test("a turn that took many calls is friction, tallied by tool", () => {
