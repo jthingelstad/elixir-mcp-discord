@@ -331,10 +331,15 @@ process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));
 
 /**
- * One line on boot, in the first channel the bot may post in, so a restart
- * is visible to the people it serves and the build is on record beside
- * whatever it posts next. Runner-posted: no model, no cost. At most once an
- * hour, so a crash loop is a log problem and not a channel problem.
+ * One line on boot, to the OPERATOR — the admins' DM, with the other
+ * notices — so a restart is visible and the build is on record. Until
+ * 2026-09-16 this went to the first channel the bot may post in, which put
+ * "build 0.3.0+d23ffe7 · 6 scheduled · /pk-routines for the list" in front
+ * of every clan member three times in one afternoon of deploys: operator
+ * information leaking into a member channel. The build is still on record
+ * beside every post — the ledger and the trace footer carry it.
+ * Runner-sent: no model, no cost. At most once an hour, so a crash loop is
+ * a log problem and not a DM problem.
  */
 const HELLO_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -345,10 +350,6 @@ async function postHello({ handshake, routines }) {
     log.info("hello_skipped", { lastAt: last });
     return;
   }
-  const target = directory.postable(directory.directory())[0];
-  if (!target) return;
-  const channel = await directory.resolveById(target.id);
-  if (!channel) return;
   const active = routines.filter((r) => !r.disabled);
   const counts = {
     schedule: active.filter((r) => r.trigger === "schedule").length,
@@ -361,12 +362,10 @@ async function postHello({ handshake, routines }) {
     `${counts.schedule} scheduled, ${counts.events ? "watching the timeline" : "no feed"}${counts.message ? ", answering questions" : ""}`,
     `\`/${commandName("routines")}\` for the list`,
   ];
-  try {
-    await channel.send({ content: `-# 👋 ${parts.join(" · ")}`, allowedMentions: { parse: [] } });
+  const sent = await notify.notify("online", parts.join(" · "), { fingerprint: "hello", every: 0 });
+  if (sent) {
     state.set({ helloAt: new Date().toISOString() });
-    log.info("hello_posted", { channel: `#${target.name}` });
-  } catch (error) {
-    log.warn("hello_failed", { error: error.message });
+    log.info("hello_sent", { admins: sent });
   }
 }
 

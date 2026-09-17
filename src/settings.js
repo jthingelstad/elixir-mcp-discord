@@ -118,7 +118,7 @@ export const SETTINGS = {
     check: intAtLeast(60, "EVENT_POLL_SECONDS"),
     restart: true,
   },
-  STARTUP_MESSAGE: { about: "the one-line hello on boot: on or off", check: onOff },
+  STARTUP_MESSAGE: { about: "the one-line hello to the admins' DM on boot: on or off", check: onOff },
   MAX_POSTS_PER_TURN: { about: "how many posts one routine turn may make", check: intAtLeast(1, "MAX_POSTS_PER_TURN") },
   VOICE: {
     about:

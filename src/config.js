@@ -370,8 +370,8 @@ export const config = {
   get voice() {
     return optional("VOICE", "normal").toLowerCase();
   },
-  // The boot hello: one line in the first channel of the directory saying
-  // the bot is up and what build it is. STARTUP_MESSAGE=off to silence it.
+  // The boot hello: one line to the admins' DM saying the bot is up and
+  // what build it is. STARTUP_MESSAGE=off to silence it.
   get startupMessage() {
     return optional("STARTUP_MESSAGE", "on").toLowerCase() !== "off";
   },

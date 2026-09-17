@@ -37,7 +37,7 @@
   "REVIEW_AUTO_MEMORY": "false",
   "REVIEW_MAX_PROPOSALS": "3",
 
-  "_misc": "FEEDBACK_CHANNEL: logical channel for Elixir's replies to filed feedback (default: the first event routine's channel, else the first in the directory). MAX_POSTS_PER_TURN: how many post_message calls one routine turn may make (3). STARTUP_MESSAGE: the one-line hello on boot (on). ROUTINES_DISABLED: comma-separated keys kept off; a routine's own enabled: false does the same.",
+  "_misc": "FEEDBACK_CHANNEL: logical channel for Elixir's replies to filed feedback (default: the first event routine's channel, else the first in the directory). MAX_POSTS_PER_TURN: how many post_message calls one routine turn may make (3). STARTUP_MESSAGE: the one-line hello to the admins' DM on boot (on); it never goes to a member channel. ROUTINES_DISABLED: comma-separated keys kept off; a routine's own enabled: false does the same.",
   "STARTUP_MESSAGE": "on",
   "MAX_POSTS_PER_TURN": "3",
 
