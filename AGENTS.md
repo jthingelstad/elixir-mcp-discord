@@ -758,6 +758,18 @@ cannot be enforced is worse than none, because it looks like it works.
   and the runner read that as SKIP: a turn that did all its work and posted
   nothing. `src/claude.js` executes those over the direct MCP client and
   continues. Echoing the assistant turn back *without* results is a 400.
+- **One reading of a tool result, whoever ran it (2026-09-17).** A result
+  reaches `src/claude.js` three ways — an `mcp_tool_result` block the
+  connector ran, a `tool_use` the API handed back for the direct client,
+  a local tool's handler — and each had its own bookkeeping: three
+  definitions of "failed", two error-body shapes, shape/request id set on
+  one path only. Now `outcome(raw, {isError})` is the single reading
+  (`ok`, `body`, `code`, `detail`, `requestId`), `settle` the single
+  recorder (trace step, `errors`, `envelopes`), `executeClientSide` the
+  single executor for anything the API asks us to run. The log line is
+  `client_tool_call` with `via: local | mcp`. A direct-client refusal now
+  hands the model the refusal body itself (code and request id) instead of
+  a paraphrase. Do not add a fourth path; add a case to `outcome`.
 - **The renamed tool does not un-rename by prefix strip.** `elixir_feedback`
   came back as `elixir-mcp_feedback`; stripping the server name gives
   `feedback`, which is not a tool. `resolveToolName` matches against the live

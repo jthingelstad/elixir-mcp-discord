@@ -155,76 +155,151 @@ function readEnvelope(body) {
 }
 
 /**
- * Walks one response and reports what the tools actually did. Block type names
- * are matched by suffix so a rename on the API side degrades to "we saw no tool
- * activity" rather than crashing the reply.
+ * ONE SHAPE FOR WHAT A TOOL SAID, whoever ran it.
+ *
+ * A tool result reaches this file three ways — an `mcp_tool_result` block the
+ * connector ran server-side, a `tool_use` the API handed back for us to run
+ * over the direct MCP client, and a local tool (post_message, the room
+ * tool, the DM's tools) run by its own handler — and until 2026-09-17 each
+ * had its own bookkeeping: three places deciding what "failed" meant, two
+ * shapes for an error body, one of them setting the result shape and the
+ * others not. `outcome` is the one reading: the raw text the model sees, the
+ * parsed body when there is one, and whether it failed.
+ *
+ * is_error alone is not enough. A call can fail without the flag being set
+ * — an unknown tool name resolves at the protocol layer, not the tool layer
+ * — and Elixir MCP reports its own refusals as a body with an `error`
+ * object. Both used to render as an ordinary success, so the model would
+ * report "linked!" while nothing had been written (observed 2026-09-08: two
+ * elixir_identify calls stored nothing and said they had). A refusal keeps
+ * its request_id (the response cap says so explicitly), so an error can be
+ * reported by id as well as by message; the code is from the contract's
+ * closed set (no_subject, invalid_tag, quota_exceeded, ...) and the friction
+ * sweep decides on it rather than on the English of the message.
  */
-function readToolActivity(content, timings) {
-  const byId = new Map();
-  const called = [];
-  const errors = [];
-  const trace = [];
-  const envelopes = [];
+export function outcome(raw, { isError = false } = {}) {
+  let body = null;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    // A tool answering in prose is legal; there is just no shape to report.
+  }
+  const failed = Boolean(isError) || Boolean(body?.error);
+  const requestId = typeof body?.meta?.request_id === "string" ? body.meta.request_id : null;
+  return {
+    ok: !failed,
+    raw,
+    body,
+    requestId,
+    code: failed && typeof body?.error?.code === "string" ? body.error.code : null,
+    detail: failed ? String(body?.error?.message ?? raw).slice(0, 400) : null,
+  };
+}
 
+/** The outcome of a call this process made — a local handler or the direct
+ *  MCP client — rendered to the text the model will read, then read back
+ *  the same way a server-side result is. `{ ok, body, error, code }` in;
+ *  the wire text is what goes into the tool_result block. */
+function outcomeOfCall(call) {
+  const raw = JSON.stringify(
+    call.ok ? (call.body ?? { ok: true }) : { error: { message: String(call.error), code: call.code ?? null } },
+  );
+  return outcome(raw, { isError: !call.ok });
+}
+
+/**
+ * The turn's tool bookkeeping: what was called, what failed, the trace the
+ * footer and the ledger render, and the meta envelopes the footer reads.
+ * `use` opens a step when the model decides on a call; `settle` closes it
+ * with an outcome — from a connector result block, from the direct client,
+ * or from a local handler, all through the same door.
+ */
+function newActivity() {
+  return { called: [], errors: [], trace: [], envelopes: [], byId: new Map() };
+}
+
+function use(activity, block) {
+  const name = block.name || "unknown";
+  const step = { kind: "tool", name, input: block.input, id: block.id };
+  if (block.id) activity.byId.set(block.id, step);
+  activity.called.push(name);
+  activity.trace.push(step);
+  return step;
+}
+
+function settle(activity, { step, name, result, ms }) {
+  if (step && ms !== undefined) step.ms = ms;
+  if (!result.ok) {
+    const failure = { name, code: result.code, detail: result.detail, requestId: result.requestId };
+    activity.errors.push(failure);
+    activity.trace.push({ kind: "error", ...failure, result: result.raw });
+    return;
+  }
+  if (step) {
+    step.shape = describeShape(result.body);
+    step.requestId = result.requestId;
+    // The body itself, for the turn ledger (src/ledger.js): the footer
+    // shows the shape, but "was that number right?" needs what the tool
+    // actually said. Not rendered anywhere in Discord.
+    step.result = result.raw;
+  }
+  const envelope = readEnvelope(result.body);
+  if (envelope) activity.envelopes.push({ tool: name, ...envelope });
+}
+
+/**
+ * Walks one response and records what the connector's tools did. Block type
+ * names are matched by suffix so a rename on the API side degrades to "we
+ * saw no tool activity" rather than crashing the reply.
+ */
+function readResponse(activity, content, timings) {
   for (const block of content) {
     if (typeof block?.type !== "string") continue;
-
     if (block.type === "thinking") {
       const text = (block.thinking || "").trim();
-      if (text) trace.push({ kind: "thought", text });
+      if (text) activity.trace.push({ kind: "thought", text });
     } else if (block.type.endsWith("tool_use")) {
-      const name = block.name || "unknown";
-      const step = { kind: "tool", name, input: block.input, id: block.id };
-      if (block.id) byId.set(block.id, step);
-      called.push(name);
-      trace.push(step);
+      use(activity, block);
     } else if (block.type.endsWith("tool_result")) {
-      const step = byId.get(block.tool_use_id);
-      const name = step?.name || "unknown";
-      const ms = timings?.get(block.tool_use_id);
-      if (step && ms !== undefined) step.ms = ms;
-
-      let body = null;
-      const raw = resultText(block.content);
-      try {
-        body = JSON.parse(raw);
-      } catch {
-        // A tool answering in prose is legal; there is just no shape to report.
-      }
-
-      // is_error alone is not enough. A call can fail without the flag being
-      // set -- an unknown tool name resolves at the protocol layer, not the
-      // tool layer -- and Elixir MCP reports its own refusals as a body with
-      // an `error` object. Both used to render as an ordinary success, so the
-      // model would report "linked!" while nothing had been written. Observed
-      // 2026-09-08: two elixir_identify calls stored nothing and said they had.
-      const failed = block.is_error || Boolean(body?.error);
-      // A refusal keeps its request_id (the response cap says so explicitly),
-      // so an error can be reported by id as well as by message.
-      const requestId = typeof body?.meta?.request_id === "string" ? body.meta.request_id : null;
-      if (failed) {
-        const detail = (body?.error?.message ?? raw).slice(0, 400);
-        // The code is from the contract's closed set (no_subject, invalid_tag,
-        // quota_exceeded, ...): the friction sweep decides on it rather than
-        // on the English of the message. Null when the failure had no body.
-        const code = typeof body?.error?.code === "string" ? body.error.code : null;
-        errors.push({ name, code, detail, requestId });
-        trace.push({ kind: "error", name, code, detail, requestId, result: raw });
-        continue;
-      }
-      if (step) {
-        step.shape = describeShape(body);
-        step.requestId = requestId;
-        // The body itself, for the turn ledger (src/ledger.js): the footer
-        // shows the shape, but "was that number right?" needs what the tool
-        // actually said. Not rendered anywhere in Discord.
-        step.result = raw;
-      }
-      const envelope = readEnvelope(body);
-      if (envelope) envelopes.push({ tool: name, ...envelope });
+      const step = activity.byId.get(block.tool_use_id);
+      settle(activity, {
+        step,
+        name: step?.name || "unknown",
+        result: outcome(resultText(block.content), { isError: block.is_error }),
+        ms: timings?.get(block.tool_use_id),
+      });
     }
   }
-  return { called, errors, trace, envelopes };
+}
+
+/**
+ * A CLIENT-SIDE tool call: the API handed back an ordinary `tool_use` and
+ * stopped, asking us to run it. Ours (a local tool) or the server's, over the
+ * direct MCP client against the same server and the same key — NOT a tool
+ * mirror: the name and arguments are forwarded opaquely, and nothing here
+ * knows what any tool does. A handler's refusal (a channel not in the
+ * directory, a cap reached) is a tool error the model sees, not an
+ * exception.
+ */
+async function executeClientSide(block, localTools, turnId) {
+  const local = localTools.find((t) => t.name === block.name);
+  if (local) {
+    let call;
+    try {
+      call = await local.handler(block.input ?? {});
+    } catch (error) {
+      call = { ok: false, error: error.message };
+    }
+    log.info("client_tool_call", { turnId, tool: block.name, via: "local", ok: call.ok });
+    return { name: block.name, result: outcomeOfCall(call) };
+  }
+  const tool = await resolveToolName(block.name);
+  const call = await callTool(tool, block.input ?? {});
+  log.info("client_tool_call", { turnId, tool, via: "mcp", ok: call.ok });
+  // The direct client reports a refusal as ok:false WITH the refusal body
+  // (error code, request_id); the model reads that body, not our paraphrase.
+  const refusal = !call.ok && call.body?.error ? JSON.stringify(call.body) : null;
+  return { name: tool, result: refusal ? outcome(refusal, { isError: true }) : outcomeOfCall(call) };
 }
 
 function readText(content) {
@@ -283,10 +358,8 @@ export async function ask({
   // process's log.
   const turnId = randomUUID().slice(0, 8);
 
-  const called = [];
-  const errors = [];
-  const trace = [];
-  const envelopes = [];
+  const activity = newActivity();
+  const { called, errors, trace, envelopes } = activity;
   let usdTotal = 0;
   let usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
   let text = "";
@@ -366,11 +439,7 @@ export async function ask({
     state.addSpend(usd, routineKey);
     budget.record(lane, usd);
 
-    const activity = readToolActivity(response.content, timings);
-    called.push(...activity.called);
-    errors.push(...activity.errors);
-    trace.push(...activity.trace);
-    envelopes.push(...activity.envelopes);
+    readResponse(activity, response.content, timings);
     text = readText(response.content) || text;
     stopReason = response.stop_reason;
 
@@ -393,81 +462,23 @@ export async function ask({
     // "<server>_<tool>", with stop_reason "tool_use" — the API asking US to run
     // it and hand back a result. Reproduced 2026-09-08: a turn ended on
     // `tool_use elixir-mcp_feedback` (toolu_...) after two server-side
-    // `mcp_tool_use clans_roster` calls (mcptoolu_...).
+    // `mcp_tool_use clans_roster` calls (mcptoolu_...). Local tools arrive
+    // the same way, on purpose.
     //
     // Left unhandled, that response has no text, and the routine runner read
     // empty text as SKIP: the turn did all its work, spent all its tokens, and
     // posted nothing. Echoing the assistant turn back without results is not an
     // option either — the API rejects it ("tool_use ids were found without
     // tool_result blocks immediately after").
-    //
-    // So we execute it, over the direct MCP client, against the same server and
-    // the same key. This is NOT a tool mirror: the name and arguments are
-    // forwarded opaquely, and nothing here knows what any tool does.
     if (stopReason === "tool_use") {
       const pending = response.content.filter((block) => block.type === "tool_use");
       if (pending.length > 0) {
         history.push({ role: "assistant", content: response.content });
         const results = [];
         for (const block of pending) {
-          const local = localTools.find((t) => t.name === block.name);
-          if (local) {
-            // Ours to run. The handler reports what it did; a refusal (a
-            // channel not in the directory, a cap reached) is a tool error
-            // the model sees, not an exception.
-            let call;
-            try {
-              call = await local.handler(block.input ?? {});
-            } catch (error) {
-              call = { ok: false, error: error.message };
-            }
-            log.info("local_tool_call", { turnId, tool: block.name, ok: call.ok });
-            const step = trace.find((s) => s.kind === "tool" && s.id === block.id);
-            if (step) step.result = JSON.stringify(call.ok ? (call.body ?? { ok: true }) : { error: call.error });
-            if (!call.ok) {
-              const failure = {
-                name: block.name,
-                code: call.code ?? null,
-                detail: String(call.error).slice(0, 400),
-                requestId: null,
-              };
-              errors.push(failure);
-              trace.push({ kind: "error", ...failure });
-            }
-            results.push({
-              type: "tool_result",
-              tool_use_id: block.id,
-              is_error: !call.ok,
-              content: JSON.stringify(
-                call.ok ? (call.body ?? { ok: true }) : { error: { message: call.error, code: call.code ?? null } },
-              ),
-            });
-            continue;
-          }
-          const tool = await resolveToolName(block.name);
-          const call = await callTool(tool, block.input ?? {});
-          log.info("client_side_tool_call", { turnId, tool, ok: call.ok });
-          const step = trace.find((s) => s.kind === "tool" && s.id === block.id);
-          if (step) {
-            step.result = JSON.stringify(call.ok ? call.body : { error: { message: call.error } });
-            if (call.ok) {
-              step.shape = describeShape(call.body);
-              step.requestId = typeof call.body?.meta?.request_id === "string" ? call.body.meta.request_id : null;
-            }
-          }
-          if (!call.ok) {
-            const code = typeof call.body?.error?.code === "string" ? call.body.error.code : null;
-            const requestId = typeof call.body?.meta?.request_id === "string" ? call.body.meta.request_id : null;
-            const failure = { name: tool, code, detail: String(call.error).slice(0, 400), requestId };
-            errors.push(failure);
-            trace.push({ kind: "error", ...failure });
-          }
-          results.push({
-            type: "tool_result",
-            tool_use_id: block.id,
-            is_error: !call.ok,
-            content: JSON.stringify(call.ok ? call.body : { error: { message: call.error } }),
-          });
+          const { name, result } = await executeClientSide(block, localTools, turnId);
+          settle(activity, { step: activity.byId.get(block.id), name, result });
+          results.push({ type: "tool_result", tool_use_id: block.id, is_error: !result.ok, content: result.raw });
         }
         // All results in ONE user message: splitting them teaches the model to
         // stop making parallel calls.

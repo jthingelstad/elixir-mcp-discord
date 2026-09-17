@@ -240,6 +240,32 @@ test("the trace names the request id of a failed call and of the last envelope",
   assert.ok(trace.includes("req `7272147a`"), "failed call request id");
 });
 
+/**
+ * One reading of a tool result, whoever ran it (2026-09-17): a connector
+ * block, the direct client and a local handler all go through `outcome`.
+ */
+test("a tool result is read one way: is_error, a refusal body, prose, and a plain success", async () => {
+  const { outcome } = await import("../src/claude.js");
+  const refusal = outcome(
+    JSON.stringify({ error: { code: "no_subject", message: "Who?" }, meta: { request_id: "r1" } }),
+  );
+  assert.equal(refusal.ok, false, "a body with an error object failed even without is_error");
+  assert.equal(refusal.code, "no_subject");
+  assert.equal(refusal.detail, "Who?");
+  assert.equal(refusal.requestId, "r1");
+  const flagged = outcome("boom", { isError: true });
+  assert.equal(flagged.ok, false);
+  assert.equal(flagged.code, null, "no body, no code");
+  assert.equal(flagged.detail, "boom");
+  const prose = outcome("Just words.");
+  assert.equal(prose.ok, true);
+  assert.equal(prose.body, null);
+  const fine = outcome(JSON.stringify({ rivals: [1], meta: { request_id: "r2", as_of: "x" } }));
+  assert.equal(fine.ok, true);
+  assert.equal(fine.requestId, "r2");
+  assert.deepEqual(fine.body.rivals, [1]);
+});
+
 test("the result shape counts rows, not the contract's notes", async () => {
   const { describeShape } = await import("../src/claude.js");
   assert.equal(describeShape({ rivals: [1, 2, 3, 4], notes: ["a", "b", "c"], meta: {} }), "4 rivals");
