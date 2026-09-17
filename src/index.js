@@ -358,13 +358,14 @@ async function postHello({ handshake, routines }) {
   const active = routines.filter((r) => !r.disabled);
   const counts = {
     schedule: active.filter((r) => r.trigger === "schedule").length,
+    clock: active.filter((r) => r.trigger === "clock").length,
     events: active.filter((r) => r.trigger === "events").length,
     message: active.filter((r) => r.trigger === "message").length,
   };
   const parts = [
     `Online · build ${buildId()}`,
     handshake?.ok ? `Elixir MCP ${handshake.version?.split("+")[0] ?? "?"}` : "Elixir MCP unreachable",
-    `${counts.schedule} scheduled, ${counts.events ? "watching the timeline" : "no feed"}${counts.message ? ", answering questions" : ""}`,
+    `${counts.schedule} scheduled${counts.clock ? `, ${counts.clock} on the game clock` : ""}, ${counts.events ? "watching the timeline" : "no feed"}${counts.message ? ", answering questions" : ""}`,
     `\`/${commandName("routines")}\` for the list`,
   ];
   const sent = await notify.notify("online", parts.join(" · "), { fingerprint: "hello", every: 0 });
