@@ -35,7 +35,7 @@ test("the catalog is every shipped routine, each with a description, plus anythi
   );
   const entries = catalog({ exampleDir: EXAMPLE, instanceDir: agent });
   const shipped = entries.filter((e) => !e.custom);
-  assert.ok(shipped.length >= 8);
+  assert.ok(shipped.length >= 4);
   for (const entry of shipped) {
     assert.equal(entry.error, null, `${entry.key}: ${entry.error}`);
     assert.ok(entry.routine.description, `${entry.key} needs a description for the picker`);
@@ -51,12 +51,12 @@ test("installing copies what is missing and never touches what is there", () => 
   fs.mkdirSync(path.join(agent, "routines"), { recursive: true });
   const rewritten = "---\ntrigger: schedule\nchannel: pulse\nat: 05:00\n---\nMy own words.\n";
   fs.writeFileSync(path.join(agent, "routines", "war-deck-check.md"), rewritten);
-  const result = installRoutines({ exampleDir: EXAMPLE, instanceDir: agent, keys: ["war-deck-check", "clan-feed"] });
-  assert.deepEqual(result, { copied: ["clan-feed"], kept: ["war-deck-check"] });
+  const result = installRoutines({ exampleDir: EXAMPLE, instanceDir: agent, keys: ["war-deck-check", "editor"] });
+  assert.deepEqual(result, { copied: ["editor"], kept: ["war-deck-check"] });
   assert.equal(fs.readFileSync(path.join(agent, "routines", "war-deck-check.md"), "utf8"), rewritten);
-  assert.ok(fs.existsSync(path.join(agent, "routines", "clan-feed.md")));
+  assert.ok(fs.existsSync(path.join(agent, "routines", "editor.md")));
   const again = catalog({ exampleDir: EXAMPLE, instanceDir: agent });
-  assert.ok(again.find((e) => e.key === "clan-feed").installed);
+  assert.ok(again.find((e) => e.key === "editor").installed);
 });
 
 test("a routine chosen off is disabled, not deleted; chosen back on is re-enabled", () => {

@@ -547,10 +547,11 @@ test("prose with no post and no SKIP is nudged once; a post or a SKIP is not", a
 
 /**
  * The silence clock: every routine post stamps its channel; a channel with
- * no stamp is anchored on first sight and reported as "at least"; the
- * runner hands the reading to a may_skip turn and records it in the ledger.
+ * no stamp is anchored on first sight and reported as "at least". Since
+ * 2026-09-17 no turn is told the reading — it is the editor's carry
+ * release gate (src/events.js) — so the user turn must NOT carry it.
  */
-test("a post resets the channel's silence clock; an unposted channel counts from first sight", async () => {
+test("a post resets the channel's silence clock; an unposted channel counts from first sight; no turn is told", async () => {
   const state = await import("../src/state.js");
   const entries = [
     { id: "21", name: "news", topic: "", visibility: "everyone", threads: false, role: null },
@@ -560,6 +561,9 @@ test("a post resets the channel's silence clock; an unposted channel counts from
   const news = fakeChannel();
   const resolve = async (id) => ({ 21: news })[id] ?? null;
   const { POST_TOOL } = await import("../src/run.js");
+  // The event lane anchors first sight when it reads the clock for the
+  // carry release; a run no longer does.
+  state.silence(entries.filter((e) => !e.role));
 
   let userTurn = null;
   const run = await runRoutine(routine({ trigger: "schedule", at: "01:00", may_skip: true }), {
@@ -574,12 +578,7 @@ test("a post resets the channel's silence clock; an unposted channel counts from
     },
   });
   assert.equal(run.ok, true);
-  assert.match(
-    userTurn,
-    /\[silence, your line is \d+h: #news ≥0h \(no post since the clock started\); #leaders ≥0h/,
-    "first sight anchors both",
-  );
-  assert.doesNotMatch(userTurn, /#ask/, "the ask channel is not on the clock");
+  assert.doesNotMatch(userTurn, /\[silence/, "the reading is a scheduler input now, not a prompt line");
 
   const later = new Date(Date.now() + 30 * 3600000);
   const reading = state.silence(

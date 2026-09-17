@@ -427,7 +427,7 @@ test("the DM lane can list the shipped examples with their briefs, and the chann
   const ask = examples.body.examples.find((e) => e.key === "ask");
   assert.equal(ask.fields.trigger, "message");
   assert.match(ask.brief, /\S/);
-  assert.deepEqual(examples.body.the_usual, ["ask", "clan-feed", "notable-movers", "war-deck-check"]);
+  assert.deepEqual(examples.body.the_usual, ["ask", "editor", "war-deck-check"]);
   const channels = await tools.list_channels.handler({});
   assert.equal(channels.body.channels[0].name, "news");
   assert.equal(channels.body.channels[0].topic, "Clan news");

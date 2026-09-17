@@ -6,7 +6,15 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { relevant, noteworthy, shouldReadFeedback } from "../src/events.js";
+import {
+  relevant,
+  noteworthy,
+  shouldReadFeedback,
+  partition,
+  releaseDue,
+  subscribedKinds,
+  CARRY_RELEASE_HOURS,
+} from "../src/events.js";
 
 const timeline = [
   {
@@ -73,4 +81,60 @@ test("the feedback ledger is read on the hint, always on the seeding run", () =>
     true,
     "no hint degrades to the old cost, never to silence",
   );
+});
+
+/**
+ * The batch (2026-09-17): wake kinds start a turn, carry kinds ride along
+ * or wait, and the carry release is the VOICE line over the silence clock.
+ */
+test("wake and carry partition a window; the server is asked for both; kinds alone still wakes on everything named", () => {
+  const editor = { wake: ["member_joined", "returned"], carry: ["ranked_promotion"] };
+  const split = partition(timeline, editor);
+  assert.deepEqual(
+    split.wake.map((i) => i.kind),
+    ["member_joined", "returned"],
+  );
+  assert.deepEqual(
+    split.carry.map((i) => i.kind),
+    ["ranked_promotion"],
+  );
+  assert.deepEqual(subscribedKinds(editor), ["member_joined", "returned", "ranked_promotion"]);
+  const legacy = { kinds: ["member_joined", "ranked_promotion"] };
+  assert.deepEqual(
+    partition(timeline, legacy).wake.map((i) => i.kind),
+    ["member_joined", "ranked_promotion"],
+  );
+  assert.deepEqual(partition(timeline, legacy).carry, []);
+  assert.deepEqual(subscribedKinds(legacy), ["member_joined", "ranked_promotion"]);
+  assert.equal(subscribedKinds({}), null, "a routine naming nothing reads everything");
+});
+
+test("the carry release: quiet never, normal 12h, chatty 4h, paced by channels the bot has posted in", () => {
+  assert.deepEqual(CARRY_RELEASE_HOURS, { quiet: null, normal: 12, chatty: 4 });
+  const silences = [
+    { channelId: "1", name: "news", hours: 13, atLeast: false },
+    { channelId: "2", name: "leaders", hours: 200, atLeast: true },
+  ];
+  assert.equal(releaseDue(silences, { voice: "normal" }), true, "13h in the posted channel passes 12h");
+  assert.equal(releaseDue(silences, { voice: "quiet" }), false, "quiet never releases");
+  assert.equal(releaseDue([{ channelId: "1", name: "news", hours: 5, atLeast: false }], { voice: "chatty" }), true);
+  assert.equal(releaseDue([{ channelId: "1", name: "news", hours: 3, atLeast: false }], { voice: "chatty" }), false);
+  assert.equal(
+    releaseDue(
+      [
+        { channelId: "1", name: "news", hours: 2, atLeast: false },
+        { channelId: "2", name: "leaders", hours: 200, atLeast: true },
+      ],
+      { voice: "normal" },
+    ),
+    false,
+    "a never-posted channel does not pace the release while a posted one is fresh",
+  );
+  assert.equal(
+    releaseDue([{ channelId: "2", name: "leaders", hours: 20, atLeast: true }], { voice: "normal" }),
+    true,
+    "with no posted channel at all, first sight paces it",
+  );
+  assert.equal(releaseDue([], { voice: "chatty" }), false);
+  assert.equal(releaseDue(silences, { voice: "nonsense" }), true, "an unknown level is normal");
 });

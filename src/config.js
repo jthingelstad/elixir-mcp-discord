@@ -364,9 +364,9 @@ export const config = {
   get maxPostsPerTurn() {
     return num("MAX_POSTS_PER_TURN", "3");
   },
-  // How much silence before the bot leans toward posting: quiet, normal or
-  // chatty (src/prompt.js VOICES holds the hours). The bar for a post never
-  // goes away; past the threshold it drops to "one true line beats nothing".
+  // The carry release for the editor (src/events.js CARRY_RELEASE_HOURS):
+  // how long the channels must be quiet before carried timeline items may
+  // start a turn on their own. quiet never, normal 12h, chatty 4h.
   get voice() {
     return optional("VOICE", "normal").toLowerCase();
   },

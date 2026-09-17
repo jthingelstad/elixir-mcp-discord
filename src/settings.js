@@ -122,7 +122,7 @@ export const SETTINGS = {
   MAX_POSTS_PER_TURN: { about: "how many posts one routine turn may make", check: intAtLeast(1, "MAX_POSTS_PER_TURN") },
   VOICE: {
     about:
-      "how long a channel may go quiet before the bot leans toward posting: quiet (72h), normal (12h), chatty (4h)",
+      "how long the channels must be quiet before carried timeline items (badge level-ups, collection steps, quiet crossings) may start an editor turn on their own: quiet (never), normal (12h), chatty (4h)",
     check: (v) => (["quiet", "normal", "chatty"].includes(v.toLowerCase()) ? null : "quiet, normal or chatty"),
   },
   COMMAND_PREFIX: {

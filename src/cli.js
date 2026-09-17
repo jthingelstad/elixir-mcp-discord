@@ -10,7 +10,7 @@
  *
  *   npm run try war-deck-check              compose it, print it, post nothing
  *   npm run try meta-report -- --show-prompt   also print the assembled system prompt
- *   npm run try clan-feed -- --post         actually post it to its channel
+ *   npm run try editor -- --post            actually post it to its channel
  *
  * A dry run costs a real model call and real tokens; it just does not touch
  * Discord. `--post` connects, posts, and exits.
@@ -162,7 +162,6 @@ async function tryRoutine() {
       userMessageFor(routine, {
         events,
         withTool: entries.length > 0,
-        silence: entries.length > 0 && routine.maySkip ? state.silence(entries.filter((e) => !e.role)) : null,
       }),
     );
     console.log("\n=== ANSWER ===\n");

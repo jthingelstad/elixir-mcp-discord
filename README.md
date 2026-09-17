@@ -33,7 +33,9 @@ invite link.
 
 ## The whole idea
 
-One unit of behaviour, three ways to trigger it:
+One unit of behaviour, four ways to trigger it — and **the record is the
+trigger, not the calendar**: a proactive post fires because something
+happened in Elixir's timeline, and a scheduled slot is the exception.
 
 ```
 routine = trigger x prompt x destination
@@ -42,29 +44,36 @@ routine = trigger x prompt x destination
 | Trigger | Fires when | Example |
 |---|---|---|
 | `message` | somebody speaks in the routine's channel | an ask-anything channel |
-| `events` | Elixir MCP's timeline carries an item of a kind it names | joins, departures, returns, a resolved war week |
-| `schedule` | a clock, in your timezone | a war-deck nudge at 01:00, a meta report on Sundays |
+| `events` | Elixir MCP's timeline carries an item of a kind it names | the editor: joins, departures, returns, a standout session, a promotion, a resolved war week |
+| `clock` | a boundary Elixir's `game_clock` names, plus an offset | a war-deck nudge four hours before this war day closes |
+| `schedule` | a wall clock, in your timezone | a meta report on Sundays |
 
-A routine is one markdown file:
+A routine is one markdown file. The shipped editor:
 
 ```markdown
 ---
-description: Midday note on up to three players whose day stood out
-trigger: schedule
-at: 12:30
-catch_up_hours: 4
+description: The editor — turns the clan's timeline into posts, one turn per batch
+trigger: events
+wake: member_joined, member_left, member_role_changed, race_finished, week_resolved, returned, session_standout, ranked_promotion, ...
+carry: badge_earned, collection_level_step, card_unlocked, quiet_crossed
 may_skip: true
-recall: 3
 ---
-Look at the last 24 hours for your clan. Name AT MOST three players whose day
-stood out, one line each, leading with the number that makes it interesting.
-If nothing genuinely stood out, reply with exactly SKIP.
+You have been handed a batch of timeline items ... You are the editor: decide
+whether any of it is worth a post, what to say, and where it goes.
 ```
 
-Drop that in your instance's `agent/routines/`, and it runs. Delete it and it
-stops. `once: true` on a scheduled routine fires at its next occurrence and
+A `wake` kind starts a turn the moment the poll sees it; everything named
+`carry` waits and rides in the next batch — or is released on its own once
+the channels have been quiet past the `VOICE` line (`quiet` never, `normal`
+12h, `chatty` 4h). The batch is the unit of cost: a turn costs about the
+same whether it says one line or SKIP, so texture never buys one by itself.
+
+Drop a file in your instance's `agent/routines/`, and it runs. Delete it and
+it stops. `once: true` on a scheduled routine fires at its next occurrence and
 then turns itself off — "remind the clan Friday at 8" is a routine, not a
-special case. Notice it names no channel: the bot posts **where it decides the post
+special case. A `clock` routine names `arm: war_day_closes_at` and
+`offset: -4h` and never fires on a training day, where that field is null.
+Notice none of them names a channel: the bot posts **where it decides the post
 belongs**, choosing among the channels you have let it into (see
 [Channels](#channels-where-it-posts)). The code is a runner: it holds the Discord connection, the model call, the run ledger,
 the cost accounting and the feedback plumbing, and it holds no opinions about
@@ -164,9 +173,9 @@ This is the part that matters, because the prompts are the product:
 
 ```bash
 export INSTANCE_DIR=~/.elixir-mcp-discord/myclan  # once per shell
-npm run try notable-movers                  # run it now, print it, post nothing
+npm run try editor                          # run it now, print it, post nothing
 npm run try meta-report -- --show-prompt    # also print the assembled prompt
-npm run try clan-feed -- --post             # actually post it
+npm run try editor -- --post                # actually post it
 npm run probe                               # the key, the surface, the feed
 npm run routines                            # what will run, where, and this month's spend
 ```
@@ -259,7 +268,7 @@ nobody else sees it, and anyone else who DMs it gets one polite line:
   does itself under launchd or systemd. Keys, tokens and the wiring ids
   live in `.env`, which it cannot reach. `settings` shows the current
   values.
-- **Try before posting.** `try notable-movers` runs the routine and shows
+- **Try before posting.** `try war-deck-check` runs the routine and shows
   you the post without sending it; `post it` sends it.
 - **Try before applying.** Every proposal that changes a routine, a house
   rule or memory has a **Try it** button: the routine runs on the proposed
@@ -384,17 +393,16 @@ still marks the run done. A channel that manufactures content on a quiet day
 teaches people to mute it. Routines that may *not* skip post what they said, so
 a prompt bug is visible rather than looking like a quiet week.
 
-The counterweight is the **silence clock**. Every such turn is told, beside
-the date, how long each channel it may post in has gone without a post from
-this bot (`[silence, your line is 12h: #poap-kings 29h (last: notable-movers,
-Tue 12:31) — past the line]`), and `VOICE` in `config.json` sets the line past
-which that lowers the bar for a skip: `quiet` (72h, a bot that speaks rarely),
-`normal` (12h, the default) or `chatty` (4h, a clan that wants to hear from it
-through the day). Past the line the bot prefers the smaller true thing — one
-line, one number that moved — over nothing. The bar never disappears: it
-still never invents and never repeats itself, and a truly dead day is still a
-SKIP. Only routine posts reset the clock; answering a question in the ask
-channel is not sharing. "Make it chattier" in the DM changes it.
+Since the record decides *when* a proactive turn fires, a SKIP means "the
+room already knows" rather than "nothing happened today" — the batch that
+woke the editor is the news. The one knob for how much to say is `VOICE` in
+`config.json`, and it is a coalescing interval, not a prompt: items the
+editor names as `carry` (badge level-ups, collection steps, card unlocks,
+quiet crossings) never start a turn on their own until the channels the bot
+posts in have been quiet past the line — `quiet` (never), `normal` (12h, the
+default) or `chatty` (4h). Only routine posts reset that clock; answering a
+question in the ask channel is not sharing. "Make it chattier" in the DM
+changes it.
 
 ## Budgets
 

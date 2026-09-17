@@ -9,7 +9,7 @@
  *
  *   npm run turns                                  the last 7 days, this instance
  *   npm run turns -- --since 2026-09-13 --lane ask
- *   npm run turns -- --routine notable-movers --full   tool bodies uncut
+ *   npm run turns -- --routine editor --full   tool bodies uncut
  *   npm run turns -- --turn d98fe553                   one turn, in full
  *   npm run turns -- --json                            raw records, one per line
  *   npm run turns -- --export ./review                 one .md per turn + the prompts

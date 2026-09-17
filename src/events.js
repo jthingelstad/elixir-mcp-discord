@@ -46,10 +46,13 @@ import * as state from "./state.js";
  */
 export const TIMELINE_TOOL = "elixir_timeline";
 
-export async function read(from, { sections = null, verbosity = "full" } = {}) {
+export async function read(from, { sections = null, kinds = null, verbosity = "full" } = {}) {
   const args = { mark_read: false, verbosity };
   if (from) args.from = from;
   if (sections?.length) args.sections = sections;
+  // Since contract 3.9.0 the server keeps only the item kinds named, so a
+  // routine that wakes on a dozen kinds and carries four reads only those.
+  if (kinds?.length) args.kinds = kinds;
   const result = await callTool(TIMELINE_TOOL, args);
   if (!result.ok) return { ok: false, error: result.error };
   const body = result.body ?? {};
@@ -70,8 +73,8 @@ export async function read(from, { sections = null, verbosity = "full" } = {}) {
  * `sections:` (either list, or both). A window is worth a model call exactly
  * when this is non-empty — a clan entry arrives on EVERY read and an active
  * clan's members play in almost every five-minute window, so a routine that
- * names no kinds fires on every `battle_session`. The shipped clan-feed
- * names the roster, war and presence kinds.
+ * names no kinds fires on every item. The shipped editor names what wakes
+ * it and what it carries (`partition`, below).
  */
 /**
  * Timeline items for a dry run of an event routine.
@@ -104,9 +107,10 @@ export async function eventsForDryRun(routine) {
   };
 }
 
-export function relevant(timeline, { kinds = null, sections = null } = {}) {
+export function relevant(timeline, { kinds = null, wake = null, carry = null, sections = null } = {}) {
+  const named = wake ? [...wake, ...(carry ?? [])] : kinds;
   return (timeline ?? []).filter((item) => {
-    if (kinds?.length && !kinds.includes(item.kind)) return false;
+    if (named?.length && !named.includes(item.kind)) return false;
     if (sections?.length && item.section && !sections.includes(item.section)) return false;
     return true;
   });
@@ -114,6 +118,54 @@ export function relevant(timeline, { kinds = null, sections = null } = {}) {
 
 export function noteworthy(timeline, filters = {}) {
   return relevant(timeline, filters).length > 0;
+}
+
+/** The kinds a routine reads at all — its filter for the server. */
+export function subscribedKinds(routine) {
+  if (routine.wake) return [...routine.wake, ...(routine.carry ?? [])];
+  return routine.kinds ?? null;
+}
+
+/**
+ * THE BATCH. An event routine that names `wake` and `carry` kinds is an
+ * editor: a wake item starts a turn now and everything carried since the
+ * last turn rides in the same batch; a carry item alone waits. What a
+ * routine names with `kinds` still wakes it every time, as before.
+ *
+ * Why: on a 47-member clan the timeline carried 26 items in one day — 14
+ * badge level-ups, 5 collection steps, 2 card unlocks, 3 quiet crossings,
+ * 2 ranked promotions. Under `kinds` that is up to 26 turns at the ~$0.08
+ * floor a cold turn costs before a word; under wake/carry it is two, and
+ * the promotions carry the texture with them
+ * (docs/PROACTIVE-2026-09-16.md).
+ */
+export function partition(timeline, routine) {
+  const items = relevant(timeline, routine);
+  if (!routine.wake) return { wake: items, carry: [] };
+  return {
+    wake: items.filter((i) => routine.wake.includes(i.kind)),
+    carry: items.filter((i) => !routine.wake.includes(i.kind)),
+  };
+}
+
+/**
+ * THE CARRY RELEASE. Carried items never start a turn on their own — unless
+ * the channels the routine may post in have gone quiet past the instance's
+ * VOICE line: quiet never, normal 12 h, chatty 4 h. This is what VOICE
+ * means since 2026-09-17: a coalescing interval, not a lean on the model's
+ * skip decision. The record decides WHEN; VOICE only decides how long
+ * texture may wait before it is allowed to be the reason.
+ */
+export const CARRY_RELEASE_HOURS = { quiet: null, normal: 12, chatty: 4 };
+
+export function releaseDue(silences, { voice = config.voice } = {}) {
+  const line = voice in CARRY_RELEASE_HOURS ? CARRY_RELEASE_HOURS[voice] : CARRY_RELEASE_HOURS.normal;
+  if (line === null || !silences?.length) return false;
+  // Channels the bot has actually posted in set the pace; a channel it has
+  // never posted in counts only when there is no other.
+  const stamped = silences.filter((s) => !s.atLeast);
+  const pool = stamped.length ? stamped : silences;
+  return Math.min(...pool.map((s) => s.hours)) >= line;
 }
 
 /** An ISO instant, or null: cursors from before 2.0.0 were integer event
@@ -144,12 +196,12 @@ async function pollRoutine(routine, channel) {
     return seeded.meta;
   }
 
-  const result = await read(cursor, { sections: routine.sections });
+  const result = await read(cursor, { sections: routine.sections, kinds: subscribedKinds(routine) });
   if (!result.ok) {
     log.warn("events_poll_failed", { routine: routine.key, error: result.error, cursor });
     return null;
   }
-  const items = relevant(result.timeline, routine);
+  const { wake, carry } = partition(result.timeline, routine);
 
   // Contract drift is worth a log line even when nothing broke: the tool
   // surface moving is exactly what this project is meant to notice early.
@@ -166,11 +218,22 @@ async function pollRoutine(routine, channel) {
     state.set({ contractVersion: version });
   }
 
-  if (items.length === 0) {
-    // A quiet window: move on without a model call.
-    if (result.cursor) state.setCursor(routine.key, result.cursor);
-    return result.meta;
+  const held = state.carried(routine.key);
+  let release = false;
+  if (wake.length === 0) {
+    // Nothing that starts a turn. Carry what was named to carry, and let
+    // the batch go only if the room has been quiet past the VOICE line.
+    if (carry.length) {
+      state.addCarry(routine.key, carry);
+      log.info("events_carried", { routine: routine.key, items: carry.length, held: held.length + carry.length });
+    }
+    release = held.length + carry.length > 0 && releaseDue(silenceFor(routine));
+    if (!release) {
+      if (result.cursor) state.setCursor(routine.key, result.cursor);
+      return result.meta;
+    }
   }
+  const items = [...held, ...wake, ...carry].sort((a, b) => String(a.at ?? "").localeCompare(String(b.at ?? "")));
 
   const run = await runRoutine(routine, {
     channel,
@@ -180,9 +243,12 @@ async function pollRoutine(routine, channel) {
   // rather than dropping it. A skip counts: the routine saw it and declined.
   if (run.ok) {
     state.setCursor(routine.key, result.cursor);
+    state.clearCarry(routine.key);
     log.info("events_consumed", {
       routine: routine.key,
       items: items.length,
+      carried: held.length + (wake.length ? carry.length : 0),
+      release,
       kinds: [...new Set(items.map((i) => i.kind))].join(","),
       window: result.window ? `${result.window.from}..${result.window.to}` : undefined,
       cursor: result.cursor,
@@ -190,6 +256,12 @@ async function pollRoutine(routine, channel) {
     });
   }
   return result.meta;
+}
+
+/** The silence clock over the channels this routine could post in. */
+function silenceFor(routine) {
+  if (!routine.wake) return [];
+  return state.silence(postable(directory()));
 }
 
 /**

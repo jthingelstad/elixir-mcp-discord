@@ -359,13 +359,6 @@ async function runRoutineNow(
   const posts = [];
   const directoryEntries = routine.trigger === "message" ? [] : entries;
   const withTool = directoryEntries.length > 0;
-  // The silence clock, for the channels this turn could post in. A dry run
-  // reads it (a rehearsal should see what the real run sees) but the first
-  // sighting it anchors is harmless: the same anchor the real run would set.
-  const silence =
-    withTool && routine.maySkip
-      ? state.silence(directoryEntries.filter((e) => e.role !== "ask" && e.role !== "read"))
-      : null;
   // `overrides` (identity, memory) let a rehearsal run on a PROPOSED file
   // before it is applied — src/review.js "Try it".
   const system = systemFor(routine, { entries: directoryEntries, defaultChannelId: channel?.id ?? null, ...overrides });
@@ -385,7 +378,6 @@ async function runRoutineNow(
           brief: routine.prompt,
           events: events ?? undefined,
           recent,
-          silence: silence?.map((s) => ({ channel: `#${s.name}`, hours: Math.round(s.hours), atLeast: s.atLeast })),
           defaultChannelId: channel?.id ?? null,
         },
         output,
@@ -394,7 +386,7 @@ async function runRoutineNow(
   };
   const result = await askFn({
     system,
-    messages: [{ role: "user", content: userMessageFor(routine, { events, recent, withTool, silence }) }],
+    messages: [{ role: "user", content: userMessageFor(routine, { events, recent, withTool }) }],
     maxTokens: routine.maxTokens,
     model: routine.model,
     effort: routine.effort,

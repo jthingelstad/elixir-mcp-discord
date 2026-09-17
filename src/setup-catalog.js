@@ -19,8 +19,17 @@ export function describeWhen(routine) {
     const days = routine.days ? routine.days.map((d) => WEEKDAY_NAMES[d]).join(",") : "daily";
     return `${days} at ${hhmm}`;
   }
-  if (routine.trigger === "events")
+  if (routine.trigger === "events") {
+    if (routine.wake)
+      return `timeline: wakes on ${routine.wake.join(", ")}${routine.carry ? `; carries ${routine.carry.join(", ")}` : ""}`;
     return `timeline: ${routine.kinds?.join(", ") ?? routine.sections?.join(", ") ?? "everything"}`;
+  }
+  if (routine.trigger === "clock") {
+    const m = routine.offsetMinutes ?? 0;
+    const off =
+      m === 0 ? "" : ` ${m > 0 ? "+" : "-"}${Math.abs(m) % 60 === 0 ? `${Math.abs(m) / 60}h` : `${Math.abs(m)}m`}`;
+    return `clock: ${routine.arm}${off}`;
+  }
   return "on message";
 }
 

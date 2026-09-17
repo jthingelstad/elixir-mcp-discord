@@ -29,6 +29,10 @@ const DEFAULTS = {
   // seeded on first poll — never drained. An agent that wakes up and posts a
   // month of history into a channel is the most common mistake with a feed.
   cursors: {},
+  // { [routineKey]: item[] }. Timeline items an event routine named as
+  // `carry`: not worth a turn on their own, kept until a `wake` item starts
+  // one or the carry release lets them go (src/events.js). Bounded.
+  carry: {},
   // { [routineKey]: periodKey }. null = never seeded, which is distinct from
   // {} on purpose: an empty ledger on a fresh install would make every routine
   // whose window is still open fire at once, in the same minute.
@@ -115,6 +119,27 @@ export function cursorFor(routineKey) {
 export function setCursor(routineKey, cursor) {
   const state = read();
   write({ ...state, cursors: { ...state.cursors, [routineKey]: cursor } });
+}
+
+/** How many carried items one routine keeps; the oldest fall off. A batch
+ *  of sixty texture items is already more than one post should carry. */
+export const CARRY_CAP = 60;
+
+export function carried(routineKey) {
+  return read().carry?.[routineKey] ?? [];
+}
+
+export function addCarry(routineKey, items) {
+  if (!items?.length) return;
+  const state = read();
+  const kept = [...(state.carry?.[routineKey] ?? []), ...items].slice(-CARRY_CAP);
+  write({ ...state, carry: { ...state.carry, [routineKey]: kept } });
+}
+
+export function clearCarry(routineKey) {
+  const state = read();
+  if (!state.carry?.[routineKey]?.length) return;
+  write({ ...state, carry: { ...state.carry, [routineKey]: [] } });
 }
 
 /** Remember what a routine just posted, so its next run can avoid repeating it. */

@@ -41,6 +41,6 @@
   "STARTUP_MESSAGE": "on",
   "MAX_POSTS_PER_TURN": "3",
 
-  "_voice": "How long a channel may go without a post from the bot before it leans toward saying the smaller true thing rather than nothing. Every routine turn is told the hours of silence per channel; VOICE sets the threshold past which that lowers the bar for a may_skip routine: quiet = 72h (a bot that speaks rarely), normal = 12h, chatty = 4h (a clan that wants to hear from it through the day). It never invents and never repeats itself at any level; a truly dead day is still a SKIP.",
+  "_voice": "How long the channels the bot posts in may go quiet before timeline items the editor names as carry (badge level-ups, collection steps, card unlocks, quiet crossings) are allowed to start a turn on their own. A wake item (a join, a promotion, a standout session, a resolved week) starts one immediately and takes the carried items with it; VOICE only sets the release for carried items: quiet = never, normal = 12h, chatty = 4h. It is a coalescing interval, not a prompt lean: nothing tells the model how much to say, and a turn that finds nothing worth a post still replies SKIP.",
   "VOICE": "normal"
 }

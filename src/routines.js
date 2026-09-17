@@ -27,7 +27,17 @@ import path from "node:path";
 import { config } from "./config.js";
 import { log } from "./log.js";
 
-export const TRIGGERS = new Set(["message", "events", "schedule"]);
+export const TRIGGERS = new Set(["message", "events", "schedule", "clock"]);
+
+/** The game_clock fields a clock routine may arm on (src/clock.js). */
+export const CLOCK_FIELDS = new Set([
+  "war_day_closes_at",
+  "next_war_day_opens_at",
+  "next_training_starts_at",
+  "week_ends_at",
+  "season_ends_at",
+  "day_ends_at",
+]);
 
 /** Every key a routine may declare. An unknown one is an error rather than an
  *  ignored line, because `catchup_hours` for `catch_up_hours` would otherwise
@@ -44,6 +54,17 @@ export const FIELDS = new Set([
   "catch_up_hours",
   "sections",
   "kinds",
+  // Since 2026-09-17 an event routine may split what it subscribes to:
+  // `wake` kinds start a turn now; `carry` kinds wait for the next batch,
+  // or for the carry release (src/events.js). `kinds` alone still means
+  // "every one of these wakes me".
+  "wake",
+  "carry",
+  // trigger: clock — armed from one game_clock field plus an offset, so a
+  // war-deck nudge fires four hours before THIS day closes and never on a
+  // training day (src/clock.js).
+  "arm",
+  "offset",
   "may_skip",
   // A one-shot: fires at its next occurrence, then is written back with
   // enabled: false. "Remind the clan Friday at 8" is a routine, not a
@@ -77,6 +98,15 @@ function asBool(key, field, raw) {
   if (["true", "yes", "on"].includes(value)) return true;
   if (["false", "no", "off"].includes(value)) return false;
   return fail(key, `${field} must be true or false, got "${raw}"`);
+}
+
+/** "-4h", "+2h", "90m", "0" -> minutes. */
+export function parseOffset(key, raw) {
+  if (raw === undefined || raw === null || String(raw).trim() === "") return 0;
+  const m = /^([+-]?)(\d+)\s*(h|m)?$/i.exec(String(raw).trim());
+  if (!m) return fail(key, `offset must look like -4h, +2h or 30m, got "${raw}"`);
+  const value = Number(m[2]) * (m[3]?.toLowerCase() === "h" ? 60 : 1);
+  return m[1] === "-" ? -value : value;
 }
 
 function asInt(key, field, raw, { min = 0 } = {}) {
@@ -168,6 +198,17 @@ export function parseRoutine(key, text) {
     maxTokens: fields.max_tokens === undefined ? 6000 : asInt(key, "max_tokens", fields.max_tokens, { min: 256 }),
   };
 
+  if (trigger === "clock") {
+    if (!CLOCK_FIELDS.has(fields.arm || ""))
+      fail(key, `arm must be one of ${[...CLOCK_FIELDS].join(", ")}, got "${fields.arm ?? ""}"`);
+    routine.arm = fields.arm;
+    routine.offsetMinutes = parseOffset(key, fields.offset);
+    routine.catchUpHours =
+      fields.catch_up_hours === undefined ? 4 : asInt(key, "catch_up_hours", fields.catch_up_hours, { min: 1 });
+  } else if (fields.arm || fields.offset) {
+    fail(key, "arm and offset only mean something for trigger: clock");
+  }
+
   if (trigger === "schedule") {
     const at = /^(\d{1,2}):(\d{2})$/.exec(fields.at || "");
     if (!at) fail(key, `at must be HH:MM in the configured timezone, got "${fields.at ?? ""}"`);
@@ -187,8 +228,8 @@ export function parseRoutine(key, text) {
     // because the host was asleep is worse than one that never fires.
     routine.catchUpHours =
       fields.catch_up_hours === undefined ? 4 : asInt(key, "catch_up_hours", fields.catch_up_hours, { min: 1 });
-  } else if (fields.at || fields.days || fields.catch_up_hours) {
-    fail(key, `at/days/catch_up_hours only mean something for trigger: schedule`);
+  } else if (fields.at || fields.days || (fields.catch_up_hours && trigger !== "clock")) {
+    fail(key, `at/days/catch_up_hours only mean something for trigger: schedule (catch_up_hours also for clock)`);
   }
   if (routine.once && trigger !== "schedule") fail(key, "once only means something for trigger: schedule");
 
@@ -199,8 +240,16 @@ export function parseRoutine(key, text) {
   if (trigger === "events") {
     routine.sections = fields.sections ? asList(fields.sections) : null;
     routine.kinds = fields.kinds ? asList(fields.kinds) : null;
-  } else if (fields.sections || fields.kinds) {
-    fail(key, "sections and kinds only mean something for trigger: events");
+    routine.wake = fields.wake ? asList(fields.wake) : null;
+    routine.carry = fields.carry ? asList(fields.carry) : null;
+    if (routine.wake && routine.kinds) fail(key, "name kinds OR wake/carry, not both");
+    if (routine.carry && !routine.wake) fail(key, "carry needs wake: something has to start the turn");
+    if (routine.wake && routine.carry) {
+      const both = routine.wake.filter((k) => routine.carry.includes(k));
+      if (both.length) fail(key, `a kind is wake or carry, not both: ${both.join(", ")}`);
+    }
+  } else if (fields.sections || fields.kinds || fields.wake || fields.carry) {
+    fail(key, "sections, kinds, wake and carry only mean something for trigger: events");
   }
 
   if (trigger === "message") {

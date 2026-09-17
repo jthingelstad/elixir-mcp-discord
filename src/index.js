@@ -13,6 +13,7 @@ import { handleAsk, isThreadOf } from "./ask.js";
 import { handleReaction } from "./reactions.js";
 import { startEventLoop } from "./events.js";
 import { startScheduler } from "./scheduler.js";
+import { startClockLane } from "./clock.js";
 import { startReview } from "./review.js";
 import * as notify from "./notify.js";
 import { handleDm, introduce } from "./dm.js";
@@ -300,7 +301,9 @@ client.once(Events.ClientReady, async (ready) => {
   timers.push(startEventLoop(() => routinesFor("events"), resolveChannel));
   timers.push(startScheduler(() => routinesFor("schedule"), resolveChannel));
   // After the scheduler: both seed the same run ledger, and the scheduler's
-  // first seeding replaces it wholesale.
+  // first seeding replaces it wholesale. The clock lane likewise.
+  const clockLane = startClockLane(() => routinesFor("clock"), resolveChannel);
+  stoppers.push(() => clockLane.stop());
   timers.push(startReview(client));
 });
 
@@ -312,6 +315,7 @@ client.once(Events.ClientReady, async (ready) => {
  * launchd does not SIGKILL first.
  */
 const timers = [];
+const stoppers = [];
 const DRAIN_MS = 45_000;
 let shuttingDown = false;
 
@@ -319,6 +323,7 @@ async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   for (const timer of timers) clearInterval(timer);
+  for (const stop of stoppers) stop();
   const running = count();
   log.info("shutdown", { signal, inFlight: running, waitUpToMs: running ? DRAIN_MS : 0 });
   const left = await drain(DRAIN_MS);

@@ -246,8 +246,7 @@ function proposeTool({ files, proposals, max }) {
         file: { type: "string", description: "memory.md, identity.md, or routines/<key>.md" },
         rule: {
           type: "string",
-          description:
-            "The rule this is about, in a few words (e.g. 'first-contact identity', 'notable-movers brief').",
+          description: "The rule this is about, in a few words (e.g. 'first-contact identity', 'editor brief').",
         },
         turn_ids: {
           type: "array",

@@ -10,7 +10,7 @@
  *                          memory.md line with an Apply button; live on tap
  *   ask why                "why d98fe553", or paste a message link — the turn's
  *                          transcript, what it thought, what the tools said
- *   try before posting     "try notable-movers" — the routine's dry run,
+ *   try before posting     "try editor" — the routine's dry run,
  *                          shown to you only; "post it" sends it
  *   ask as yourself        anything about the record, answered on your behalf,
  *                          without cluttering the ask channel
@@ -95,9 +95,8 @@ SET IT UP, the first time. When list_routines is empty the bot does
 nothing yet. Call list_example_routines (the shipped set, each with its
 fields and full brief) and list_channels (where the bot may post, and the
 ask channel). Offer the examples in a few lines each; if they say "the
-usual", propose create for ask, clan-feed, notable-movers and
-war-deck-check with the example's own fields and brief, times moved to
-their evening if they said one. Propose the ask routine first — it is
+usual", propose create for ask, editor and war-deck-check with the
+example's own fields and brief. Propose the ask routine first — it is
 what makes the ask channel answer. Three proposals per message; say what
 else is on offer. Then ask about the clan: what they call things, what to
 keep in mind — memory.md lines. This is also how a new routine is written
@@ -632,7 +631,7 @@ function examplesTool() {
               fields: splitFrontMatter(e.text).fields,
               brief: e.routine.prompt,
             })),
-          the_usual: ["ask", "clan-feed", "notable-movers", "war-deck-check"],
+          the_usual: ["ask", "editor", "war-deck-check"],
         },
       };
     },
@@ -1062,7 +1061,7 @@ export async function introduce({ guildName, subject, examples = null } = {}) {
     "What I can run:",
     ...shipped.map((e) => `• **${e.key}** — ${e.routine.description}`),
     "",
-    "Say **the usual** for ask, clan-feed, notable-movers and war-deck-check, or tell me which you want and when. Each comes back as a proposal with an Apply button. Then tell me about the clan — what you call things, what to keep in mind.",
+    "Say **the usual** for ask, editor and war-deck-check, or tell me which you want and when. Each comes back as a proposal with an Apply button. Then tell me about the clan — what you call things, what to keep in mind.",
   ];
   return notify("welcome", lines.join("\n"), { fingerprint: "introduce", every: 24 * 3600 * 1000 });
 }

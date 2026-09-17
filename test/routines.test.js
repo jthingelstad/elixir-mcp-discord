@@ -44,7 +44,7 @@ test("an events routine names the timeline kinds or sections that wake it; topic
   );
   assert.throws(
     () => parseRoutine("x", doc({ trigger: "schedule", channel: "pulse", at: "01:00", kinds: "returned" })),
-    /kinds only mean something/,
+    /wake and carry only mean something/,
   );
 });
 
@@ -83,7 +83,7 @@ test("front matter is separated from the prompt, comments and all", () => {
 test("the shipped bundle loads, is uniquely keyed, and names no clan", () => {
   const { routines, errors } = loadRoutines({ disabled: new Set() });
   assert.deepEqual(errors, [], "every shipped routine must parse");
-  assert.ok(routines.length >= 6);
+  assert.ok(routines.length >= 4);
 
   const keys = new Set();
   for (const routine of routines) {
@@ -99,8 +99,18 @@ test("the shipped bundle loads, is uniquely keyed, and names no clan", () => {
     assert.doesNotMatch(routine.prompt, /#[0-9A-Z]{5,}/, `${routine.key} names a Clash Royale tag`);
   }
   assert.ok(routines.some((routine) => routine.trigger === "message"));
-  assert.ok(routines.some((routine) => routine.trigger === "events"));
-  assert.ok(routines.filter((routine) => routine.trigger === "schedule").length >= 4);
+  // The record is the trigger (docs/PROACTIVE-2026-09-16.md): one editor on
+  // the timeline, one clock-armed nudge, and the calendar as the exception.
+  const editor = routines.find((routine) => routine.trigger === "events");
+  assert.ok(editor.wake.includes("member_joined") && editor.carry.includes("badge_earned"));
+  assert.equal(
+    routines.filter((routine) => routine.trigger === "schedule").length,
+    1,
+    "meta-report is the one schedule",
+  );
+  const clock = routines.find((routine) => routine.trigger === "clock");
+  assert.equal(clock.arm, "war_day_closes_at");
+  assert.equal(clock.offsetMinutes, -240);
 });
 
 test("a routine can be turned off by key without editing it", () => {
@@ -141,4 +151,30 @@ test("a routine file the runner cannot parse is logged, once, and loudly when no
   } finally {
     console.error = original;
   }
+});
+
+test("wake/carry and the clock trigger parse, and their mistakes are errors", () => {
+  const editor = parseRoutine(
+    "editor",
+    doc({ trigger: "events", wake: "member_joined, returned", carry: "badge_earned", may_skip: true }),
+  );
+  assert.deepEqual(editor.wake, ["member_joined", "returned"]);
+  assert.deepEqual(editor.carry, ["badge_earned"]);
+  assert.equal(editor.kinds, null);
+  const clock = parseRoutine("nudge", doc({ trigger: "clock", arm: "war_day_closes_at", offset: "-4h" }));
+  assert.equal(clock.arm, "war_day_closes_at");
+  assert.equal(clock.offsetMinutes, -240);
+  assert.equal(clock.catchUpHours, 4);
+  assert.equal(parseRoutine("n", doc({ trigger: "clock", arm: "week_ends_at", offset: "+90m" })).offsetMinutes, 90);
+  assert.equal(parseRoutine("n", doc({ trigger: "clock", arm: "week_ends_at" })).offsetMinutes, 0);
+  const bad = [
+    [{ trigger: "events", wake: "member_joined", kinds: "returned" }, /kinds OR wake\/carry/],
+    [{ trigger: "events", carry: "badge_earned" }, /carry needs wake/],
+    [{ trigger: "events", wake: "returned", carry: "returned" }, /wake or carry, not both/],
+    [{ trigger: "clock", arm: "next_full_moon" }, /arm must be one of/],
+    [{ trigger: "clock", arm: "week_ends_at", offset: "soon" }, /offset must look like/],
+    [{ trigger: "schedule", at: "01:00", arm: "week_ends_at" }, /arm and offset only mean something/],
+  ];
+  for (const [fields, pattern] of bad)
+    assert.throws(() => parseRoutine("x", doc(fields)), pattern, JSON.stringify(fields));
 });
