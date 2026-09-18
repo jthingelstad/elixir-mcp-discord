@@ -253,6 +253,11 @@ test("a tool result is read one way: is_error, a refusal body, prose, and a plai
   assert.equal(refusal.code, "no_subject");
   assert.equal(refusal.detail, "Who?");
   assert.equal(refusal.requestId, "r1");
+  assert.equal(refusal.errorClass, null, "a hub before 3.18.0 carries no class");
+  const classed = outcome(
+    JSON.stringify({ error: { code: "live_pending", class: "retry", message: "Queued." }, meta: { request_id: "r3" } }),
+  );
+  assert.equal(classed.errorClass, "retry");
   const flagged = outcome("boom", { isError: true });
   assert.equal(flagged.ok, false);
   assert.equal(flagged.code, null, "no body, no code");

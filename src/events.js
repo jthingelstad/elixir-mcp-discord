@@ -14,15 +14,20 @@
  * something to write about — and since contract 2.0.0 (2026-09-13) deciding
  * THAT is this file's job too, see `relevant`.
  *
- * CURSORS: we pass `mark_read: false` on every poll and keep our own position
- * per routine in state.json. The seen bookmark is a single per-account
- * instant, so acknowledging would move the window for anything else polling
- * this account — and with two event routines here, each other's. The local
- * cursor also means a restart can never skip a window it failed to post.
+ * CURSORS: the local cursor per routine in state.json is still what `from`
+ * comes from — a restart can never skip a window it failed to post. Since
+ * hub contract 3.18.0 each routine ALSO names itself as a `reader` on the
+ * poll (`<instance>-<routine>`) and marks: the hub keeps one pointer per
+ * reader, so two routines and three instances on one account no longer
+ * move each other's window, and `meta.timeline_pending` on every response
+ * counts against this reader's own mark instead of a pointer nothing ever
+ * moved. The reader's pointer can run a window ahead of the local cursor
+ * after a failed turn; the local cursor is the one that decides `from`.
  */
 
+import path from "node:path";
 import { callTool } from "./mcp.js";
-import { config } from "./config.js";
+import { config, instanceDir } from "./config.js";
 import { runRoutine } from "./run.js";
 import { newFeedbackResponses } from "./feedback.js";
 import { directory, postable, resolveById } from "./directory.js";
@@ -46,8 +51,23 @@ import * as state from "./state.js";
  */
 export const TIMELINE_TOOL = "elixir_timeline";
 
-export async function read(from, { sections = null, kinds = null, verbosity = "full" } = {}) {
-  const args = { mark_read: false, verbosity };
+/** This consumer's reader name on the hub: the instance directory's name
+ *  and the routine's key, lowercased to the hub's alphabet, at most 32. */
+export function readerName(routineKey) {
+  const inst = path
+    .basename(instanceDir)
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-");
+  const key = String(routineKey ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-");
+  return `${inst}-${key}`.replace(/^-+|-+$/g, "").slice(0, 32) || "discord";
+}
+
+export async function read(from, { sections = null, kinds = null, verbosity = "full", reader = null } = {}) {
+  // A named reader marks its own pointer; a read with no reader (the seed,
+  // the dry run) never moves anything.
+  const args = reader ? { reader, mark_read: true, verbosity } : { mark_read: false, verbosity };
   if (from) args.from = from;
   if (sections?.length) args.sections = sections;
   // Since contract 3.9.0 the server keeps only the item kinds named, so a
@@ -196,7 +216,11 @@ async function pollRoutine(routine, channel) {
     return seeded.meta;
   }
 
-  const result = await read(cursor, { sections: routine.sections, kinds: subscribedKinds(routine) });
+  const result = await read(cursor, {
+    sections: routine.sections,
+    kinds: subscribedKinds(routine),
+    reader: readerName(routine.key),
+  });
   if (!result.ok) {
     log.warn("events_poll_failed", { routine: routine.key, error: result.error, cursor });
     return null;

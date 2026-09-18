@@ -179,10 +179,19 @@ export function claimsFiling(text) {
  *   quota_exceeded  the ceiling did what it is for. The maintainer sets it and
  *                   can read it in the audit log; a feedback item adds nothing.
  *
+ * Since hub contract 3.18.0 every error also carries a CLASS, and `retry`
+ * is the one that is not a failure of the call at all: live_pending (a
+ * fresh read was queued, call again in retry_after_s) and query_timeout
+ * (call again in a moment, or narrower). Those used to print "⚠️ 1 of N
+ * tool calls failed" under a post and fire a reflection sweep. The class
+ * is the wire's word; the two codes stay listed for a hub older than
+ * 3.18.0 that carries no class.
+ *
  * Every other code — invalid_tag, not_entitled, not_recorded, not_found,
- * live_unavailable, bad_request, result_too_large — stays a signal.
+ * live_unavailable, bad_request, result_too_large, internal — stays a signal.
  */
-const EXPECTED_ERROR_CODES = new Set(["no_subject", "quota_exceeded"]);
+const EXPECTED_ERROR_CODES = new Set(["no_subject", "quota_exceeded", "live_pending", "query_timeout"]);
+const EXPECTED_ERROR_CLASSES = new Set(["retry"]);
 
 /** This runner's own tools. Their refusals (a channel not in the directory,
  *  the post cap) are this consumer's behaviour, never hub friction to file. */
@@ -205,7 +214,9 @@ const LOCAL_TOOLS = new Set([
 
 /** The errors worth a reader's or the maintainer's attention. */
 export function unexpectedErrors(errors) {
-  return (errors || []).filter((e) => !EXPECTED_ERROR_CODES.has(e.code) && !LOCAL_TOOLS.has(e.name));
+  return (errors || []).filter(
+    (e) => !EXPECTED_ERROR_CODES.has(e.code) && !EXPECTED_ERROR_CLASSES.has(e.class) && !LOCAL_TOOLS.has(e.name),
+  );
 }
 
 /**

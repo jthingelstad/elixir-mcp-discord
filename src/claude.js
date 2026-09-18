@@ -192,6 +192,9 @@ export function outcome(raw, { isError = false } = {}) {
     body,
     requestId,
     code: failed && typeof body?.error?.code === "string" ? body.error.code : null,
+    // The code's class (hub 3.18.0): retry | input | subject | server |
+    // budget, so the friction sweep branches on one word.
+    errorClass: failed && typeof body?.error?.class === "string" ? body.error.class : null,
     detail: failed ? String(body?.error?.message ?? raw).slice(0, 400) : null,
   };
 }
@@ -230,7 +233,13 @@ function use(activity, block) {
 function settle(activity, { step, name, result, ms }) {
   if (step && ms !== undefined) step.ms = ms;
   if (!result.ok) {
-    const failure = { name, code: result.code, detail: result.detail, requestId: result.requestId };
+    const failure = {
+      name,
+      code: result.code,
+      class: result.errorClass ?? null,
+      detail: result.detail,
+      requestId: result.requestId,
+    };
     activity.errors.push(failure);
     activity.trace.push({ kind: "error", ...failure, result: result.raw });
     return;

@@ -129,23 +129,24 @@ people to mute it. Do not pad.`;
 const WHO_IS_ASKING = `Each message names its author and their id from this surface, like
 "Raquaza (discord:12345): how am I doing?". When a question is about the person
 asking — "my stats", "how am I playing", "my deck" — pass that id as
-on_behalf_of and OMIT player_tag. The server remembers who they are.
+on_behalf_of AND the author's name from the message line as display_name, and
+OMIT player_tag. The server remembers who they are.
 
-The first time someone asks, the server will not know them yet and will say
-so. Before you ask them anything, look them up yourself: pull clans_roster and
-compare the author's name from the message line against the members' names,
-ignoring case and spacing. Exactly one member with that whole name is them —
-call elixir_identify once with their id and that tag, say so in one line
-("Linked you to sikander sidhu #JYRQ8U92C — tell me if that's wrong"), and
-answer the question in the same reply. From then on it is remembered, for them
-and for everyone who asks later.
+The first time someone asks, the server will not know them yet and says so
+with a no_subject error that carries candidates[]: the clan members whose
+whole name matches the display_name you passed, case and spacing ignored,
+never a partial match. Exactly one candidate is them — call elixir_identify
+once with their id and that tag, say so in one line ("Linked you to sikander
+sidhu #JYRQ8U92C — tell me if that's wrong"), and answer the question in the
+same reply. From then on it is remembered, for them and for everyone who asks
+later. Do not pull clans_roster to compare names yourself; the refusal already
+did that.
 
-No member with that name, more than one, or only part of the name matching:
-ask which player in the clan they are, then call elixir_identify once. A
-partial or similar name is never a link. A wrong link is not permanent —
-elixir_identify with the same id again replaces it — but a wrong link answers
-confidently about the wrong person until somebody notices, so the bar is the
-whole name and one match.
+candidates[] empty, or more than one: ask which player in the clan they are,
+then call elixir_identify once. A partial or similar name is never a link. A
+wrong link is not permanent — elixir_identify with the same id again replaces
+it — but a wrong link answers confidently about the wrong person until
+somebody notices, so the bar is the whole name and one match.
 
 You do not otherwise know who anyone here is, and you have no local nickname
 table. Asking for a tag when the name does not resolve is the honest answer,

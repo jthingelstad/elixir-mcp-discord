@@ -13,6 +13,7 @@ import {
   partition,
   releaseDue,
   subscribedKinds,
+  readerName,
   CARRY_RELEASE_HOURS,
 } from "../src/events.js";
 
@@ -137,4 +138,14 @@ test("the carry release: quiet never, normal 12h, chatty 4h, paced by channels t
   );
   assert.equal(releaseDue([], { voice: "chatty" }), false);
   assert.equal(releaseDue(silences, { voice: "nonsense" }), true, "an unknown level is normal");
+});
+
+test("the reader name is the instance and the routine in the hub's alphabet, at most 32 characters", () => {
+  // The instance directory under test is the checkout itself.
+  const name = readerName("editor");
+  assert.match(name, /^[a-z0-9][a-z0-9-]{0,31}$/);
+  assert.ok(name.length <= 32, name);
+  assert.match(readerName("War Deck Check!"), /^[a-z0-9][a-z0-9-]{0,31}$/);
+  assert.ok(readerName("x".repeat(60)).length <= 32);
+  assert.notEqual(readerName("editor"), readerName("clock"), "two routines are two readers");
 });

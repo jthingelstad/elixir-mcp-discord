@@ -44,6 +44,27 @@ test("no_subject and quota_exceeded are expected flows, not friction", () => {
   assert.doesNotMatch(friction.detail, /no_subject/);
 });
 
+test("a retry-class error (hub 3.18.0) is the service working, not friction; the class is read before the code", () => {
+  // live_pending and query_timeout carry class "retry" since 3.18.0 and
+  // used to print a failure footer and fire a sweep.
+  assert.equal(
+    detectFriction(
+      turn([{ name: "clans_roster", code: "live_pending", class: "retry", detail: "Queued; call again in 20 s." }]),
+    ),
+    null,
+  );
+  assert.equal(
+    detectFriction(turn([{ name: "battles_meta_decks", code: "query_timeout", detail: "Budget exceeded." }])),
+    null,
+    "the code alone still counts as expected on a hub without classes",
+  );
+  // A class the hub calls server is friction whatever the code.
+  const friction = detectFriction(
+    turn([{ name: "battles_levels", code: "internal", class: "server", detail: "Failed unexpectedly." }]),
+  );
+  assert.deepEqual(friction.codes, ["internal"]);
+});
+
 test("an error without a code is still friction", () => {
   // A protocol-level failure (unknown tool, no JSON body) carries no code and
   // is exactly the kind of thing worth a look.
