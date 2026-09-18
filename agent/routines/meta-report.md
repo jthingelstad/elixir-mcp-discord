@@ -15,7 +15,13 @@ Two parts: what is rising and falling across the recorded corpus this week, and
 how your clan's play compares — what are you over-playing or under-playing
 relative to it.
 
-Be honest about sample size: a card with few recorded battles is not a trend.
+Read `comparable` before ranking anything: when it is false the first note
+names the rows that clash (played in different modes, or at level gaps half a
+level apart) and those rows are not one list. Name the population you read:
+pass `segment: "corpus"` for the field and `segment: "mine"` for the clan; a
+corpus read's `population` says how many recorded clans and players it was
+drawn from, and that is the neighbourhood the numbers describe, not the game.
+`players` per row and `insufficient_sample` still say when a number is thin.
 
 Post it where decks and strategy get discussed if your directory has such a
 channel; otherwise where the clan reads.
