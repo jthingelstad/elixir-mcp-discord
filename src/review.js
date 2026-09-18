@@ -213,7 +213,7 @@ proposal is refused, read the error and fix it or drop it.
 WHAT YOU CANNOT CHANGE: MECHANICS (code). If the fix belongs there, call
 report_mechanics — it becomes a report the operator can paste into an issue.
 If the fix is Elixir's (a tool's shape, a misleading note, a missing
-capability), call elixir_feedback with the request ids — and if you ALSO add
+capability), call elixir_send_feedback with the request ids — and if you ALSO add
 a memory entry that works around it, say so in the entry so it can be
 dropped when Elixir ships the fix.
 
@@ -426,7 +426,7 @@ export async function runReview({
   // A rehearsal persists nothing here, and must write nothing upstream
   // either: the first dry run filed a real item with Elixir's maintainer.
   const system = dryRun
-    ? `${SYSTEM}\n\nTHIS IS A REHEARSAL: do not call elixir_feedback. Where you would have filed, say so in the report instead.`
+    ? `${SYSTEM}\n\nTHIS IS A REHEARSAL: do not call elixir_send_feedback. Where you would have filed, say so in the report instead.`
     : SYSTEM;
   const result = await askFn({
     system,
@@ -453,7 +453,7 @@ export async function runReview({
 
   const report = (result.text || "").trim();
   const filed = (result.trace || [])
-    .filter((s) => s.kind === "tool" && s.name.includes("elixir_feedback"))
+    .filter((s) => s.kind === "tool" && s.name.includes("elixir_send_feedback"))
     .map((s) => String(s.input?.message ?? "").slice(0, 200));
   const record = ledger.reviewEntry({
     reviewId,

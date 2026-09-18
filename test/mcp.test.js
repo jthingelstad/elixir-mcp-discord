@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resolveToolName, describePrincipal, readPrincipal, PRINCIPAL_META_KEY } from "../src/mcp.js";
 
-const NAMES = ["elixir_feedback", "elixir_my_feedback", "clans_roster", "players_search", "war_current"];
+const NAMES = ["elixir_send_feedback", "elixir_my_feedback", "clans_roster", "players_search", "war_current"];
 const resolve = (name) => resolveToolName(name, { serverName: "elixir-mcp", names: NAMES });
 
 test("a published name is used as-is", async () => {
@@ -17,9 +17,9 @@ test("a published name is used as-is", async () => {
 });
 
 test("the connector's renamed form resolves back to the real tool", async () => {
-  // Observed: elixir_feedback came back as elixir-mcp_feedback, and the old
+  // Observed: elixir_send_feedback came back as elixir-mcp_send_feedback, and the old
   // prefix-strip called "feedback", which does not exist.
-  assert.equal(await resolve("elixir-mcp_feedback"), "elixir_feedback");
+  assert.equal(await resolve("elixir-mcp_send_feedback"), "elixir_send_feedback");
   assert.equal(await resolve("elixir-mcp_my_feedback"), "elixir_my_feedback");
 });
 

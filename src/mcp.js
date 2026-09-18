@@ -117,8 +117,8 @@ export function describePrincipal(principal) {
  * publishes.
  *
  * When the connector asks the CLIENT to run an mcp_toolset tool, the tool
- * arrives renamed: `elixir_feedback` on a server we named `elixir-mcp` came
- * back as `elixir-mcp_feedback`. Stripping the server prefix gives "feedback",
+ * arrives renamed: `elixir_send_feedback` on a server we named `elixir-mcp` came
+ * back as `elixir-mcp_send_feedback`. Stripping the server prefix gives "feedback",
  * which is not a tool, and calling it returns "Unknown tool: feedback" —
  * observed 2026-09-08, and the model reads that as its feedback having failed.
  *
@@ -148,7 +148,7 @@ export async function resolveToolName(name, { serverName = config.mcp.serverName
   if (resolved.includes(bare)) return bare;
 
   // The renamed form dropped the tool's own namespace, so match on the tail.
-  // Prefer the shortest match: `elixir_feedback` over `elixir_my_feedback`,
+  // Prefer the shortest match: `elixir_send_feedback` over `elixir_my_feedback`,
   // which is the tool that was actually asked for.
   const tails = resolved.filter((tool) => tool.endsWith(`_${bare}`)).sort((a, b) => a.length - b.length);
   if (tails.length === 0) {

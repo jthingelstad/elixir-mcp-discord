@@ -78,7 +78,7 @@ test("a filed turn and a clean turn are not friction", () => {
   assert.equal(
     detectFriction({
       text: "ok",
-      called: ["elixir_feedback"],
+      called: ["elixir_send_feedback"],
       errors: [{ name: "x", code: "not_found", detail: "d" }],
     }),
     null,
@@ -160,7 +160,7 @@ test("figures with no tool call are ungrounded, unless the feed supplied them", 
   assert.equal(looksUngrounded({ text: "Which player are you?", called: [] }), false, "no figures, no problem");
 });
 
-test("a reply that says it filed, with no elixir_feedback call, is friction of its own kind", () => {
+test("a reply that says it filed, with no elixir_send_feedback call, is friction of its own kind", () => {
   // 2026-09-15, the operator's DM: "Filed as a data-quality bug against
   // elixir_timeline ... with the request_id attached" after four reads and
   // no filing. The words and the calls disagreed and nothing compared them.
@@ -185,7 +185,7 @@ test("a reply that says it filed, with no elixir_feedback call, is friction of i
   assert.equal(
     detectFriction({
       text: "Filed as a data-quality bug.",
-      called: ["players_search", "elixir_feedback"],
+      called: ["players_search", "elixir_send_feedback"],
       errors: [],
     }),
     null,

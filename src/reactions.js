@@ -6,7 +6,7 @@
  * and until now a reader had no way to say so that reached anyone. A 👎 on
  * any message a turn produced — the post, its footer — is joined back to the
  * turn (question, tools called, the server's request ids) and swept: the
- * model reflects once and files at most one item with elixir_feedback. A 👍
+ * model reflects once and files at most one item with elixir_send_feedback. A 👍
  * files praise deterministically, without a model call, so a good answer is
  * protected from regression at no cost.
  *
@@ -26,7 +26,7 @@ import * as state from "./state.js";
 export const REACTIONS = { "👍": "up", "👎": "down" };
 
 function calledFeedback(called) {
-  return (called || []).some((name) => name.includes("elixir_feedback"));
+  return (called || []).some((name) => name.includes("elixir_send_feedback"));
 }
 
 /** What the reader said about the message, if they replied to it. */
@@ -119,7 +119,7 @@ export async function filePraise({ turn }) {
     } Tools: ${tallyCalls(turn.called) || "none"}. Worth protecting from regression.`,
   };
   if (turn.requestIds?.[0]) args.request_id = turn.requestIds[0];
-  const result = await callTool("elixir_feedback", args);
+  const result = await callTool("elixir_send_feedback", args);
   if (!result.ok) {
     log.warn("praise_file_failed", { turnId: turn.turnId, error: result.error });
     return false;

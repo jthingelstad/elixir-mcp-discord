@@ -24,7 +24,7 @@ test("every prompt carries the rules a routine is not allowed to get wrong", () 
   assert.match(system, /ONLY source of information is the Elixir MCP server/);
   assert.match(system, /must come from a tool call in THIS turn/);
   assert.match(system, /NEVER use a markdown table/);
-  assert.match(system, /elixir_feedback/, "filing friction is not optional");
+  assert.match(system, /elixir_send_feedback/, "filing friction is not optional");
   assert.match(system, /omit clan_tag/i, "the agent's clan comes from its key");
   assert.doesNotMatch(system, /#[0-9A-Z]{5,}/, "no prompt layer may name a clan tag");
 });

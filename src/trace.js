@@ -63,7 +63,7 @@ export function errorFooter(result) {
 }
 
 /** The correction under a reply that said feedback was filed when no
- *  elixir_feedback call went out this turn and the sweep filed nothing. A
+ *  elixir_send_feedback call went out this turn and the sweep filed nothing. A
  *  statement about the turn, not the sentence: the reply may have been
  *  discussing someone else's filing, and this is still true. */
 export const UNFILED_FOOTER = "-# ⚠️ No feedback was filed with Elixir MCP in this turn, whatever the reply says.";

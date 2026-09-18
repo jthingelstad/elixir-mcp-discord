@@ -379,7 +379,7 @@ everyone who asks later.
 The most valuable output of a channel like this is not the answers. It is the
 record of what the agent *wanted* to do and could not.
 
-`elixir_feedback` is a first-class door for exactly that, and every routine —
+`elixir_send_feedback` is a first-class door for exactly that, and every routine —
 not just the ask lane — files through it two ways: inline, while the agent
 still has the context that made the gap obvious, and via a post-turn sweep when
 a tool errored or an answer conceded a limit and nothing was filed. Maintainer

@@ -357,7 +357,7 @@ test("a dry run costs the call and writes nothing — here or upstream", async (
     agentDir: dir,
     askFn: async (args) => ((system = args.system), inner(args)),
   });
-  assert.match(system, /REHEARSAL: do not call elixir_feedback/);
+  assert.match(system, /REHEARSAL: do not call elixir_send_feedback/);
   assert.equal(outcome.proposals.length, 1);
   assert.equal(findReview(outcome.reviewId), null);
   assert.equal(state.get("reviewedThrough"), null);

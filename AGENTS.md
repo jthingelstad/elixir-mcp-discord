@@ -237,7 +237,7 @@ design is there. The short version:
   or a routine's brief (replace/remove, never the front matter). Each cites
   turns and is shown as a diff. A finding that is not an edit is a
   `report_mechanics` (code — the DM carries a pasteable issue) or an
-  `elixir_feedback` filing (the hub).
+  `elixir_send_feedback` filing (the hub).
 - **Humans outrank the rubric.** The signals that flag a turn: 👎/👍 with
   notes, an `intervention` (another member speaking in the answer thread,
   or the asker pushing back — `looksLikeCorrection` in `src/ask.js`), a
@@ -701,7 +701,7 @@ cannot be enforced is worse than none, because it looks like it works.
   per-member calls and never told anyone. Errors and the trace carry
   `meta.request_id`, and the sweep hands failing ids to the model so a filing
   names the exact call.
-- **A reply that says it filed, with no `elixir_feedback` call, is friction
+- **A reply that says it filed, with no `elixir_send_feedback` call, is friction
   of its own kind — and the DM lane sweeps too (2026-09-15).** The operator
   DM'd "filing as a bug is the right call" and the bot answered "Filed as a
   data-quality bug against elixir_timeline ... with the request_id
@@ -770,8 +770,8 @@ cannot be enforced is worse than none, because it looks like it works.
   `client_tool_call` with `via: local | mcp`. A direct-client refusal now
   hands the model the refusal body itself (code and request id) instead of
   a paraphrase. Do not add a fourth path; add a case to `outcome`.
-- **The renamed tool does not un-rename by prefix strip.** `elixir_feedback`
-  came back as `elixir-mcp_feedback`; stripping the server name gives
+- **The renamed tool does not un-rename by prefix strip.** `elixir_send_feedback`
+  came back as `elixir-mcp_send_feedback`; stripping the server name gives
   `feedback`, which is not a tool. `resolveToolName` matches against the live
   `tools/list`.
 - **The feed is a TIMELINE since contract 3.0.0 (2026-09-13, two shape

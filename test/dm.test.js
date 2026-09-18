@@ -493,7 +493,7 @@ test("retract deletes every message a turn produced and records it on the turn",
 test("a DM reply that claims a filing with no call behind it is swept: filed for real, or corrected under the claim", async () => {
   // The operator's DM of 2026-09-15: "Filing as a bug is right call" ->
   // "Filed as a data-quality bug against elixir_timeline ..." with four
-  // reads and no elixir_feedback call. The lane had no sweep at all.
+  // reads and no elixir_send_feedback call. The lane had no sweep at all.
   fresh();
   const modelTurn = (text) => ({
     ok: true,
@@ -550,7 +550,7 @@ test("a DM reply that claims a filing with no call behind it is swept: filed for
   fresh();
   const honest = dm("Filing as a bug is right call.");
   await handleDm(honest.message, {
-    askFn: async () => ({ ...modelTurn(claim), called: ["elixir_timeline", "elixir_feedback"] }),
+    askFn: async () => ({ ...modelTurn(claim), called: ["elixir_timeline", "elixir_send_feedback"] }),
     sweepFn: async () => assert.fail("nothing to sweep"),
   });
   assert.equal(honest.sent.at(-1).content, claim);

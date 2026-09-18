@@ -5,7 +5,7 @@
  * of what the agent WANTED to do and could not: a capability that isn't there,
  * a workflow that took five calls when it should take one, a result that
  * misled it. Elixir MCP has a first-class door for exactly that
- * (`elixir_feedback`, answered by the maintainer, readable back via
+ * (`elixir_send_feedback`, answered by the maintainer, readable back via
  * `elixir_my_feedback`), and the server's own instructions tell agents to file
  * on their own judgment.
  *
@@ -64,7 +64,7 @@ You are one of the first agents using Elixir MCP in production, and the
 maintainer reads everything you file. Filing friction is part of your job here,
 not an interruption of it.
 
-Call elixir_feedback the moment any of these happen:
+Call elixir_send_feedback the moment any of these happen:
 - You wanted a capability that does not exist, or could not find a tool for
   something a clan member reasonably asked for.
 - A question took noticeably more tool calls than it should have.
@@ -82,12 +82,12 @@ request rather than guess at it.
 File it in the same turn, then answer the member normally. Do not mention the
 filing in your reply unless they asked about it — a short note is appended to
 your message automatically. Never say you filed, are filing, or will file
-unless elixir_feedback was actually called in this turn: a claim without the
+unless elixir_send_feedback was actually called in this turn: a claim without the
 call is caught and corrected in public. If you decided not to file, say that.
 `.trim();
 
 function calledFeedback(called) {
-  return called.some((name) => name.includes("elixir_feedback"));
+  return called.some((name) => name.includes("elixir_send_feedback"));
 }
 
 /**
@@ -107,7 +107,7 @@ function calledFeedback(called) {
  */
 export const CLASSIFY_RULES = `Decide who owns the fix, and reply with ONE line in one of these forms:
 - \`ELIXIR: <under 140 chars>\` — the server is missing a capability, gave a
-  misleading result, or failed a call. File it with elixir_feedback FIRST
+  misleading result, or failed a call. File it with elixir_send_feedback FIRST
   (at most one item, concrete, with the request id when it is about one
   call), then reply with this line summarising what you filed.
 - \`PROMPT: <under 200 chars>\` — the agent's own instructions caused it: a
@@ -148,7 +148,7 @@ function looksLikeLimit(text) {
  * A reply that says feedback was filed. On 2026-09-15 the operator told the
  * bot "filing as a bug is the right call" and it answered "Filed as a
  * data-quality bug against elixir_timeline ... with the request_id attached"
- * having made four reads and no elixir_feedback call at all. The model
+ * having made four reads and no elixir_send_feedback call at all. The model
  * narrated an action it never took, and nothing on this side compared the
  * words to the calls. Over-inclusive on purpose, like the limit markers: a
  * false positive costs one reflection call, a false negative is a lie left
@@ -324,7 +324,7 @@ ${CLASSIFY_RULES}`;
       : friction.reason === "many_calls"
         ? `The turn took ${friction.count} tool calls (${friction.detail}). Was there a tool or an argument that would have answered in fewer, and if not, what is missing?`
         : friction.reason === "claimed_filing"
-          ? `The agent TOLD the member it had filed (or was filing) feedback, but made no elixir_feedback call in that turn. The claim is false as it stands. If what it described is a real, concrete item, file it now so the claim becomes true (ELIXIR:); if it is not worth filing, say so (NONE) and the member will be told nothing was filed.`
+          ? `The agent TOLD the member it had filed (or was filing) feedback, but made no elixir_send_feedback call in that turn. The claim is false as it stands. If what it described is a real, concrete item, file it now so the claim becomes true (ELIXIR:); if it is not worth filing, say so (NONE) and the member will be told nothing was filed.`
           : `The agent conceded a limit in its answer.`;
 
   const result = await ask({
