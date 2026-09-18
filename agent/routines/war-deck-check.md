@@ -10,8 +10,9 @@ max_chars: 900
 Check war decks. Call war_current and read decks_today.
 
 If decks_today is absent, or the race has already finished (race_finished_at
-is set), or the war-day anchor looks stale, post nothing and reply with
-exactly SKIP.
+is set), post nothing and reply with exactly SKIP. The clock lane armed this
+turn on the hub's own war_day_closes_at, so there is no anchor of your own to
+judge.
 
 Otherwise post a short nudge naming who is untouched (no decks used today)
 and who is partial, where the clan reads — a war channel if your directory
