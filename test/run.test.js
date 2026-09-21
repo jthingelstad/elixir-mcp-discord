@@ -637,3 +637,61 @@ test("the clock is seeded from the ledger at boot, and a real stamp is never ove
   const [again] = state.silence([{ id: "31", name: "news" }], new Date("2026-09-16T17:31:00Z"));
   assert.equal(again.routine, "clan-feed", "a stamp the runtime set outranks any later seed");
 });
+
+/**
+ * A turn cut off at max_tokens is not a decision. On 2026-09-20 the weekly
+ * meta-report made four big reads at high effort, reached its 6,000-token
+ * ceiling inside the thinking, and came back with no text — which `isSkip`
+ * accepted and the ledger recorded as a deliberate skip. Nothing reached the
+ * channel or the operator. Now: the nudge answers a cutoff with OUT OF ROOM
+ * (a fresh round, the reads still in the turn), and a turn that is STILL
+ * truncated with no post fails loudly instead of skipping quietly.
+ */
+test("a truncated turn with no post is a loud failure, never a SKIP; the nudge answers a cutoff", async () => {
+  const { deliveryNudge } = await import("../src/run.js");
+  const may = routine({ trigger: "schedule", at: "01:00", may_skip: true });
+  const must = routine({ trigger: "schedule", at: "01:00" });
+  assert.match(
+    deliveryNudge(may, { text: "", posts: [], truncated: true }),
+    /OUT OF ROOM[\s\S]*post_message[\s\S]*reply SKIP/,
+  );
+  assert.doesNotMatch(deliveryNudge(must, { text: "", posts: [], truncated: true }), /reply SKIP/);
+  assert.equal(
+    deliveryNudge(may, { text: "", posts: [{ channelId: "11" }], truncated: true }),
+    null,
+    "a post made before the cutoff stands",
+  );
+
+  const channel = fakeChannel();
+  channel.id = "11";
+  const entries = [{ id: "11", name: "news", topic: "", visibility: "everyone", threads: false, role: null }];
+  const run = await runRoutine(may, {
+    channel,
+    entries,
+    resolve: async () => channel,
+    askFn: async () =>
+      answer("", {
+        called: ["battles_meta_decks"],
+        trace: [],
+        stopReason: "max_tokens",
+        truncated: true,
+        resumed: true,
+        rounds: 2,
+        usage: { input: 500, cacheRead: 40000, cacheWrite: 0, output: 6400 },
+      }),
+  });
+  assert.equal(run.ok, false);
+  assert.equal(run.error, "truncated");
+  assert.notEqual(run.skipped, true, "silence after a cutoff is not a skip");
+  assert.equal(channel.sent.length, 0, "a half-written report is not posted");
+
+  const dry = await runRoutine(may, {
+    channel,
+    entries,
+    resolve: async () => channel,
+    dryRun: true,
+    askFn: async () => answer("Half a rep", { called: [], trace: [], stopReason: "max_tokens", truncated: true }),
+  });
+  assert.equal(dry.ok, false, "the dry run says so too");
+  assert.equal(dry.error, "truncated");
+});

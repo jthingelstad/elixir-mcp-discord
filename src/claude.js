@@ -352,12 +352,16 @@ export async function ask({
   // A member's answer is done in five rounds or it is looping. A review
   // (src/review.js) proposes edits one tool call at a time and needs more.
   maxRounds = MAX_ROUNDS,
-  // `nudge({ text, called })` is asked ONCE when the model ends the turn in
-  // prose. Return a user message to send back and the turn gets one more
-  // round; return null to accept the reply. The caller knows what "done"
-  // means (a routine turn is done when post_message was called or the reply
-  // is SKIP); this loop only knows how to ask again. See src/run.js.
+  // `nudge({ text, called, truncated })` is asked ONCE when the model ends
+  // the turn in prose, or when the turn is cut off at max_tokens. Return a
+  // user message to send back and the turn gets one more round; return null
+  // to accept the reply. The caller knows what "done" means (a routine turn
+  // is done when post_message was called or the reply is SKIP); this loop
+  // only knows how to ask again. See src/run.js.
   nudge = null,
+  // The API call, injectable so a test can play the model round by round
+  // (a fake needs `.on("streamEvent", fn)` and `.finalMessage()`).
+  stream = (params) => client.beta.messages.stream(params),
 }) {
   const history = [...messages];
   const started = Date.now();
@@ -375,6 +379,7 @@ export async function ask({
   let rounds = 0;
   let stopReason = null;
   let nudged = false;
+  let resumed = false;
 
   for (let round = 0; round < maxRounds; round += 1) {
     rounds = round + 1;
@@ -382,7 +387,7 @@ export async function ask({
     const timings = new Map();
 
     try {
-      const stream = client.beta.messages.stream({
+      const call = stream({
         model,
         max_tokens: maxTokens,
         betas: [MCP_BETA],
@@ -404,7 +409,7 @@ export async function ask({
       const idByIndex = new Map();
       const execStart = new Map();
 
-      stream.on("streamEvent", (event) => {
+      call.on("streamEvent", (event) => {
         try {
           if (event.type === "content_block_start") {
             const block = event.content_block;
@@ -428,7 +433,7 @@ export async function ask({
         }
       });
 
-      response = await stream.finalMessage();
+      response = await call.finalMessage();
     } catch (error) {
       log.error("claude_call_failed", { turnId, error: error.message });
       return {
@@ -515,12 +520,29 @@ export async function ask({
     // four with the posting rule first and DELIVER last (2026-09-14..16, all
     // three instances). The work is done and cached; asking again costs a
     // cache read, dropping it cost the whole turn.
-    if (stopReason === "end_turn" && nudge && !nudged) {
-      const message = nudge({ text, called });
-      if (message) {
+    //
+    // The same round serves a turn cut off at max_tokens (2026-09-20, turn
+    // c0aa7196): the meta-report made four big reads at high effort, the
+    // thinking about them reached the 6,000-token ceiling, and the response
+    // had no text — which the runner read as SKIP. The reads are done and in
+    // the turn; the continuation gets a fresh ceiling and the caller's
+    // message. A client-side tool_use in a max_tokens response is dropped
+    // from the echo: its input may be cut mid-argument (never run it), and
+    // an assistant turn with a tool_use and no tool_result is a 400.
+    const cutOff = stopReason === "max_tokens";
+    if ((stopReason === "end_turn" || cutOff) && nudge && !nudged) {
+      const message = nudge({ text, called, truncated: cutOff });
+      const echo = cutOff ? response.content.filter((block) => block.type !== "tool_use") : response.content;
+      if (message && echo.length > 0) {
         nudged = true;
-        log.info("turn_nudged", { turnId, routine: routineKey, chars: text.length });
-        history.push({ role: "assistant", content: response.content });
+        if (cutOff) resumed = true;
+        log.info(cutOff ? "turn_resumed" : "turn_nudged", {
+          turnId,
+          routine: routineKey,
+          chars: text.length,
+          ...(cutOff ? { maxTokens, output: response.usage?.output_tokens } : {}),
+        });
+        history.push({ role: "assistant", content: echo });
         history.push({ role: "user", content: message });
         continue;
       }
@@ -542,6 +564,10 @@ export async function ask({
     rounds,
     stopReason,
     nudged,
+    // The turn was cut off at max_tokens and asked again; a post that follows
+    // was delivered on the second ask. Beside `nudged` so the review can tell
+    // "too little room" from "forgot to call the tool".
+    resumed,
     // A max_tokens cutoff otherwise reads as a complete answer.
     truncated: stopReason === "max_tokens" || rounds >= maxRounds,
     model,

@@ -391,7 +391,10 @@ answered is the point.
 Any routine with `may_skip: true` may answer `SKIP`, which posts nothing and
 still marks the run done. A channel that manufactures content on a quiet day
 teaches people to mute it. Routines that may *not* skip post what they said, so
-a prompt bug is visible rather than looking like a quiet week.
+a prompt bug is visible rather than looking like a quiet week. A turn that is
+cut off at its `max_tokens` ceiling is not a SKIP: it is asked once more with
+a fresh ceiling (the reads it made stay in the turn), and if it still cannot
+deliver, the run fails and you get a DM saying which routine ran out of room.
 
 Since the record decides *when* a proactive turn fires, a SKIP means "the
 room already knows" rather than "nothing happened today" — the batch that
@@ -447,6 +450,11 @@ effort: low
 max_tokens: 2000
 ---
 ```
+
+`max_tokens` (default 6000) caps thinking plus text plus tool arguments for
+one turn; at `effort: high` a routine that makes several large reads can
+reach it inside the thinking. When the DM says a routine ran out of room,
+raise its `max_tokens` or lower its effort.
 
 Whatever you choose must have a price in `agent/models.json` (which extends the
 catalog in `src/pricing.js`). That file is operator-owned for the same reason

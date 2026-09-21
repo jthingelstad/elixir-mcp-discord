@@ -15,7 +15,7 @@
 import { ask, spendBlock, cacheShare } from "./claude.js";
 import { laneFor } from "./budget.js";
 import { detectFriction, sweepFriction, looksUngrounded } from "./feedback.js";
-import { systemFor, userMessageFor, isSkip, notDelivered } from "./prompt.js";
+import { systemFor, userMessageFor, isSkip, notDelivered, outOfRoom } from "./prompt.js";
 import { post, recentPosts } from "./post.js";
 import { renderTrace, errorFooter, UNGROUNDED_FOOTER } from "./trace.js";
 import { directory, resolveById } from "./directory.js";
@@ -304,9 +304,15 @@ export async function runRoutine(routine, options = {}) {
  * it posted or declined; prose with neither is a post that was never delivered,
  * and the answer is to ask once more (src/claude.js `nudge`), not to drop $0.10
  * of tool calls on the floor. Null accepts the reply.
+ *
+ * A turn cut off at max_tokens (`truncated`) with no post is never finished:
+ * its empty or half-written reply is not a decision, and reading it as one
+ * is how the 2026-09-20 meta-report vanished. It is asked again with a
+ * fresh ceiling; if it posted before the cutoff, the post stands.
  */
-export function deliveryNudge(routine, { text, posts }) {
+export function deliveryNudge(routine, { text, posts, truncated = false }) {
   if (posts.length > 0) return null;
+  if (truncated) return outOfRoom(routine);
   const reply = (text || "").trim();
   if (!reply) return null;
   if (routine.maySkip && isSkip(reply)) return null;
@@ -398,7 +404,7 @@ async function runRoutineNow(
           roomTool({ entries: directoryEntries, resolve }),
         ]
       : [],
-    nudge: withTool ? ({ text }) => deliveryNudge(routine, { text, posts }) : null,
+    nudge: withTool ? ({ text, truncated }) => deliveryNudge(routine, { text, posts, truncated }) : null,
   });
 
   if (!result.ok) {
@@ -412,6 +418,40 @@ async function runRoutineNow(
   }
 
   const text = (result.text || "").trim();
+
+  // A turn that ran out of room and posted nothing is a failure, not a
+  // decision. Before this check an empty reply at stop_reason max_tokens
+  // passed `isSkip` and was ledgered as a deliberate skip (2026-09-20, turn
+  // c0aa7196: the week's meta-report, four reads, $0.30, nothing anywhere).
+  // The resume round in src/claude.js is the first answer; this is what
+  // happens when that round is cut off too, or there was no tool to resume
+  // toward. Partial prose is not posted: a report cut mid-sentence is worse
+  // than none.
+  if (result.truncated && posts.length === 0) {
+    const why =
+      result.stopReason === "max_tokens"
+        ? `hit its max_tokens ceiling (${routine.maxTokens})${result.resumed ? " twice" : ""}`
+        : `used all ${result.rounds} rounds`;
+    log.error("routine_truncated", {
+      routine: routine.key,
+      turnId: result.turnId,
+      stopReason: result.stopReason,
+      rounds: result.rounds,
+      resumed: result.resumed ?? false,
+      maxTokens: routine.maxTokens,
+      output: result.usage?.output ?? null,
+      chars: text.length,
+    });
+    if (dryRun) return { ok: false, error: "truncated", text, skipped: false, posts: [], result };
+    record({ text, posts: [], error: "truncated" });
+    await notify(
+      "routine ran out of room",
+      `${routine.key} ${why} at effort ${result.effort} and posted nothing; the turn cost $${result.usd.toFixed(2)}. Raise max_tokens on the routine or lower its effort.`,
+      { fingerprint: `truncated:${routine.key}` },
+    );
+    return { ok: false, error: "truncated", text, result };
+  }
+
   // Three ways a turn ends. It posted through the tool: those posts are the
   // output and trailing prose is not. It posted nothing and replied SKIP (or
   // nothing): it declined. It posted nothing and replied prose: that prose

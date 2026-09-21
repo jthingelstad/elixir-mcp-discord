@@ -99,6 +99,7 @@ export function renderTrace(result, { label = "How I got there" } = {}) {
     result.usage ? `cache ${Math.round(cached * 100)}%` : null,
     `${(result.ms / 1000).toFixed(1)}s`,
     result.rounds > 1 ? `${result.rounds} rounds` : null,
+    result.resumed ? "resumed" : null,
     result.stopReason,
     result.truncated ? "**TRUNCATED**" : null,
     result.serverVersion,

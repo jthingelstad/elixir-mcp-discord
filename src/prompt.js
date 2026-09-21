@@ -341,6 +341,22 @@ from the directory and the text as content.${skip}`;
 }
 
 /**
+ * The other second chance. Sent as the user turn when a routine turn hit its
+ * output ceiling (stop_reason max_tokens) before it called post_message: the
+ * meta-report of 2026-09-20 spent 6,408 tokens on four big reads and the
+ * thinking about them, and the week's report ended as an empty reply that
+ * the runner read as SKIP. The reads are still in the turn; this round has a
+ * fresh ceiling and one job.
+ */
+export function outOfRoom(routine) {
+  const skip = routine.maySkip ? " If there is nothing worth posting, reply SKIP." : "";
+  return `OUT OF ROOM. Your reply was cut off at the output limit before anything
+reached Discord. The tool results above stand; do not call them again. Call
+post_message now with a channel_id from the directory and the post as content,
+kept short.${skip}`;
+}
+
+/**
  * The clock, in the operator's zone, on every user turn. The model has no
  * other way to know the date: it was spending a game_clock call to learn
  * the weekday, and writing "until Friday" as a date it had to guess. In

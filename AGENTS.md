@@ -538,6 +538,28 @@ skip; prose with no call still goes to the default (legacy), or is
   ledger and `nudged` in the `turns` footer. A turn that still will not
   call the tool ends as before. The nudge is a mechanics fix, not a prompt
   fix: do not answer this failure by making `DELIVER` longer.
+- **A cutoff is not a SKIP (2026-09-21).** Turn c0aa7196 (poapkings,
+  `meta-report`, effort high): four big meta reads, 6,408 output tokens,
+  `stop_reason: max_tokens` inside the thinking, no text — and `isSkip("")`
+  is true, so the runner ledgered the week's report as a deliberate skip.
+  No post, no notice, nothing in the channel; review 6f5cd835 found it.
+  Now the same nudge hook answers `max_tokens`: `ask()` calls
+  `nudge({ text, called, truncated: true })`, `deliveryNudge` returns
+  `outOfRoom(routine)`, and the turn gets its ONE extra round with a fresh
+  `max_tokens` — the assistant turn echoed back as the `pause_turn` path
+  already does, minus any client-side `tool_use` (its input may be cut
+  mid-argument; the API guide says never run one from a `max_tokens`
+  response, and an echoed `tool_use` without a result is a 400).
+  `resumed: true` in the ledger and `resumed` in the footers say a post
+  was delivered on the second ask, which is the signal that the routine's
+  ceiling is too low for its effort. A turn STILL `truncated` with no post
+  is `routine_truncated` + a "routine ran out of room" DM, `error:
+  "truncated"` in the ledger, and `ok: false` — the run ledger was marked
+  before the call, so it does not re-fire. Partial prose is never posted.
+  `ask()` takes an injectable `stream` for the loop's tests
+  (`test/claude.test.js`). Not changed: the 6,000 default `max_tokens`
+  in `src/routines.js` — a routine that resumes every week wants its own
+  `max_tokens:` in its front matter, which is the operator's call.
 - **The silence clock and VOICE (2026-09-16; the prompt half retired
   2026-09-17, see "The record is the trigger").** The SKIP rule points one
   way, and a bot judging "worth saying?" against the same bar an hour after
