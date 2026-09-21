@@ -456,6 +456,11 @@ one turn; at `effort: high` a routine that makes several large reads can
 reach it inside the thinking. When the DM says a routine ran out of room,
 raise its `max_tokens` or lower its effort.
 
+`max_chars` (default 1900) is the length of one post. The model is told the
+number, and `post_message` refuses anything longer with an error it can
+answer by shortening; a post is never cut or split to fit. Discord's own
+2,000 is the ceiling whatever you set.
+
 Whatever you choose must have a price in `agent/models.json` (which extends the
 catalog in `src/pricing.js`). That file is operator-owned for the same reason
 the prompts are: prices change, and the person paying the bill should be able

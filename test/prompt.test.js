@@ -112,4 +112,7 @@ test("no lean and no silence line reach a turn; the timeline framing explains a 
   const user = userMessageFor(may, { events: { timeline: [{ kind: "member_joined" }] }, withTool: true });
   assert.doesNotMatch(user, /\[silence/);
   assert.match(user, /since your last turn[^\n]*waited for this batch/);
+  // The routine's length limit rides DELIVER, so the model has the number in
+  // the turn and not only in the tool's description (2026-09-21).
+  assert.match(user, /post_message[\s\S]*The limit is 1900 characters per post; post_message refuses more/);
 });

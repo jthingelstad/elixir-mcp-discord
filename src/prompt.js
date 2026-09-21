@@ -326,6 +326,12 @@ export const MECHANICS = {
 export const DELIVER = `Deliver your post by calling post_message. If there is nothing to post, make no
 call and reply SKIP.`;
 
+/** DELIVER with the routine's length limit in it: the number the tool will
+ *  hold the post to, said where the model reads last. */
+export function deliverLine(routine) {
+  return `${DELIVER} The limit is ${routine.maxChars} characters per post; post_message refuses more.`;
+}
+
 /**
  * The second chance. Sent as the user turn when a routine turn ended in prose
  * with no post_message call and no SKIP: the model wrote the post and
@@ -388,7 +394,7 @@ export function userMessageFor(routine, { events, recent, withTool = false, now 
   if (recent?.length) {
     parts.push(`${RECALL_HEADER}\n\n${recent.map((text) => `--- ${text}`).join("\n\n")}`);
   }
-  if (withTool) parts.push(DELIVER);
+  if (withTool) parts.push(deliverLine(routine));
   return parts.join("\n\n");
 }
 

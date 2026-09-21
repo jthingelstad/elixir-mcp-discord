@@ -560,6 +560,23 @@ skip; prose with no call still goes to the default (legacy), or is
   (`test/claude.test.js`). Not changed: the 6,000 default `max_tokens`
   in `src/routines.js` — a routine that resumes every week wants its own
   `max_tokens:` in its front matter, which is the operator's call.
+- **`max_chars` is refused, not chunked (2026-09-21).** Review 6feff89e
+  (shipit, turn 47f426a1): a 2,060-character meta-report on a `max_chars:
+  1400` routine went out through `post_message` as two Discord messages,
+  unflagged — `post(channel, text, routine.maxChars)` used the limit as a
+  chunk size, the tool's description said "up to the routine's length
+  limit" without a number, and nothing in the turn named one. Now
+  `postToolFor(routine)` renders the limit into the tool's description
+  and the `content` schema, `deliverLine(routine)` puts it in the user
+  turn beside DELIVER (per routine, so the cached prefix is untouched),
+  and the handler answers over-length content with `too_long` — a local
+  tool error the model sees and shortens for (`LOCAL_TOOLS` keeps it out
+  of friction filing). It does not count against the post cap. Nothing
+  is truncated: a report cut mid-sentence is the same failure as a lost
+  one. `post()` now caps its chunk at Discord's 2,000 whatever limit it
+  is handed, so a `max_chars` above it cannot produce a rejected send.
+  The legacy prose path (no directory) and the DM's `post it` still chunk
+  at `max_chars`: there is no tool there for the model to react to.
 - **The silence clock and VOICE (2026-09-16; the prompt half retired
   2026-09-17, see "The record is the trigger").** The SKIP rule points one
   way, and a bot judging "worth saying?" against the same bar an hour after

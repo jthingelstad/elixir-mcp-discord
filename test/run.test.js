@@ -325,11 +325,14 @@ test("a turn posts through post_message to the channel it chose, and the rules h
     seen.read = await tool.handler({ channel_id: "14", content: "x" });
     seen.first = await tool.handler({ channel_id: "11", content: "Two joined today." });
     seen.second = await tool.handler({ channel_id: "12", content: "One left: an elder." });
+    seen.long = await tool.handler({ channel_id: "11", content: "x".repeat(901) });
     seen.third = await tool.handler({ channel_id: "11", content: "again" });
     seen.fourth = await tool.handler({ channel_id: "11", content: "cap" });
+    seen.description = tool.description;
+    seen.schema = tool.input_schema.properties.content.description;
     return answer("Posted.", { called: ["clans_roster", "post_message", "post_message", "post_message"], trace: [] });
   };
-  const run = await runRoutine(routine({ trigger: "schedule", at: "01:00" }), {
+  const run = await runRoutine(routine({ trigger: "schedule", at: "01:00", max_chars: 900 }), {
     channel: null,
     askFn,
     entries,
@@ -340,7 +343,14 @@ test("a turn posts through post_message to the channel it chose, and the rules h
   assert.equal(seen.read.code, "read_only", "let in to look, not to speak");
   assert.equal(seen.first.ok, true);
   assert.equal(seen.second.ok, true);
-  assert.equal(seen.third.ok, true);
+  // max_chars is refused, not chunked (shipit 47f426a1: 2,060 chars on a
+  // 1,400 routine went out as two messages, unflagged), and the limit is
+  // named where the model reads the tool.
+  assert.equal(seen.long.code, "too_long");
+  assert.match(seen.long.error, /901 characters; this routine's limit is 900/);
+  assert.match(seen.description, /limit is 900 characters/);
+  assert.match(seen.schema, /at most 900 characters/);
+  assert.equal(seen.third.ok, true, "a refusal does not count against the cap");
   assert.equal(seen.fourth.code, "post_cap", "three posts is the cap");
   assert.equal(run.ok, true);
   assert.deepEqual(
@@ -694,4 +704,12 @@ test("a truncated turn with no post is a loud failure, never a SKIP; the nudge a
   });
   assert.equal(dry.ok, false, "the dry run says so too");
   assert.equal(dry.error, "truncated");
+});
+
+test("post() never sends more than Discord's 2,000 characters, whatever max_chars says", async () => {
+  const { post } = await import("../src/post.js");
+  const channel = fakeChannel();
+  await post(channel, "y".repeat(2500), 3000);
+  assert.equal(channel.sent.length, 2);
+  assert.ok(channel.sent.every((m) => m.text.length <= 2000));
 });

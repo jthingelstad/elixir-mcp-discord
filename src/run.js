@@ -52,9 +52,35 @@ export const POST_TOOL = {
   },
 };
 
-function postTool({ routine, entries, dryRun, posts, resolve = resolveById }) {
+/**
+ * The routine's `max_chars` is a rule the model can only keep if it is told
+ * the number and refused when it breaks it. Before 2026-09-21 the limit was
+ * a chunk size: a 2,060-character meta-report on a `max_chars: 1400` routine
+ * went out as two Discord messages, nothing said so, and the review found it
+ * (shipit, turn 47f426a1). Now the tool names the limit in its description
+ * and refuses over-length content with `too_long`, an error the model sees
+ * and answers by shortening; a cut mid-sentence is not a post.
+ */
+function postToolFor(routine) {
   return {
     ...POST_TOOL,
+    description: `${POST_TOOL.description} This routine's limit is ${routine.maxChars} characters per post; longer content is refused, so check your draft's length before you call.`,
+    input_schema: {
+      ...POST_TOOL.input_schema,
+      properties: {
+        ...POST_TOOL.input_schema.properties,
+        content: {
+          type: "string",
+          description: `The message, Discord markdown, at most ${routine.maxChars} characters.`,
+        },
+      },
+    },
+  };
+}
+
+function postTool({ routine, entries, dryRun, posts, resolve = resolveById }) {
+  return {
+    ...postToolFor(routine),
     async handler({ channel_id, content }) {
       const entry = entries.find((e) => e.id === String(channel_id));
       if (!entry) {
@@ -87,6 +113,14 @@ function postTool({ routine, entries, dryRun, posts, resolve = resolveById }) {
       }
       const text = String(content ?? "").trim();
       if (!text) return { ok: false, code: "empty", error: "content is empty" };
+      if (text.length > routine.maxChars) {
+        log.warn("post_too_long", { routine: routine.key, chars: text.length, max: routine.maxChars });
+        return {
+          ok: false,
+          code: "too_long",
+          error: `content is ${text.length} characters; this routine's limit is ${routine.maxChars}. Shorten it and call post_message again.`,
+        };
+      }
       const record = { channelId: entry.id, channelName: entry.name, text, messages: [] };
       posts.push(record);
       if (dryRun) return { ok: true, body: { posted: true, channel: `#${entry.name}`, dry_run: true } };
