@@ -30,8 +30,8 @@
     "dotenv": "^17.0.0"
   },
   "devDependencies": {
-    "knip": "^6.35.1",
+    "knip": "^6.37.0",
     "oxlint": "^1.83.0",
-    "prettier": "^3.9.6"
+    "prettier": "^3.9.8"
   }
 }
