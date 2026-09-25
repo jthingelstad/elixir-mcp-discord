@@ -1,5 +1,5 @@
 {
-  "_about": "Every setting the bot may change about itself. Flat, same key names the docs use. Written by npm run setup; editable from the DM ('raise the ask budget to $15'), which shows the diff and restarts the bot to apply. Secrets and wiring (keys, tokens, the Elixir URL, the app and server ids) are in .env, not here. Keys starting with _ are notes and ignored.",
+  "_about": "Every setting the bot may change about itself. Flat, same key names the docs use. Written by npm run setup; editable from the DM ('raise the ask budget to $15'), which shows the diff; applied live, and only COMMAND_PREFIX and EVENT_POLL_SECONDS restart the bot. Secrets and wiring (keys, tokens, the Elixir URL, the app and server ids) are in .env, not here. Keys starting with _ are notes and ignored.",
 
   "_channels": "Where the bot LISTENS: the ask channel, where members' questions are answered in threads. Where it POSTS is not configured: every channel where its role is explicitly granted Send Messages is in its directory and the model chooses. A routine may name a default with channel:, bound here as CHANNEL_<NAME> or matched by channel name.",
   "CHANNEL_ASK": "",

@@ -1,6 +1,6 @@
 # elixir-mcp-discord
 
-[![tests](https://github.com/jthingelstad/elixir-mcp-discord/actions/workflows/test.yml/badge.svg)](https://github.com/jthingelstad/elixir-mcp-discord/actions/workflows/test.yml)
+[![verify](https://github.com/jthingelstad/elixir-mcp-discord/actions/workflows/verify.yml/badge.svg)](https://github.com/jthingelstad/elixir-mcp-discord/actions/workflows/verify.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)](package.json)
 
@@ -143,8 +143,9 @@ and each choice comes back as a proposal with an Apply button. In order:
    bot says what a set would cost when you choose it).
 9. **Admins** — each user id checked to be a member of the server. These are
    the people the bot DMs.
-10. Writes `.env` and offers to install and start the service, showing the
-    boot check's lines from the log. Then DM it.
+10. Writes `.env` and `config.json` (after every section, so a cancelled
+    run keeps what you typed) and offers to install and start the service,
+    showing the boot check's lines from the log. Then DM it.
 
 Every failure comes with its fix and a chance to retry; `skip` moves on.
 Re-running keeps every value on Enter, so it is also how you rotate one key,
@@ -262,8 +263,9 @@ nobody else sees it, and anyone else who DMs it gets one polite line:
   transcript — what it was asked, what it thought, what every tool
   returned. Tell it what it should have done and it proposes the change.
 - **Run the calendar.** `routines` lists what runs and when. "Move the
-  movers post to 7:30", "turn off the rival scout", "add a Friday war
-  recap in #war that skips quiet weeks", "make the meta report shorter" —
+  meta report to Saturday at 9", "turn off the war-deck nudge", "add a
+  Friday war recap in #war that skips quiet weeks", "make the meta report
+  shorter" —
   each becomes a proposal on the routine's file, checked the way the bot
   loads it, live on Apply with no restart.
 - **Change a setting.** "Raise the ask budget to $15", "run the review
@@ -511,10 +513,11 @@ changed to an unpriced one later fails before the call, not after it.
   window (the same `from`, `to` at the cut, `mark_read: false`), up to four
   more pages, so a join under an hour of badges is still posted. What the
   bound leaves unread is an `events_unread` warning in the log.
-- **A routine remembers what it posted.** `recall: 3` hands the model that
-  routine's last three posts, from its own ledger in `state/`, so a daily
-  spotlight can rotate and a movers post does not name the same three players
-  every morning. It is the bot's own output, not game data.
+- **A routine can remember what it posted.** `recall: 3` hands the model
+  that routine's last three posts, from its own ledger in `state/`, so a
+  recurring post you write can rotate instead of repeating itself. None of
+  the shipped routines use it — the editor is handed the news itself — but
+  the field is yours. It is the bot's own output, not game data.
 - **Failed calls are visible under the post.** When a turn's tool calls
   errored, a one-line footer says which and how many, whether or not the
   routine shows a trace; a reply that states figures without having called a
@@ -554,9 +557,9 @@ and nothing shared but the code:
 
 ```
 ~/.elixir-mcp-discord/
-  kings/     .env  agent/  state/
-  shipit/    .env  agent/  state/
-  rookies/   .env  agent/  state/
+  kings/     .env  config.json  agent/  state/
+  shipit/    .env  config.json  agent/  state/
+  rookies/   .env  config.json  agent/  state/
 ```
 
 Run `npm run setup` once per directory. Two things to know:

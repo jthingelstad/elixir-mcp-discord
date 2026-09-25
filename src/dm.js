@@ -14,7 +14,7 @@
  *                          shown to you only; "post it" sends it
  *   ask as yourself        anything about the record, answered on your behalf,
  *                          without cluttering the ask channel
- *   run the calendar       "routines"; "move the movers post to 7:30", "add a
+ *   run the calendar       "routines"; "move the meta report to 7:30", "add a
  *                          Friday war recap in #war" — a proposal on the
  *                          routine's file, parser-checked, live on Apply
  *   see what it knows      "memory" — the current memory.md, with expiry
