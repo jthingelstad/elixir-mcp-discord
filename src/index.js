@@ -24,7 +24,7 @@ import * as directory from "./directory.js";
 import { buildId } from "./build.js";
 import { drain, count } from "./inflight.js";
 import { commandName } from "./commands.js";
-import { rateFor } from "./pricing.js";
+import { rateFor, UnpricedModel } from "./pricing.js";
 import * as budget from "./budget.js";
 import { initialize, describePrincipal } from "./mcp.js";
 import { log } from "./log.js";
@@ -128,7 +128,30 @@ function reportPrincipal(handshake) {
   if (principal) state.set({ principal });
 }
 
-client.once(Events.ClientReady, async (ready) => {
+/**
+ * A boot that throws (an unpriced model, a channel check that crashed) used
+ * to leave a half-started process: the handler's rejection only reached the
+ * unhandledRejection log line, so the ask and DM lanes answered while no
+ * scheduler, feed, clock or review ever started, and the supervisor never
+ * restarted it because it never exited. It exits now — after the drain, with
+ * a notice — and launchd or systemd brings it back.
+ */
+client.once(
+  Events.ClientReady,
+  (ready) =>
+    void boot(ready).catch(async (error) => {
+      log.error("boot_failed", { error: error.message, stack: error.stack?.slice(0, 400) });
+      // An unpriced model has already said so, with the fix.
+      if (!(error instanceof UnpricedModel)) {
+        await notify.notify("boot failed", `${error.message.slice(0, 300)} — exiting so the service restarts.`, {
+          fingerprint: `boot_failed:${error.message.slice(0, 60)}`,
+        });
+      }
+      await shutdown("boot_failed", 1);
+    }),
+);
+
+async function boot(ready) {
   log.info("discord_ready", { user: ready.user.tag, guild: config.discord.guildId, build: buildId() });
   notify.configure({ client });
   // Which instance this is, first. One checkout can run several bots, and a
@@ -311,7 +334,7 @@ client.once(Events.ClientReady, async (ready) => {
   const clockLane = startClockLane(() => routinesFor("clock"), resolveChannel);
   stoppers.push(() => clockLane.stop());
   timers.push(startReview(client));
-});
+}
 
 /**
  * GRACEFUL SHUTDOWN. SIGTERM (what `launchctl kickstart -k` and systemd
@@ -325,7 +348,7 @@ const stoppers = [];
 const DRAIN_MS = 45_000;
 let shuttingDown = false;
 
-async function shutdown(signal) {
+async function shutdown(signal, code = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
   for (const timer of timers) clearInterval(timer);
@@ -336,7 +359,7 @@ async function shutdown(signal) {
   if (left) log.warn("shutdown_abandoned_turns", { inFlight: left });
   await client.destroy().catch(() => {});
   log.info("shutdown_complete");
-  process.exit(0);
+  process.exit(code);
 }
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));

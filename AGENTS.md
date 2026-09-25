@@ -791,6 +791,15 @@ cannot be enforced is worse than none, because it looks like it works.
   the sweep on the review lane's pot, records `friction` on the turn and
   `filed` in the ledger, and takes `sweepFn` for tests. The prompt says it
   too: never claim a filing the call does not back.
+- **What breaks after boot reaches the operator too — since 2026-09-25.**
+  A routine file that stops parsing while the bot runs (the 2026-09-13
+  outage, exactly), a scheduled or clock routine whose bound channel cannot
+  be found, and a routine that crashes were log lines only; each is a DM
+  notice now, on the boot check's fingerprints. A boot that throws (an
+  unpriced model, anything in the `ClientReady` handler) used to leave a
+  half-started process — ask and DM answering, no scheduler, feed, clock
+  or review, and no exit for the supervisor to restart — it drains and
+  exits 1 now (`boot_failed`).
 - **Nothing the bot writes pings anyone but the asker — since 2026-09-25.**
   Routine posts and ask-lane chunks were sent with no `allowedMentions`
   and the client set no default, so a `<@id>`, a mentionable role or

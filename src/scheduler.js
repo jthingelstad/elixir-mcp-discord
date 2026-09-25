@@ -9,7 +9,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { config } from "./config.js";
+import { config, channelEnvName } from "./config.js";
 import { dueRoutines, currentPeriods } from "./schedule.js";
 import { runRoutine } from "./run.js";
 import { spendBlock } from "./claude.js";
@@ -76,12 +76,20 @@ export async function tick(routines, resolveChannel, now = new Date(), { runFn =
         routine: routine.key,
         channel: routine.channel,
       });
+      await notify(
+        "routine skipped",
+        `${routine.key} was due and did not run: its channel "${routine.channel}" could not be found. Bind ${channelEnvName(routine.channel)} in config.json, or set the routine's channel: to a channel the bot may post in.`,
+        { fingerprint: `channel_missing:${routine.key}` },
+      );
       continue;
     }
-    const run = await runFn(routine, { channel }).catch((error) => {
+    const run = await runFn(routine, { channel }).catch(async (error) => {
       log.error("scheduled_crashed", {
         routine: routine.key,
         error: error.message,
+      });
+      await notify("routine crashed", `${routine.key}: ${error.message.slice(0, 300)}`, {
+        fingerprint: `crashed:${routine.key}`,
       });
       return null;
     });

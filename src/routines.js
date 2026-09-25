@@ -26,6 +26,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
 import { log } from "./log.js";
+import { notify } from "./notify.js";
 
 export const TRIGGERS = new Set(["message", "events", "schedule", "clock"]);
 
@@ -326,6 +327,17 @@ export function activeRoutines(options) {
     .join("\n");
   if (signature !== lastErrorSignature) {
     for (const failure of errors) log.error("routine_invalid", failure);
+    // And to the operator, not only the log: this is the 2026-09-13 outage
+    // after boot — a file edited or synced into a running instance — and
+    // the boot check's DM (src/index.js, same fingerprint) cannot see it.
+    // notify never throws and is a log line when there is no client.
+    if (errors.length) {
+      void notify(
+        "routine files",
+        `${errors.length} routine file${errors.length === 1 ? "" : "s"} failed to load and ${errors.length === 1 ? "is" : "are"} off the air${routines.length === 0 ? " — nothing will run, answer or post" : ""}: ${errors.map((e) => `${e.key} — ${e.error}`).join("; ")}`,
+        { fingerprint: `routine_invalid:${errors.map((e) => e.key).join(",")}` },
+      );
+    }
     if (errors.length && routines.length === 0) {
       log.error("no_routines_load", {
         failed: errors.length,

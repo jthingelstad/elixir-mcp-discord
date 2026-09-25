@@ -153,6 +153,33 @@ test("a routine file the runner cannot parse is logged, once, and loudly when no
   }
 });
 
+test("a routine file that breaks after boot reaches the operator's DM, not only the log", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { activeRoutines } = await import("../src/routines.js");
+  const notify = await import("../src/notify.js");
+  const { config } = await import("../src/config.js");
+  const state = await import("../src/state.js");
+  const dms = [];
+  notify.configure({ client: { users: { fetch: async () => ({ send: async (m) => dms.push(m.content) }) } } });
+  config.adminUserIds = new Set(["9"]);
+  state.set({ notices: {} });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "emd-routines-"));
+  fs.mkdirSync(path.join(dir, "routines"));
+  fs.writeFileSync(path.join(dir, "routines", "recap.md"), "---\ntrigger: schedule\nat: 25:00\n---\nx\n");
+  try {
+    activeRoutines({ dir, disabled: new Set() });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(dms.length, 1);
+    assert.match(dms[0], /recap — /);
+    assert.match(dms[0], /nothing will run/);
+  } finally {
+    notify.configure({ client: null });
+    config.adminUserIds = new Set();
+  }
+});
+
 test("wake/carry and the clock trigger parse, and their mistakes are errors", () => {
   const editor = parseRoutine(
     "editor",
