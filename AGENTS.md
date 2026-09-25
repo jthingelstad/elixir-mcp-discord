@@ -977,6 +977,20 @@ cannot be enforced is worse than none, because it looks like it works.
   the scheduler marks every routine's current period as done; the feedback
   ledger marks history as shown. All three have posted a backlog into a channel
   at least once. Do not "helpfully" replay.
+- **Docker is the recommended install — since 2026-09-25 (Jamie's D1).**
+  `scripts/install-docker.sh <instance>...` writes one `compose.yml` beside
+  the instances (one service each: `restart: unless-stopped`, `init`, the
+  host user's uid:gid, a 60 s stop grace for the drain, rotated json-file
+  logs), builds from the checkout or, with `--image <version>`, uses the
+  image `release.yml` now publishes to GHCR (amd64 + arm64) per tag. It
+  refuses while a launchd job or systemd unit for the same instance runs —
+  two processes on one bot token answer everything twice — and only
+  overwrites a `compose.yml` it wrote. `docs/DOCKER.md` is the operator's
+  page: the four words, day-to-day commands beside their launchctl
+  equivalents, and moving a bot off launchd one at a time. Node on the host
+  stays the path for working on the code (`npm run try` against an
+  instance works either way). Not run against a live daemon in the session
+  that wrote it: the first real build and boot is the acceptance test.
 - **The container mounts the whole instance — since 2026-09-25.** The
   Docker recipe mounted `state/` and `agent/` and passed `.env` as
   `--env-file`, which was right until settings moved to `config.json`

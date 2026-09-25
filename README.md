@@ -17,15 +17,31 @@ your bot — no fork, no code to edit.
 
 ## Quick start
 
+With Docker — recommended for a machine that is always on, and nothing to
+install but a Docker runtime ([docs/DOCKER.md](docs/DOCKER.md) explains
+each step and the words):
+
+```bash
+git clone https://github.com/jthingelstad/elixir-mcp-discord && cd elixir-mcp-discord
+docker build -t elixir-mcp-discord .
+mkdir -p ~/.elixir-mcp-discord/myclan
+docker run -it --rm --user "$(id -u):$(id -g)" -v ~/.elixir-mcp-discord/myclan:/instance \
+  elixir-mcp-discord node src/setup.js /instance    # guided: keys, Discord app, channels
+./scripts/install-docker.sh ~/.elixir-mcp-discord/myclan   # runs it; then DM the bot
+```
+
+With Node 22 on the host — the path for working on the code, and for
+launchd or systemd:
+
 ```bash
 git clone https://github.com/jthingelstad/elixir-mcp-discord && cd elixir-mcp-discord
 npm install
 npm run setup -- ~/.elixir-mcp-discord/myclan     # guided: keys, Discord app, channels; then DM the bot
 ```
 
-That is the whole install. Setup asks for each thing, tries it against the
-service it is for before writing anything, and at the end offers to start the
-bot as a service. You need three things in hand: an **Elixir MCP agent key**
+Either way that is the whole install. Setup asks for each thing, tries it
+against the service it is for before writing anything, and at the end
+offers to start the bot as a service (outside a container). You need three things in hand: an **Elixir MCP agent key**
 (elixir.poapkings.com > Account > Agents > Create agent), a **Claude API
 key** (console.anthropic.com), and a **Discord application** with a bot token
 (discord.com/developers). Setup explains the rest as it goes, including the
@@ -649,18 +665,19 @@ journalctl --user -u elixir-mcp-discord-myclan -f
 loginctl enable-linger $USER              # keep it running after you log out
 ```
 
-**Docker:**
+**Docker** ([docs/DOCKER.md](docs/DOCKER.md) is the whole story, moving a
+bot off launchd included):
 
 ```bash
-I=~/.elixir-mcp-discord/myclan
-docker build -t elixir-mcp-discord .
-# setup, in the image, if node is not on the host
-docker run -it --rm --user "$(id -u):$(id -g)" -v "$I:/instance" \
-  elixir-mcp-discord node src/setup.js /instance
-# the bot
-docker run -d --name elixir-mcp-discord-myclan --restart unless-stopped \
-  --user "$(id -u):$(id -g)" -v "$I:/instance" elixir-mcp-discord
+./scripts/install-docker.sh ~/.elixir-mcp-discord/myclan              # one bot
+./scripts/install-docker.sh ~/.elixir-mcp-discord/{kings,shipit}      # several, one compose.yml
+./scripts/install-docker.sh ~/.elixir-mcp-discord/myclan --image 0.4.0  # the published image
+cd ~/.elixir-mcp-discord && docker compose logs -f myclan
 ```
+
+The script writes `compose.yml` beside the instances — one service each,
+restarted when it exits, run as you, logs rotated — and refuses while a
+launchd job or systemd unit for the same instance is still running.
 
 Both service templates are rendered rather than committed, because a unit file
 is nothing but absolute paths and yours are not these. Three things in them are
