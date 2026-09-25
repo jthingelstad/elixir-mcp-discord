@@ -476,6 +476,12 @@ budgets, because they look like they work.
   polls with `mark_read: false` and keeps its own position. On first run each
   seeds from the newest event rather than draining the backlog into your
   channel.
+- **A busy window is read to its start.** Elixir MCP serves the newest items
+  of a window too big for one page and counts the rest (`has_more`,
+  `timeline_more`); before the turn the bot reads the older ones back by
+  window (the same `from`, `to` at the cut, `mark_read: false`), up to four
+  more pages, so a join under an hour of badges is still posted. What the
+  bound leaves unread is an `events_unread` warning in the log.
 - **A routine remembers what it posted.** `recall: 3` hands the model that
   routine's last three posts, from its own ledger in `state/`, so a daily
   spotlight can rotate and a movers post does not name the same three players

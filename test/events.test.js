@@ -14,8 +14,11 @@ import {
   releaseDue,
   subscribedKinds,
   readerName,
+  readWindow,
+  pollRoutine,
   CARRY_RELEASE_HOURS,
 } from "../src/events.js";
+import * as state from "../src/state.js";
 
 const timeline = [
   {
@@ -148,4 +151,137 @@ test("the reader name is the instance and the routine in the hub's alphabet, at 
   assert.match(readerName("War Deck Check!"), /^[a-z0-9][a-z0-9-]{0,31}$/);
   assert.ok(readerName("x".repeat(60)).length <= 32);
   assert.notEqual(readerName("editor"), readerName("clock"), "two routines are two readers");
+});
+
+/**
+ * A fake `elixir_timeline` with the hub's busy-window rule (contract 7.0.0):
+ * select by observed_at over (from, to], keep the newest `pageSize` by
+ * observed instant, count the rest in timeline_more, set has_more, serve
+ * newest first, next_cursor at the window's end. `now` stands in for the
+ * clock. Every call is recorded.
+ */
+function fakeHub(items, { pageSize = 3, now = "2026-09-25T12:00:00.000Z" } = {}) {
+  const calls = [];
+  const observed = (it) => Date.parse(it.observed_at ?? it.at);
+  const iso = (ms) => new Date(ms).toISOString();
+  const call = async (name, args) => {
+    calls.push({ name, args });
+    const toMs = Math.min(args.to ? Date.parse(args.to) : Infinity, Date.parse(now));
+    const fromMs = args.from ? Date.parse(args.from) : toMs - 86_400_000;
+    const all = items.filter(
+      (it) => observed(it) > fromMs && observed(it) <= toMs && (!args.kinds || args.kinds.includes(it.kind)),
+    );
+    const byObserved = [...all].sort((a, b) => observed(b) - observed(a));
+    const leftOut = byObserved.slice(pageSize);
+    const cutMs = leftOut.length ? observed(leftOut[0]) : null;
+    const timeline = (cutMs === null ? all : all.filter((it) => observed(it) > cutMs)).sort(
+      (a, b) => Date.parse(b.at) - Date.parse(a.at),
+    );
+    return {
+      ok: true,
+      body: {
+        window: { from: iso(fromMs), to: iso(toMs) },
+        timeline,
+        timeline_more: all.length - timeline.length,
+        has_more: cutMs !== null,
+        entries: [{ kind: "clan", subject_tag: "#CLAN" }],
+        next_cursor: iso(toMs),
+        meta: {},
+      },
+    };
+  };
+  return { call, calls };
+}
+
+const moment = (kind, at, observedAt = at, name = kind) => ({
+  at,
+  observed_at: observedAt,
+  subject_tag: `#${name}`,
+  subject_name: name,
+  kind,
+  section: "roster",
+  text: `${name} ${kind}`,
+  facts: {},
+});
+
+// An hour of badges after a join: the join is the oldest item, so the
+// newest page never holds it. One item was learned hours after it happened
+// (`at` early, observed late) — the continuation pages by observed_at.
+const busyHour = [
+  moment("member_joined", "2026-09-25T11:00:00.000Z", "2026-09-25T11:00:00.000Z", "joiner"),
+  moment("badge_earned", "2026-09-25T11:05:00.000Z", "2026-09-25T11:05:00.000Z", "b1"),
+  moment("badge_earned", "2026-09-25T11:10:00.000Z", "2026-09-25T11:10:00.000Z", "b2"),
+  moment("returned", "2026-09-25T02:00:00.000Z", "2026-09-25T11:15:00.000Z", "late"),
+  moment("badge_earned", "2026-09-25T11:20:00.000Z", "2026-09-25T11:20:00.000Z", "b3"),
+  moment("badge_earned", "2026-09-25T11:30:00.000Z", "2026-09-25T11:30:00.000Z", "b4"),
+  moment("card_unlocked", "2026-09-25T11:40:00.000Z", "2026-09-25T11:40:00.000Z", "c1"),
+  moment("badge_earned", "2026-09-25T11:50:00.000Z", "2026-09-25T11:50:00.000Z", "b5"),
+];
+
+test("a busy window is read to its start: older pages by the same from, to at the cut, mark_read false", async () => {
+  const key = "busy-window-editor";
+  const cursor = "2026-09-25T10:55:00.000Z";
+  state.setCursor(key, cursor);
+  const editor = {
+    key,
+    trigger: "events",
+    wake: ["member_joined", "returned"],
+    carry: ["badge_earned", "card_unlocked"],
+  };
+  const hub = fakeHub(busyHour, { pageSize: 3 });
+  const turns = [];
+  const run = async (routine, { events }) => {
+    turns.push(events);
+    return { ok: true, skipped: false };
+  };
+
+  await pollRoutine(editor, null, { call: hub.call, run });
+
+  // The first read is the routine's own reader, marking; every later one
+  // continues the SAME window backwards and moves nothing.
+  const [first, ...older] = hub.calls.map((c) => c.args);
+  assert.equal(first.reader, readerName(key));
+  assert.equal(first.mark_read, true);
+  assert.equal(first.from, cursor);
+  assert.equal(first.to, undefined);
+  assert.equal(older.length, 2, "8 items at 3 a page is two more pages");
+  for (const args of older) {
+    assert.equal(args.mark_read, false);
+    assert.equal(args.reader, undefined, "a continuation names no reader");
+    assert.equal(args.from, cursor, "the same from");
+    assert.deepEqual(args.kinds, first.kinds, "the same kinds");
+  }
+  assert.ok(older[0].to > older[1].to, "each page reaches further back");
+
+  // One turn, every item exactly once, oldest first — the join included.
+  assert.equal(turns.length, 1);
+  const names = turns[0].timeline.map((i) => i.subject_name);
+  assert.deepEqual(names, ["late", "joiner", "b1", "b2", "b3", "b4", "c1", "b5"]);
+  assert.equal(new Set(names).size, busyHour.length, "no item twice");
+  // The cursor goes to the window's end, never to a cut.
+  assert.equal(state.cursorFor(key), "2026-09-25T12:00:00.000Z");
+});
+
+test("the catch-up is bounded, and says what it left unread", async () => {
+  const hub = fakeHub(busyHour, { pageSize: 2 });
+  const result = await readWindow("2026-09-25T10:55:00.000Z", { reader: "x" }, { call: hub.call, maxPages: 1 });
+  assert.equal(result.ok, true);
+  assert.equal(result.pages, 2, "the first page and one more");
+  assert.equal(hub.calls.length, 2);
+  assert.equal(result.timeline.length, 4);
+  assert.equal(result.unread, 4, "the older half, counted by the last page");
+  assert.deepEqual(
+    result.timeline.map((i) => i.subject_name),
+    ["b3", "b4", "c1", "b5"],
+    "the newest items, oldest first",
+  );
+
+  const calm = await readWindow("2026-09-25T10:55:00.000Z", {}, { call: fakeHub(busyHour, { pageSize: 50 }).call });
+  assert.equal(calm.pages, 1, "a window that fits is one call");
+  assert.equal(calm.unread, 0);
+
+  const failing = async (name, args) =>
+    args.to ? { ok: false, error: "transport: boom" } : fakeHub(busyHour, { pageSize: 3 }).call(name, args);
+  const failed = await readWindow("2026-09-25T10:55:00.000Z", { reader: "x" }, { call: failing });
+  assert.equal(failed.ok, false, "a failed continuation fails the read, so the cursor stays");
 });

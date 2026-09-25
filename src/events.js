@@ -36,20 +36,31 @@ import { notify } from "./notify.js";
 import * as state from "./state.js";
 
 /**
- * One read of the timeline from `from` (an ISO instant) to now.
+ * One read of the timeline from `from` (an ISO instant) to now, or to `to`.
  *
  * Since contract 3.0.0 (2026-09-13, the same evening as 2.0.0) the tool is
  * `elixir_timeline` and the feed is a TIMELINE: `timeline[]` is what happened,
- * oldest first, one typed item each — `{ at, subject_tag, subject_name, kind,
+ * one typed item each — `{ at, observed_at, subject_tag, subject_name, kind,
  * section, text, facts }` — and `entries[]` is the window's context, one per
  * subject with sections null when nothing happened. For an agent, the entry
- * is the clan it acts for, members inside it. `has_more` is always false;
- * `next_cursor` is the window's end and goes back as `from` next time.
+ * is the clan it acts for, members inside it. `next_cursor` is the window's
+ * end and goes back as `from` next time.
+ *
+ * Since contract 7.0.0 (2026-09-23) the timeline is a newsfeed: NEWEST
+ * first, and a window past the hub's size cap serves only its newest items,
+ * counts the older ones in `timeline_more` and sets `has_more` — see
+ * `readWindow`, which reads them back. Everything handed to a model is
+ * re-sorted oldest first (`oldestFirst`).
  *
  * `meta` is the envelope; it carries the hints the loop runs on
  * (`feedback_responses_pending`, `contract_version`).
  */
 export const TIMELINE_TOOL = "elixir_timeline";
+
+/** How many older pages one poll may read back from a busy window before it
+ *  stops and says how many items it left unread. Each page is up to the hub's
+ *  ~40,000-character budget, and every item read goes into one turn. */
+export const MAX_CATCHUP_PAGES = 4;
 
 /** This consumer's reader name on the hub: the instance directory's name
  *  and the routine's key, lowercased to the hub's alphabet, at most 32. */
@@ -64,16 +75,20 @@ export function readerName(routineKey) {
   return `${inst}-${key}`.replace(/^-+|-+$/g, "").slice(0, 32) || "discord";
 }
 
-export async function read(from, { sections = null, kinds = null, verbosity = "full", reader = null } = {}) {
+export async function read(
+  from,
+  { sections = null, kinds = null, verbosity = "full", reader = null, to = null, call = callTool } = {},
+) {
   // A named reader marks its own pointer; a read with no reader (the seed,
-  // the dry run) never moves anything.
+  // the dry run, a busy window's older pages) never moves anything.
   const args = reader ? { reader, mark_read: true, verbosity } : { mark_read: false, verbosity };
   if (from) args.from = from;
+  if (to) args.to = to;
   if (sections?.length) args.sections = sections;
   // Since contract 3.9.0 the server keeps only the item kinds named, so a
   // routine that wakes on a dozen kinds and carries four reads only those.
   if (kinds?.length) args.kinds = kinds;
-  const result = await callTool(TIMELINE_TOOL, args);
+  const result = await call(TIMELINE_TOOL, args);
   if (!result.ok) return { ok: false, error: result.error };
   const body = result.body ?? {};
   return {
@@ -83,8 +98,70 @@ export async function read(from, { sections = null, kinds = null, verbosity = "f
     quiet: body.quiet ?? [],
     window: body.window ?? null,
     cursor: body.next_cursor ?? null,
+    hasMore: body.has_more === true,
+    more: Number(body.timeline_more) || 0,
     meta: body.meta ?? null,
   };
+}
+
+/** Items in the order a turn reads them: oldest `at` first. */
+export function oldestFirst(items) {
+  return [...(items ?? [])].sort((a, b) => String(a.at ?? "").localeCompare(String(b.at ?? "")));
+}
+
+/**
+ * Where the older remainder of a busy page ends: one millisecond before the
+ * oldest OBSERVED instant the page served. The hub cuts a busy window on
+ * observed_at and serves everything observed after the newest item it left
+ * out, so every item not served was observed before the oldest one served —
+ * and a window selects (from, to] at the millisecond. The hub states its cut
+ * only in a note's prose (written for a model, rewritten often), so the
+ * boundary is read off the items rather than the sentence. Null when the
+ * page gives nothing to go on.
+ */
+function olderThan(timeline) {
+  const instants = (timeline ?? []).map((it) => Date.parse(it.observed_at ?? it.at)).filter(Number.isFinite);
+  return instants.length ? new Date(Math.min(...instants) - 1).toISOString() : null;
+}
+
+/**
+ * THE WHOLE WINDOW. `read`, then — when the hub says the window was busier
+ * than a page (`has_more`) — the older items it counted instead of serving,
+ * read back by window as the hub's note says: the same `from`, `to` at the
+ * cut, `mark_read: false` and no reader, so the continuation moves nothing.
+ * At most `maxPages` more pages; `unread` is what the last page still
+ * counted and did not serve (0 when the window was read to its start).
+ *
+ * Before this (contract 7.0.0 to 2026-09-25) the lane read one page and moved
+ * its cursor to the window's end, so in a busy window every item older than
+ * the newest page was never posted — a join after an hour of badges was
+ * simply gone.
+ *
+ * The first read's window, entries, cursor and meta are the window's; the
+ * items are every page's, oldest first. A failed continuation fails the
+ * read, so the caller keeps its cursor and the next poll reads it again.
+ */
+export async function readWindow(from, options = {}, { call = callTool, maxPages = MAX_CATCHUP_PAGES } = {}) {
+  const first = await read(from, { ...options, call });
+  if (!first.ok) return first;
+  const items = [...first.timeline];
+  const windowFrom = first.window?.from ?? from;
+  const floorMs = Date.parse(windowFrom);
+  let page = first;
+  let pages = 1;
+  let to = null;
+  while (page.hasMore && pages <= maxPages) {
+    const next = olderThan(page.timeline);
+    // A boundary that does not move back, or reaches the window's start,
+    // cannot serve anything new: stop rather than loop.
+    if (next === null || (to !== null && next >= to) || !(Date.parse(next) > floorMs)) break;
+    to = next;
+    page = await read(windowFrom, { ...options, reader: null, to, call });
+    if (!page.ok) return page;
+    pages += 1;
+    items.push(...page.timeline);
+  }
+  return { ...first, timeline: oldestFirst(items), pages, unread: page.more };
 }
 
 /**
@@ -203,10 +280,11 @@ async function seedCursor() {
   return result.ok ? { cursor: result.cursor ?? now, meta: result.meta } : null;
 }
 
-/** Polls one routine. Returns the envelope of the last `elixir_timeline`
+/** Polls one routine. Returns the envelope of the first `elixir_timeline`
  *  response it read (or null when it read none), so the tick can act on the
- *  hints without a call of its own. */
-async function pollRoutine(routine, channel) {
+ *  hints without a call of its own. `call` and `run` are the transport and
+ *  the turn, for tests. */
+export async function pollRoutine(routine, channel, { call = callTool, run: runTurn = runRoutine } = {}) {
   const cursor = isoCursor(state.cursorFor(routine.key));
   if (cursor === null) {
     const seeded = await seedCursor();
@@ -216,14 +294,22 @@ async function pollRoutine(routine, channel) {
     return seeded.meta;
   }
 
-  const result = await read(cursor, {
-    sections: routine.sections,
-    kinds: subscribedKinds(routine),
-    reader: readerName(routine.key),
-  });
+  const result = await readWindow(
+    cursor,
+    { sections: routine.sections, kinds: subscribedKinds(routine), reader: readerName(routine.key) },
+    { call },
+  );
   if (!result.ok) {
     log.warn("events_poll_failed", { routine: routine.key, error: result.error, cursor });
     return null;
+  }
+  if (result.pages > 1) {
+    log.info("events_busy_window", { routine: routine.key, pages: result.pages, items: result.timeline.length });
+  }
+  if (result.unread > 0) {
+    // Past MAX_CATCHUP_PAGES, or more items at one observed instant than a
+    // page holds: the hub counted them and nothing here can serve them.
+    log.warn("events_unread", { routine: routine.key, unread: result.unread, pages: result.pages, cursor });
   }
   const { wake, carry } = partition(result.timeline, routine);
 
@@ -257,9 +343,9 @@ async function pollRoutine(routine, channel) {
       return result.meta;
     }
   }
-  const items = [...held, ...wake, ...carry].sort((a, b) => String(a.at ?? "").localeCompare(String(b.at ?? "")));
+  const items = oldestFirst([...held, ...wake, ...carry]);
 
-  const run = await runRoutine(routine, {
+  const run = await runTurn(routine, {
     channel,
     events: { window: result.window, timeline: items, entries: result.entries },
   });
@@ -275,6 +361,7 @@ async function pollRoutine(routine, channel) {
       release,
       kinds: [...new Set(items.map((i) => i.kind))].join(","),
       window: result.window ? `${result.window.from}..${result.window.to}` : undefined,
+      pages: result.pages > 1 ? result.pages : undefined,
       cursor: result.cursor,
       posted: !run.skipped,
     });

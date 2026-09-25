@@ -825,6 +825,21 @@ cannot be enforced is worse than none, because it looks like it works.
   `topics:` fails to parse with the migration in the message. There is no
   war-day-open item; a war-day post is a `clock` routine's job
   (`game_clock` says when; since 2026-09-17).
+- **A busy window is read to its start — since 2026-09-25.** Since hub
+  contract 7.0.0 a window past the hub's page budget (~40,000 characters)
+  serves only its NEWEST items, counts the older ones in `timeline_more`
+  and sets `has_more`; the note says to read them with the same `from`,
+  `to` at the cut and `mark_read: false`. The lane read one page and moved
+  its cursor to `next_cursor`, so every older item — a join under an hour
+  of badges — was never posted, and nothing said so. `readWindow` in
+  `src/events.js` now reads those pages back before the turn (no reader,
+  `mark_read: false`, the same `kinds`), at most `MAX_CATCHUP_PAGES` (4)
+  more, and hands every item to one turn oldest first. The cut is taken
+  from the items — one millisecond before the oldest `observed_at` served
+  — not from the note's prose. `events_busy_window` logs a catch-up;
+  `events_unread` (WARN) counts what the bound or a one-instant burst
+  left unread. A failed continuation fails the poll, so the cursor stays
+  and the next tick reads the window again.
 - **The seen bookmark is per ACCOUNT (an agent is its own account).** Every
   event routine polls with `mark_read: false` and keeps its own ISO cursor
   in `state/state.json`; a pre-2.0.0 integer cursor re-seeds from now. Never
