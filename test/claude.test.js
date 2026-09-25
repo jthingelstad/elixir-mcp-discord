@@ -95,3 +95,42 @@ test("cut off twice is truncated, and a turn with no nudge is never resumed", as
   assert.equal(bare.truncated, true);
   assert.equal(bare.resumed, false);
 });
+
+test("a model without adaptive thinking is sent neither thinking nor effort; the rest are sent both", async () => {
+  const done = { content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage };
+  const haiku = playing([done]);
+  const out = await ask({
+    system: "s",
+    messages: [{ role: "user", content: "go" }],
+    model: "claude-haiku-4-5",
+    effort: "low",
+    stream: haiku.stream,
+  });
+  assert.equal(out.ok, true);
+  assert.equal(haiku.requests[0].thinking, undefined, "adaptive thinking is a 400 on Haiku 4.5");
+  assert.equal(haiku.requests[0].output_config, undefined, "and so is effort");
+
+  const sonnet = playing([done]);
+  await ask({
+    system: "s",
+    messages: [{ role: "user", content: "go" }],
+    model: "claude-sonnet-5",
+    stream: sonnet.stream,
+  });
+  assert.equal(sonnet.requests[0].thinking.type, "adaptive");
+  assert.ok(sonnet.requests[0].output_config.effort);
+});
+
+test("an unpriced model is refused before the call, not discovered on the bill", async () => {
+  const { stream, requests } = playing([]);
+  const out = await ask({
+    system: "s",
+    messages: [{ role: "user", content: "go" }],
+    model: "claude-nonesuch-9",
+    stream,
+  });
+  assert.equal(out.ok, false);
+  assert.match(out.error, /No price for model "claude-nonesuch-9"/);
+  assert.equal(requests.length, 0, "nothing was sent, so nothing was paid for");
+  assert.ok(out.turnId, "and the failure is still a turn the ledger can hold");
+});

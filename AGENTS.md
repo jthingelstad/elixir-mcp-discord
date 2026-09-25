@@ -937,6 +937,15 @@ cannot be enforced is worse than none, because it looks like it works.
 - **Sonnet 5 has no mid-conversation system messages** and rejects
   `budget_tokens` and sampling params. Thinking is `{type: "adaptive"}`; depth
   is `output_config.effort`.
+- **Haiku 4.5 takes neither — since 2026-09-25 it is sent neither.** Every
+  call sent adaptive thinking and `effort`, so `model: claude-haiku-4-5` —
+  the README's own example — was a 400 on every turn, and nothing caught it
+  because the model has a price. The price book carries `adaptive` (the
+  catalog marks Haiku `false`; `models.json` can mark another), and `ask()`
+  leaves both out for such a model. `ask()` also reads the price BEFORE the
+  call now: boot checks the models it can see, but a routine's `model:`
+  edited later reached the API and `costOf` threw on the response — a paid
+  call no budget recorded, repeated every poll. `model_unpriced` in the log.
 - **A shell variable used to outrank `.env`.** dotenv does not override
   `process.env`, and an exported `CLAUDE_EFFORT=high` ran this bot at high
   effort for an evening. Since `config.json` (2026-09-15) a setting the file

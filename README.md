@@ -456,11 +456,16 @@ report needs:
 ```markdown
 ---
 trigger: schedule
-model: claude-haiku-4-5
+model: claude-sonnet-5
 effort: low
 max_tokens: 2000
 ---
 ```
+
+`effort` (and the adaptive thinking it tunes) is sent only to models that
+take them. `claude-haiku-4-5` takes neither — either is an API error there —
+so a Haiku routine runs without thinking and its `effort` is ignored; mark
+another such model `"adaptive": false` in `models.json`.
 
 `max_tokens` (default 6000) caps thinking plus text plus tool arguments for
 one turn; at `effort: high` a routine that makes several large reads can
@@ -477,7 +482,8 @@ catalog in `src/pricing.js`). That file is operator-owned for the same reason
 the prompts are: prices change, and the person paying the bill should be able
 to correct one without a deploy. **An unpriced model stops the bot at boot**
 rather than being billed at zero — budgets you cannot enforce are worse than no
-budgets, because they look like they work.
+budgets, because they look like they work — and a routine whose `model:` is
+changed to an unpriced one later fails before the call, not after it.
 
 ## Operating notes
 

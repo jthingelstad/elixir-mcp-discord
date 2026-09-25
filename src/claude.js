@@ -33,7 +33,7 @@
 import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "./config.js";
-import { costOf } from "./pricing.js";
+import { costOf, rateFor } from "./pricing.js";
 import * as budget from "./budget.js";
 import { callTool, resolveToolName } from "./mcp.js";
 import { log } from "./log.js";
@@ -402,6 +402,28 @@ export async function ask({
     effort,
   });
 
+  // The price first, BEFORE anything is paid for. Boot checks the models it
+  // can see, but a routine's `model:` edited later (by hand, or set from the
+  // DM) reached the API, and costOf threw on the response — a paid call whose
+  // spend no budget ever saw, repeated every poll by an event routine.
+  let adaptive;
+  try {
+    ({ adaptive } = rateFor(model));
+  } catch (error) {
+    log.error("model_unpriced", { turnId, model, routine: routineKey });
+    return { ...summary(), ok: false, error: error.message };
+  }
+  // Thinking and effort only where the model takes them: on Haiku 4.5 either
+  // is a 400, so `model: claude-haiku-4-5` failed every turn.
+  const depth = adaptive
+    ? {
+        // "omitted" is the default on Sonnet 5 and returns empty thinking
+        // blocks. We show our work in-channel, so ask for the summary.
+        thinking: { type: "adaptive", display: "summarized" },
+        output_config: { effort },
+      }
+    : {};
+
   for (let round = 0; round < maxRounds; round += 1) {
     rounds = round + 1;
     let response;
@@ -416,10 +438,7 @@ export async function ask({
         messages: history,
         mcp_servers: mcpServers,
         tools: toolsFor(localTools),
-        // "omitted" is the default on Sonnet 5 and returns empty thinking
-        // blocks. We show our work in-channel, so ask for the summary.
-        thinking: { type: "adaptive", display: "summarized" },
-        output_config: { effort },
+        ...depth,
       });
 
       // Per-call latency, which separates "slow because six calls" from "slow
