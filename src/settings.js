@@ -47,9 +47,9 @@ function isTimezone(tz) {
 }
 
 const money = (name) => (v) =>
-  v === "" || (Number.isFinite(Number(v)) && Number(v) >= 0)
+  v === "" || /^unlimited$/i.test(v) || (Number.isFinite(Number(v)) && Number(v) >= 0)
     ? null
-    : `${name} must be a number of dollars (or empty for unlimited)`;
+    : `${name} must be a number of dollars, or "unlimited" (empty returns it to the default cap)`;
 const onOff = (v) => (["on", "off"].includes(v.toLowerCase()) ? null : "on or off");
 const trueFalse = (v) => (["true", "false"].includes(v.toLowerCase()) ? null : "true or false");
 const intAtLeast = (min, what) => (v) =>
@@ -67,15 +67,16 @@ const effort = (v) => (EFFORTS.has(v.toLowerCase()) ? null : `effort is one of $
 /** What the DM may change, with what makes a value acceptable. */
 export const SETTINGS = {
   MONTHLY_BUDGET_USD: {
-    about: "monthly budget for scheduled and event posts, USD; empty = unlimited",
+    about: 'monthly budget for scheduled and event posts, USD, or "unlimited"; unset = the $10 default cap',
     check: money("MONTHLY_BUDGET_USD"),
   },
   ASK_MONTHLY_BUDGET_USD: {
-    about: "monthly budget for members' questions, USD; empty = unlimited",
+    about:
+      'monthly budget for members\' questions (and their 👎 sweeps), USD, or "unlimited"; unset = the $10 default cap',
     check: money("ASK_MONTHLY_BUDGET_USD"),
   },
   REVIEW_MONTHLY_BUDGET_USD: {
-    about: "monthly budget for the review lane and DM turns, USD",
+    about: 'monthly budget for the review lane and DM turns, USD, or "unlimited"; unset = the $10 default cap',
     check: money("REVIEW_MONTHLY_BUDGET_USD"),
   },
   ASK_DAILY_TURNS_PER_MEMBER: {

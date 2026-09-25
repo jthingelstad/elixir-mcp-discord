@@ -170,6 +170,9 @@ const numberIn = (label, min) => (value) =>
   Number.isFinite(Number(value)) && Number(value) >= min
     ? null
     : `${label} must be a number${min ? ` ≥ ${min}` : ""}, got "${value}"`;
+/** A budget: dollars, or "unlimited" said on purpose (an unset one is capped). */
+const budgetValue = (value) =>
+  /^unlimited$/i.test(String(value).trim()) ? null : numberIn('a budget (or "unlimited")', 0)(value);
 
 async function yesNo(question, fallback = false) {
   const answer = (await ask(question, { fallback: fallback ? "y" : "n" })).toLowerCase();
@@ -631,21 +634,22 @@ if (routines.length) {
   note("No routines yet, so no estimate: a scheduled post is roughly $0.10, and the");
   note("bot says what a set would cost when you choose it in the DM.");
 }
-note("Budgets are strict: a lane stops BEFORE a turn that could cross the line.");
+note("Budgets are strict: a lane stops BEFORE a turn that could cross the line. Type");
+note('"unlimited" for no cap; a budget left unset is capped at $10 a month.');
 const suggested = routines.length ? Math.max(5, Math.ceil(estimate.usd * 2)).toFixed(2) : "20.00";
 values.MONTHLY_BUDGET_USD = await askValid("Monthly budget for schedules and events, USD", {
   fallback: values.MONTHLY_BUDGET_USD || suggested,
-  validate: numberIn("a budget", 0),
+  validate: budgetValue,
 });
 values.ASK_MONTHLY_BUDGET_USD = await askValid("Monthly budget for member questions, USD", {
   fallback: values.ASK_MONTHLY_BUDGET_USD || "10.00",
-  validate: numberIn("a budget", 0),
+  validate: budgetValue,
 });
 // The third pot pays for your DMs to the bot and, if you turn it on, the
 // weekly review. Unasked, it was unset — unlimited — on every install.
 values.REVIEW_MONTHLY_BUDGET_USD = await askValid("Monthly budget for your DMs with the bot and its reviews, USD", {
   fallback: values.REVIEW_MONTHLY_BUDGET_USD || "10.00",
-  validate: numberIn("a budget", 0),
+  validate: budgetValue,
 });
 save("budgets");
 

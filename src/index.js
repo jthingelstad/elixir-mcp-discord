@@ -8,7 +8,17 @@
  */
 
 import { Client, GatewayIntentBits, Partials, Events } from "discord.js";
-import { config, provenance, channelEnvName, instanceDir, envFile, configFile, envLoaded, migrated } from "./config.js";
+import {
+  config,
+  provenance,
+  channelEnvName,
+  instanceDir,
+  envFile,
+  configFile,
+  envLoaded,
+  migrated,
+  DEFAULT_LANE_BUDGET_USD,
+} from "./config.js";
 import { handleAsk, isThreadOf } from "./ask.js";
 import { handleReaction } from "./reactions.js";
 import { startEventLoop } from "./events.js";
@@ -280,14 +290,26 @@ async function boot(ready) {
     }
   }
 
+  const defaulted = [];
   for (const lane of budget.status()) {
-    log[lane.budget ? "info" : "warn"]("budget", {
+    log[lane.source === "set" ? "info" : "warn"]("budget", {
       lane: lane.lane,
       month: lane.month,
       spent: lane.spent.toFixed(2),
-      budget: lane.budget ? lane.budget.toFixed(2) : "UNLIMITED",
+      budget: lane.budget === null ? "UNLIMITED" : lane.budget.toFixed(2),
+      source: lane.source,
       state: lane.state,
     });
+    if (lane.source === "default") defaulted.push(lane);
+  }
+  // An unset budget is capped, not open (config.js, since 2026-09-25): say
+  // so where the operator reads, once a day, with the fix.
+  if (defaulted.length) {
+    await notify.notify(
+      "budget not set",
+      `${defaulted.map((l) => `${budget.BUDGET_KEYS[l.lane]} (${l.label})`).join(", ")} ${defaulted.length === 1 ? "is" : "are"} not set, so ${defaulted.length === 1 ? "it is" : "each is"} capped at $${DEFAULT_LANE_BUDGET_USD.toFixed(2)} a month. Set a number, or "unlimited" if you mean no cap — "raise the ask budget to $15" here does it.`,
+      { fingerprint: `budget_default:${defaulted.map((l) => l.lane).join(",")}`, every: 24 * 3600 * 1000 },
+    );
   }
   for (const routine of routines) {
     log.info("routine_loaded", {

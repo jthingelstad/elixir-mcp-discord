@@ -34,7 +34,10 @@ const key = rest.find((arg) => !arg.startsWith("--"));
 
 function budgetLines() {
   return budget.status().map((b) => {
-    const of = b.budget === null ? "no budget set" : `of $${b.budget.toFixed(2)}`;
+    const of =
+      b.budget === null
+        ? "unlimited"
+        : `of $${b.budget.toFixed(2)}${b.source === "default" ? " (default cap: not set)" : ""}`;
     return `  ${b.label.padEnd(13)} $${b.spent.toFixed(2)} ${of}  (${b.state}, reserve $${b.reserve.toFixed(2)})`;
   });
 }

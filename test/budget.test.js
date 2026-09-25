@@ -169,3 +169,11 @@ test("slash commands are declared, gated, and describe themselves", async () => 
   assert.match(reply, /\$40\.00/);
   assert.match(reply, /\$20\.00/);
 });
+
+test("a $0 budget turns the lane off; it is not read as unlimited", () => {
+  config.askMonthlyBudgetUsd = 0;
+  const verdict = budget.check("ask");
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.reason, "exhausted");
+  assert.equal(budget.status().find((b) => b.lane === "ask").state, "exhausted");
+});

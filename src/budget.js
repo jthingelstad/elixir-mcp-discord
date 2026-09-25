@@ -29,7 +29,7 @@
  * invoice. Nothing rolls over.
  */
 
-import { config } from "./config.js";
+import { config, budgetSource } from "./config.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
 
@@ -41,11 +41,22 @@ export function laneFor(routine) {
   return routine?.trigger === "message" ? "ask" : "routines";
 }
 
+/** The config.json key that holds each lane's monthly budget. */
+export const BUDGET_KEYS = {
+  routines: "MONTHLY_BUDGET_USD",
+  ask: "ASK_MONTHLY_BUDGET_USD",
+  review: "REVIEW_MONTHLY_BUDGET_USD",
+};
+
+/** null is unlimited, and only when the operator wrote "unlimited"; an
+ *  unset budget is config's default cap (DEFAULT_LANE_BUDGET_USD). */
 function budgetFor(lane) {
   if (lane === "ask") return config.askMonthlyBudgetUsd;
   if (lane === "review") return config.review.monthlyBudgetUsd;
   return config.monthlyBudgetUsd;
 }
+
+const unlimited = (budget) => budget === null || budget === undefined;
 
 function ledger(now = new Date()) {
   const all = state.get("budgets") || {};
@@ -72,7 +83,8 @@ export function reserveFor(lane) {
  */
 export function check(lane, now = new Date()) {
   const budget = budgetFor(lane);
-  if (!budget) return { ok: true, unlimited: true };
+  // `!budget` read a $0 budget — a lane turned off — as unlimited.
+  if (unlimited(budget)) return { ok: true, unlimited: true };
   const used = spent(lane, now);
   const reserve = reserveFor(lane);
   if (used >= budget) {
@@ -126,9 +138,11 @@ export function status(now = new Date()) {
       month: monthKey(now),
       spent: used,
       budget: budget ?? null,
-      remaining: budget ? Math.max(0, budget - used) : null,
+      // set | default | unlimited: whether the number is one the operator chose.
+      source: budgetSource(BUDGET_KEYS[lane]),
+      remaining: unlimited(budget) ? null : Math.max(0, budget - used),
       reserve: reserveFor(lane),
-      state: !budget ? "unlimited" : check(lane, now).ok ? "ok" : used >= budget ? "exhausted" : "reserved",
+      state: unlimited(budget) ? "unlimited" : check(lane, now).ok ? "ok" : used >= budget ? "exhausted" : "reserved",
     };
   });
 }

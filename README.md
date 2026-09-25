@@ -446,8 +446,10 @@ bot stops slightly short of your number rather than slightly past it. A lane
 that runs out says so — in the log for routines, and in the channel for asks,
 in a sentence aimed at a member rather than an operator.
 
-Months are UTC calendar months and nothing rolls over. A pot left unset
-is unlimited, and the boot log warns about each one that is. `npm run
+Months are UTC calendar months and nothing rolls over. Each pot is a
+number of dollars or `"unlimited"`, said on purpose; one left unset (or
+set to something that is not a number) is capped at $10 a month, and the
+boot log and a DM say which. `0` turns a lane off. `npm run
 routines`, `/budget` and `budget` in the DM all show where you are — all
 three pots, the review one whether or not the review is on, and "raise the ask
 budget to $15" in the DM changes it, live. `ASK_DAILY_TURNS_PER_MEMBER`

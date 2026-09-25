@@ -104,7 +104,10 @@ const money = (n) => `$${n.toFixed(2)}`;
 
 export function budgetReply(status = budget.status()) {
   const lines = status.map((b) => {
-    const cap = b.budget === null ? "no budget set" : `of ${money(b.budget)}`;
+    const cap =
+      b.budget === null
+        ? "unlimited"
+        : `of ${money(b.budget)}${b.source === "default" ? " (default cap: not set)" : ""}`;
     const left = b.remaining === null ? "" : ` · ${money(b.remaining)} left`;
     const mark = b.state === "ok" ? "" : ` · **${b.state}**`;
     return `**${b.label}** — ${money(b.spent)} ${cap}${left}${mark}`;

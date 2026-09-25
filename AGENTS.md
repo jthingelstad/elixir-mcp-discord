@@ -713,6 +713,18 @@ so the boot log's unlimited-budget warning, `/budget` and `status` never
 mentioned that the operator's DM turns (on `REVIEW_MODEL`, Opus at high
 effort by default) had no ceiling. The status line reads `review + DMs`.
 
+**Since 2026-09-25 an unset budget is a cap, not unlimited** (Jamie's D4).
+Unset used to mean unlimited with a boot-log warning, and it failed open
+three ways: a container started without `config.json`, the review lane on
+every install, a hand edit that dropped a key. Now `laneBudget` in
+`config.js` reads a number, or `"unlimited"` (the only way to say no cap),
+and anything else — unset, empty, a typo — is `DEFAULT_LANE_BUDGET_USD`
+($10). A cap rather than a refusal on purpose: a refused review lane would
+lock the operator out of the DM turn that sets it. `budget.status()`
+carries `source` (set / default / unlimited); boot logs each lane and DMs
+the defaulted ones once a day. `$0` now turns a lane off: `check` read
+`!budget` as unlimited, so a zero budget was the opposite of what it said.
+
 **Strict means checked BEFORE the call.** A lane refuses to start a turn that
 could take it past its budget, estimating from the largest turn that lane has
 ever produced (floored by `TURN_RESERVE_USD`, which climbs and never drops).
