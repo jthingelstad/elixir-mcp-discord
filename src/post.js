@@ -19,11 +19,17 @@ export function chunk(text, limit = DISCORD_LIMIT) {
 }
 
 /** Posts a message, splitting it if it is long. Returns every message sent, in order.
- *  Discord's own 2,000 is the ceiling whatever the caller's limit says. */
+ *  Discord's own 2,000 is the ceiling whatever the caller's limit says. A send
+ *  that fails throws with `error.sent`: the parts already in the channel. */
 export async function post(channel, text, limit = DISCORD_LIMIT) {
   const sent = [];
   for (const part of chunk(text, Math.min(limit, DISCORD_LIMIT))) {
-    sent.push(await channel.send(part));
+    try {
+      sent.push(await channel.send(part));
+    } catch (error) {
+      error.sent = sent;
+      throw error;
+    }
   }
   return sent;
 }

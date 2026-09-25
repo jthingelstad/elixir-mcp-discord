@@ -888,6 +888,20 @@ cannot be enforced is worse than none, because it looks like it works.
   catch-up window live. `fire` returns `{ blocked }` and the lane holds that
   boundary `RETRY_MS`. A failed release turn also no longer carries the
   same items twice (`addCarry` keeps one of each).
+- **A post is a post once Discord has it, and only then — since
+  2026-09-25.** Every client-side tool result is followed by another API
+  round, and when that round failed (a 529, a dropped stream) `ask()`
+  returned `ok:false` with no `turnId`: the runner reported a failed
+  routine, the event cursor stayed, the next poll posted the same news
+  again, and the ledger's reader dropped the record, so `why` and
+  `retract` could not find a message that was in the channel. Now every
+  `ask()` return carries the turn's `summary()` (turnId, usage, rounds),
+  and `runRoutine` treats a failure with `posts.length > 0` as delivered
+  (`routine_failed_after_post`, `error: "after_post: …"` in the ledger).
+  The other half: `post_message` pushed its record before the send, so a
+  send Discord refused still counted as posted; it is recorded after, a
+  refusal is a `send_failed` tool error the model sees, and `post()` puts
+  the parts already sent on `error.sent`.
 - **Sonnet 5 has no mid-conversation system messages** and rejects
   `budget_tokens` and sampling params. Thinking is `{type: "adaptive"}`; depth
   is `output_config.effort`.

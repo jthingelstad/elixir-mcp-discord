@@ -367,6 +367,49 @@ test("a turn posts through post_message to the channel it chose, and the rules h
   );
 });
 
+test("a post that went out is delivered even when the API round after it fails", async () => {
+  const { POST_TOOL } = await import("../src/run.js");
+  const news = fakeChannel();
+  const entries = [{ id: "11", name: "news", topic: "", visibility: "everyone", threads: false, role: null }];
+  const run = await runRoutine(routine({ trigger: "events", kinds: "member_joined", may_skip: true }), {
+    channel: null,
+    entries,
+    resolve: async () => news,
+    events: { window: null, timeline: [], entries: [] },
+    askFn: async ({ localTools }) => {
+      await localTools.find((t) => t.name === POST_TOOL.name).handler({ channel_id: "11", content: "A joined." });
+      // The round that follows the tool result: overloaded, mid-stream.
+      return { ...answer(""), ok: false, error: "overloaded_error" };
+    },
+  });
+  assert.equal(news.sent.length, 1);
+  assert.equal(run.ok, true, "delivered, so the cursor moves and the next poll does not post it again");
+  assert.deepEqual(
+    run.posts.map((p) => p.channel),
+    ["#news"],
+  );
+});
+
+test("a post Discord refused is not counted as posted", async () => {
+  const { POST_TOOL } = await import("../src/run.js");
+  const refusing = { ...fakeChannel(), send: () => Promise.reject(new Error("Missing Permissions")) };
+  const entries = [{ id: "11", name: "news", topic: "", visibility: "everyone", threads: false, role: null }];
+  let seen;
+  const run = await runRoutine(routine({ trigger: "schedule", at: "01:00", may_skip: true }), {
+    channel: null,
+    entries,
+    resolve: async () => refusing,
+    askFn: async ({ localTools }) => {
+      seen = await localTools.find((t) => t.name === POST_TOOL.name).handler({ channel_id: "11", content: "News." });
+      return answer("SKIP", { called: ["post_message"], trace: [] });
+    },
+  });
+  assert.equal(seen.ok, false);
+  assert.equal(seen.code, "send_failed");
+  assert.match(seen.error, /Missing Permissions/);
+  assert.deepEqual(run.posts, [], "nothing reached the channel, so nothing is recorded as a post");
+});
+
 test("with a directory, no post call and prose still goes to the routine's default; SKIP still skips", async () => {
   const channel = fakeChannel();
   channel.id = "11";

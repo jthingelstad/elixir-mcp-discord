@@ -380,6 +380,27 @@ export async function ask({
   let stopReason = null;
   let nudged = false;
   let resumed = false;
+  // What every return carries, failed or not. A round can fail AFTER a
+  // client-side tool already acted — post_message sent, then the next API
+  // call 529s — and a failure with no turnId was dropped by the ledger's
+  // reader, so the turn that put a message in a channel had no record.
+  const summary = () => ({
+    text,
+    called,
+    errors,
+    trace,
+    envelopes,
+    usd: usdTotal,
+    usage,
+    turnId,
+    ms: Date.now() - started,
+    rounds,
+    stopReason,
+    nudged,
+    resumed,
+    model,
+    effort,
+  });
 
   for (let round = 0; round < maxRounds; round += 1) {
     rounds = round + 1;
@@ -436,15 +457,7 @@ export async function ask({
       response = await call.finalMessage();
     } catch (error) {
       log.error("claude_call_failed", { turnId, error: error.message });
-      return {
-        ok: false,
-        error: error.message,
-        called,
-        errors,
-        trace,
-        envelopes,
-        usd: usdTotal,
-      };
+      return { ...summary(), ok: false, error: error.message };
     }
 
     const usd = costOf(model, response.usage);
@@ -457,17 +470,7 @@ export async function ask({
     text = readText(response.content) || text;
     stopReason = response.stop_reason;
 
-    if (stopReason === "refusal") {
-      return {
-        ok: false,
-        error: "refusal",
-        called,
-        errors,
-        trace,
-        envelopes,
-        usd: usdTotal,
-      };
-    }
+    if (stopReason === "refusal") return { ...summary(), ok: false, error: "refusal" };
     // A CLIENT-SIDE tool call, on a connection whose tools are all server-side.
     //
     // Most of the time an mcp_toolset call comes home as `mcp_tool_use` +
@@ -551,27 +554,14 @@ export async function ask({
   }
 
   return {
+    ...summary(),
     ok: true,
-    text,
-    called,
-    errors,
-    trace,
-    envelopes,
-    usd: usdTotal,
-    usage,
-    turnId,
-    ms: Date.now() - started,
-    rounds,
-    stopReason,
-    nudged,
-    // The turn was cut off at max_tokens and asked again; a post that follows
-    // was delivered on the second ask. Beside `nudged` so the review can tell
-    // "too little room" from "forgot to call the tool".
-    resumed,
-    // A max_tokens cutoff otherwise reads as a complete answer.
+    // `resumed` (in the summary): the turn was cut off at max_tokens and
+    // asked again; a post that follows was delivered on the second ask.
+    // Beside `nudged` so the review can tell "too little room" from "forgot
+    // to call the tool". A max_tokens cutoff otherwise reads as a complete
+    // answer.
     truncated: stopReason === "max_tokens" || rounds >= maxRounds,
-    model,
-    effort,
     serverVersion: state.get("serverVersion"),
   };
 }
