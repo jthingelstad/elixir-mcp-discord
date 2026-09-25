@@ -388,6 +388,12 @@ a tool errored or an answer conceded a limit and nothing was filed. Maintainer
 replies are posted back into the channel. Members watching their complaint get
 answered is the point.
 
+Readers take part too: a 👎 on any post or answer sends the turn back for
+one reflection and at most one filing (reply to the message with what was
+wrong, and that reply is the strongest evidence it gets); a 👍 files
+praise with no model call. A 👎 is paid from the ask budget, since a
+member started it, and one turn takes at most three.
+
 ### Silence is a valid output
 
 Any routine with `may_skip: true` may answer `SKIP`, which posts nothing and

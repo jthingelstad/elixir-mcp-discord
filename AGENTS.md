@@ -780,6 +780,14 @@ cannot be enforced is worse than none, because it looks like it works.
   produced — the post AND its footers — so a reaction on either resolves.
   Needs the `GuildMessageReactions` intent and Message/Reaction/User
   partials, or reactions on posts older than the process never arrive.
+  **Since 2026-09-25 a 👎 sweep is the ask lane's and bounded.** A bare 👎
+  the sweep declined released its mark (so a reply could follow), which
+  meant removing and re-adding it swept the same turn again — a paid call
+  and a "Noted" line per toggle, charged to the POST's lane, so any member
+  could spend the budget the scheduled posts run on. Now a turn is swept
+  without a note once (`reactions.bare`), at most `SWEEPS_PER_TURN` (3)
+  times in all (`state.countSweep`), and every sweep is charged to `ask`:
+  a member started it.
 - **Cache breakpoints on the toolset and the system block.** Verified live:
   a second consecutive turn was 89% cache reads and cost a third of the
   first. Keep the system block a stable prefix — the asker's id rides in the

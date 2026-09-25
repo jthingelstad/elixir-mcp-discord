@@ -327,6 +327,17 @@ export function markReaction(turnId, kind, value = true) {
   return true;
 }
 
+/** Count one more 👎 sweep of a turn and return the new count (0 for an
+ *  unknown turn). Kept beside the reaction marks, which survive a re-record. */
+export function countSweep(turnId) {
+  const state = read();
+  const turn = state.turns?.[turnId];
+  if (!turn) return 0;
+  const sweeps = (turn.reactions?.sweeps ?? 0) + 1;
+  write({ ...state, turns: { ...state.turns, [turnId]: { ...turn, reactions: { ...turn.reactions, sweeps } } } });
+  return sweeps;
+}
+
 export function markRun(routineKey, periodKey) {
   const state = read();
   write({ ...state, runs: { ...state.runs, [routineKey]: periodKey } });
