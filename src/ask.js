@@ -31,6 +31,7 @@ import * as state from "./state.js";
 import * as ledger from "./ledger.js";
 import { notify } from "./notify.js";
 import { deckLinkTool } from "./deck-link.js";
+import { linkMeTool } from "./link.js";
 
 /**
  * ONE THREAD PER QUESTION.
@@ -455,9 +456,12 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
         },
       ],
       // The local tools a member's turn gets: reading a pasted deck link
-      // (text, not the web) and passing a request to the operator.
+      // (text, not the web), passing a request to the operator, and linking
+      // the asker — the author Discord says sent this, never an id from the
+      // conversation (src/link.js).
       localTools: [
         deckLinkTool(),
+        linkMeTool({ authorId: message.author.id }),
         tellOperatorTool({
           message,
           channelName: message.channel?.isThread?.() ? message.channel.parent?.name : message.channel?.name,

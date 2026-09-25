@@ -26,12 +26,13 @@ export const POLICIES = {
   rehearsal: [],
   // Filing what it wanted to do and could not is the job (src/feedback.js).
   routines: ["elixir_send_feedback"],
-  // A member's turn files friction and links who is asking.
-  ask: ["elixir_send_feedback", "elixir_identify"],
+  // A member's turn files friction. Linking who is asking is link_me
+  // (src/link.js), where the runner — not the model — says who that is.
+  ask: ["elixir_send_feedback"],
   // The weekly review files what belongs to the hub.
   review: ["elixir_send_feedback"],
-  // The operator's console: files, and links the operator to their player.
-  dm: ["elixir_send_feedback", "elixir_identify"],
+  // The operator's console files; it links the operator through link_me too.
+  dm: ["elixir_send_feedback"],
 };
 
 /**

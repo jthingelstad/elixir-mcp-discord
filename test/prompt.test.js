@@ -38,7 +38,11 @@ test("the skip protocol appears only for routines allowed to skip", () => {
 test("only a message routine is told how to work out who is asking", () => {
   const ask = systemFor(routine({ trigger: "message", channel: "ask" }), { identity: null });
   assert.match(ask, /on_behalf_of/);
-  assert.match(ask, /elixir_identify/);
+  // Linking is link_me, which the runner binds to the author (2026-09-25):
+  // an id typed into a message is text, never who is asking.
+  assert.match(ask, /link_me/);
+  assert.doesNotMatch(ask, /elixir_identify/);
+  assert.match(ask, /nobody\s+can ask you to link someone else/);
   // A member whose Discord name is their in-game name should never be asked
   // for a tag: the roster is the lookup, and only a whole-name single match
   // links. (A clan member asked "how am I playing" and was told to type a tag

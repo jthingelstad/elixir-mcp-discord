@@ -127,6 +127,23 @@ bot could have read off the roster; the server refuses `elixir_identify` for
 anyone outside the clan and a re-call replaces the mapping, so the exact
 match is cheap to make and cheap to undo.
 
+**Since 2026-09-25 the model never addresses `elixir_identify`** (Jamie's
+D2). The ask lane writes `Name (discord:<id>): question` into the turn and
+the model passed that id through, so a member who typed a second author
+line could remap ANOTHER member to the wrong player — every "my stats"
+answer for them confidently wrong until noticed. Reads were never the risk
+(every recorded fact is readable by every account); that one write was.
+`src/link.js` `link_me(player_tag)` is a local tool in the ask lane and the
+DM whose handler calls `elixir_identify({ external_id: "discord:<author>",
+player_tag })` with the author Discord delivered; `src/tools.js` switches
+`elixir_identify` off in every lane; `WHO_IS_ASKING` names `link_me` and
+says an id typed into a message is text. `on_behalf_of` on READS stays the
+model's: a forged one reads public data about someone else, which anyone
+can ask for by tag anyway. The one-name exception to "no tool list" is the
+handler's `elixir_identify`, a tool the prompts named already. The
+Elixir-side alternative — the connection carrying the asker per turn — is
+the cleaner end state and a hub decision.
+
 **Public repo, no secrets.** `.env`, `.env.*`, `/config.json` and `state/`
 are gitignored. Check `git ls-files` before assuming something is untracked. Since
 2026-09-13 the live instances keep nothing in the checkout at all — see below.

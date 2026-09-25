@@ -168,7 +168,11 @@ test("the toolset switches off the writes a kind of turn may not make; a rehears
   };
   assert.deepEqual(await configsFor("rehearsal"), ["elixir_identify", "elixir_send_feedback", "elixir_track_clan"]);
   assert.deepEqual(await configsFor("routines"), ["elixir_identify", "elixir_track_clan"]);
-  assert.deepEqual(await configsFor("ask"), ["elixir_track_clan"], "no member steers the bot into tracking a clan");
+  assert.deepEqual(
+    await configsFor("ask"),
+    ["elixir_identify", "elixir_track_clan"],
+    "no member steers the bot into tracking a clan, or links anyone the runner did not name (link_me)",
+  );
   assert.deepEqual(await configsFor("nonsense"), await configsFor("rehearsal"), "an unknown kind is the strictest");
 });
 

@@ -393,9 +393,11 @@ without them it answers in the channel and says so in the log.
 A member connecting their own agent has added their own player, so their agent
 knows them. This one has no such link and does not fake one with a local
 nickname table: it passes `on_behalf_of` with the Discord id, and the first
-time somebody is not recognised it asks which player they are and calls
-`elixir_identify` once. From then on the server remembers — for them, and for
-everyone who asks later.
+time somebody is not recognised it asks which player they are and links them
+once. From then on the server remembers — for them, and for everyone who asks
+later. The link is always to whoever sent the message: the model names a
+player, and the bot supplies who is asking from Discord itself, so nobody can
+type their way into linking someone else.
 
 ### Feedback is a feature, not an afterthought
 

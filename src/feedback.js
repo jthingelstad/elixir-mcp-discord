@@ -209,6 +209,7 @@ const LOCAL_TOOLS = new Set([
   "read_channel",
   "tell_operator",
   "deck_link",
+  "link_me",
   "propose_change",
   "lookup_turn",
   "search_turns",
