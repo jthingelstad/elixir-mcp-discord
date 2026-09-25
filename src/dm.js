@@ -878,6 +878,7 @@ async function converse(message, options = {}) {
     maxTokens: routine.maxTokens,
     routineKey: "dm",
     lane: "review",
+    policy: "dm",
     localTools: [
       proposeTool({ files, proposals, by: "owner", operatorId: message.author.id }),
       routinesTool(),

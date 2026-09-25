@@ -140,12 +140,19 @@ test("a long post is split rather than truncated", async () => {
   assert.equal(channel.sent.map((m) => m.text).join("\n"), long);
 });
 
-test("a dry run composes without touching Discord", async () => {
+test("a dry run composes without touching Discord, and asks for a rehearsal's toolset", async () => {
+  let policy;
   const run = await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "01:00" }), {
     dryRun: true,
-    askFn: async () => answer("Would have posted this."),
+    askFn: async (args) => ((policy = args.policy), answer("Would have posted this.")),
   });
   assert.equal(run.text, "Would have posted this.");
+  assert.equal(policy, "rehearsal", "a rehearsal writes nothing upstream");
+  await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "01:00" }), {
+    channel: fakeChannel(),
+    askFn: async (args) => ((policy = args.policy), answer("Posted.")),
+  });
+  assert.equal(policy, "routines");
 });
 
 test("a failed turn is reported, not posted", async () => {

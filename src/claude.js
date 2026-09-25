@@ -35,7 +35,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { config } from "./config.js";
 import { costOf, rateFor } from "./pricing.js";
 import * as budget from "./budget.js";
-import { callTool, resolveToolName } from "./mcp.js";
+import { callTool, resolveToolName, toolCatalog } from "./mcp.js";
+import { disabledTools } from "./tools.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
 
@@ -64,11 +65,17 @@ const mcpServers = [
  * much was actually served from cache; the trace footer shows it, because a
  * cache that silently stopped hitting is a cost regression nobody would see.
  */
-const MCP_TOOLSET = {
-  type: "mcp_toolset",
-  mcp_server_name: config.mcp.serverName,
-  cache_control: { type: "ephemeral" },
-};
+/** The server's tools, with the writes this kind of turn may not use
+ *  switched off (src/tools.js). Stable per kind of turn, so the cache
+ *  breakpoint holds: a lane's disabled set changes only with the catalog. */
+function mcpToolset(disabled = []) {
+  return {
+    type: "mcp_toolset",
+    mcp_server_name: config.mcp.serverName,
+    ...(disabled.length ? { configs: Object.fromEntries(disabled.map((name) => [name, { enabled: false }])) } : {}),
+    cache_control: { type: "ephemeral" },
+  };
+}
 
 /**
  * LOCAL tools — the few things this runner can do that the server cannot,
@@ -76,10 +83,10 @@ const MCP_TOOLSET = {
  * breakpoint on it covers them; a lane without local tools (the ask lane)
  * has a different, equally stable prefix.
  */
-function toolsFor(localTools) {
+function toolsFor(localTools, disabled) {
   return [
     ...localTools.map(({ name, description, input_schema }) => ({ name, description, input_schema })),
-    MCP_TOOLSET,
+    mcpToolset(disabled),
   ];
 }
 
@@ -290,7 +297,7 @@ function readResponse(activity, content, timings) {
  * directory, a cap reached) is a tool error the model sees, not an
  * exception.
  */
-async function executeClientSide(block, localTools, turnId) {
+async function executeClientSide(block, localTools, turnId, { disabled = [], names = null } = {}) {
   const local = localTools.find((t) => t.name === block.name);
   if (local) {
     let call;
@@ -302,7 +309,16 @@ async function executeClientSide(block, localTools, turnId) {
     log.info("client_tool_call", { turnId, tool: block.name, via: "local", ok: call.ok });
     return { name: block.name, result: outcomeOfCall(call) };
   }
-  const tool = await resolveToolName(block.name);
+  const tool = await resolveToolName(block.name, { names });
+  // This path runs a server tool over the direct client, past the
+  // connector's `configs`: a switched-off tool is refused here as well.
+  if (disabled.includes(tool)) {
+    log.warn("client_tool_refused", { turnId, tool, reason: "not available to this kind of turn" });
+    return {
+      name: tool,
+      result: outcomeOfCall({ ok: false, code: "not_available", error: `${tool} is not available in this turn` }),
+    };
+  }
   const call = await callTool(tool, block.input ?? {});
   log.info("client_tool_call", { turnId, tool, via: "mcp", ok: call.ok });
   // The direct client reports a refusal as ok:false WITH the refusal body
@@ -346,6 +362,11 @@ export async function ask({
   // and by LANE so a chatty ask channel cannot spend the schedule's budget.
   routineKey = "unattributed",
   lane = "routines",
+  // What this turn may DO through Elixir beyond reading (src/tools.js):
+  // "rehearsal" for a dry run, else the kind of turn. Defaults to the lane.
+  policy = lane,
+  // The server's tool catalog, injectable so a test never reaches the network.
+  catalogFn = toolCatalog,
   // `[{ name, description, input_schema, handler(input) -> {ok, body} }]`.
   // Executed here when the model calls them; see src/run.js.
   localTools = [],
@@ -400,6 +421,7 @@ export async function ask({
     resumed,
     model,
     effort,
+    policy,
   });
 
   // The price first, BEFORE anything is paid for. Boot checks the models it
@@ -413,6 +435,14 @@ export async function ask({
     log.error("model_unpriced", { turnId, model, routine: routineKey });
     return { ...summary(), ok: false, error: error.message };
   }
+  // The writes this turn may not make, from the server's own annotations.
+  // Read before the call like the price: a rehearsal that filed with the
+  // maintainer is the reason this exists.
+  const catalog = await catalogFn();
+  const disabled = disabledTools(policy, catalog);
+  // A tool handed back to run is named against the same catalog.
+  const published = catalog?.ok ? catalog.tools.map((t) => t.name) : null;
+
   // Thinking and effort only where the model takes them: on Haiku 4.5 either
   // is a 400, so `model: claude-haiku-4-5` failed every turn.
   const depth = adaptive
@@ -437,7 +467,7 @@ export async function ask({
         system: systemBlocks(system),
         messages: history,
         mcp_servers: mcpServers,
-        tools: toolsFor(localTools),
+        tools: toolsFor(localTools, disabled),
         ...depth,
       });
 
@@ -512,7 +542,7 @@ export async function ask({
         history.push({ role: "assistant", content: response.content });
         const results = [];
         for (const block of pending) {
-          const { name, result } = await executeClientSide(block, localTools, turnId);
+          const { name, result } = await executeClientSide(block, localTools, turnId, { disabled, names: published });
           settle(activity, { step: activity.byId.get(block.id), name, result });
           results.push({ type: "tool_result", tool_use_id: block.id, is_error: !result.ok, content: result.raw });
         }

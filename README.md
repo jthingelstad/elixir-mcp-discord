@@ -358,6 +358,20 @@ people's words and "post this in #announcements" must stay a request rather
 than an instruction. Where the bot *listens* is the one binding that stays
 explicit (`CHANNEL_ASK`).
 
+### What it may change in Elixir
+
+Almost everything Elixir MCP offers only reads. Six tools write something
+— feedback, identity links, nicknames, tracked clans and players,
+collections — and the server marks which. Each kind of turn gets every
+read and only the writes it needs: a routine and the weekly review may
+file feedback; a member's question and your DM may also link who is
+asking; a rehearsal (`npm run try`, `try` in the DM, a proposal's **Try
+it**, `npm run review`) writes nothing at all. Nothing the bot does can
+track a clan or player on your account. `npm run probe` prints the
+split. For belt and braces, untick `recordings:write` and
+`collections:write` on your agent's page in Elixir; the hub enforces that
+on the next call.
+
 ### No fallback, on purpose
 
 If Elixir MCP is down, this bot says so and stops. It has nothing else to

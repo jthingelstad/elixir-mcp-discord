@@ -449,6 +449,8 @@ async function runRoutineNow(
     effort: routine.effort,
     routineKey: routine.key,
     lane,
+    // A dry run reads and writes nothing, upstream included (src/tools.js).
+    policy: dryRun ? "rehearsal" : lane,
     localTools: withTool
       ? [
           postTool({ routine, entries: directoryEntries, dryRun: dryRun || false, posts, resolve }),

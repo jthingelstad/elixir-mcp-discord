@@ -190,7 +190,15 @@ export function claimsFiling(text) {
  * Every other code — invalid_tag, not_entitled, not_recorded, not_found,
  * live_unavailable, bad_request, result_too_large, internal — stays a signal.
  */
-const EXPECTED_ERROR_CODES = new Set(["no_subject", "quota_exceeded", "live_pending", "query_timeout"]);
+// `not_available`: this runner switched the tool off for the kind of turn
+// (src/tools.js) — ours, never the hub's.
+const EXPECTED_ERROR_CODES = new Set([
+  "no_subject",
+  "quota_exceeded",
+  "live_pending",
+  "query_timeout",
+  "not_available",
+]);
 const EXPECTED_ERROR_CLASSES = new Set(["retry"]);
 
 /** This runner's own tools. Their refusals (a channel not in the directory,

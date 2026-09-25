@@ -669,11 +669,30 @@ its own event cursor and its own feedback inbox, at its own door
 
 Riding Jamie's account, this bot could answer "what players do you track?" with
 his personal claimed-player list, and on first boot it posted eight of his
-answered feedback items into a public channel. Both are impossible by
-construction now: the agent surface publishes 36 tools, and
-`elixir_my_players`, `elixir_track_player` and `elixir_track_clan` (the
-`elixir_add_*` names before contract 1.0.0) are absent *and* refused on call.
-**So do not add them to a prompt.**
+answered feedback items into a public channel. `elixir_my_players` is
+still absent from an agent door *and* refused on call. **So do not add it
+to a prompt.**
+
+**Since hub 7.1.0 an agent door publishes `elixir_track_clan` and
+`elixir_track_player`** (54 tools; an agent may watch a rival, and every
+track spends the OWNER's recording slots). The line above used to name
+them as absent; it was stale for a week, and in that week any lane — a
+member's question included — could have tracked a clan on Jamie's slots.
+Since 2026-09-25 `src/tools.js` decides which writes each kind of turn
+keeps, from the server's own `readOnlyHint` annotations (`toolCatalog` in
+`src/mcp.js`): rehearsals none; routines and the review
+`elixir_send_feedback`; the ask lane and the DM that plus
+`elixir_identify`. Every other write — tracking, `collections_edit`,
+`elixir_nickname`, and any the hub adds later — is switched off through
+the connector's per-tool `configs`, and refused again (`not_available`) on
+the direct-client path the API sometimes hands back. The first dry-run
+review filed a real item with the maintainer; a prompt line was the only
+fence until now. `npm run probe` prints the writes each kind of turn keeps;
+without annotations (`tool_annotations_missing`) live lanes keep
+everything and rehearsals lose the two prompted writes. Belt and braces
+for an operator: an agent key's capabilities can be narrowed on its page in
+Elixir (untick `recordings:write` and `collections:write`), which the hub
+enforces on the next call.
 
 Since contract 0.37.0 the connection describes itself as data:
 `initialize._meta["elixir.poapkings.com/principal"]` carries `kind` and

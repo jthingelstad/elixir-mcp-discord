@@ -470,6 +470,8 @@ export async function runReview({
     maxTokens: 16000,
     routineKey: "review",
     lane,
+    // The rehearsal line above asks; this makes it so (src/tools.js).
+    policy: dryRun ? "rehearsal" : "review",
     localTools: [
       proposeTool({ files, proposals, max: config.review.maxProposals }),
       reportTool({ reports }),
