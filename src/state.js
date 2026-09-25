@@ -98,15 +98,22 @@ const TURNS_KEEP = 200;
  * defaults plus one key — the month's spend back to $0 (a budget that could
  * be spent twice), every cursor and run gone. The bad file is now moved
  * aside, never overwritten, and said out loud; what starts afresh is the
- * same seed-don't-drain state a new install gets.
+ * same seed-don't-drain state a new install gets. One that cannot be READ
+ * at all is left where it is and every access throws until it can.
  */
 function read() {
   let raw;
   try {
     raw = fs.readFileSync(STATE_PATH, "utf8");
   } catch (error) {
-    if (error.code !== "ENOENT") log.error("state_unreadable", { path: STATE_PATH, error: error.message });
-    return { ...DEFAULTS };
+    if (error.code === "ENOENT") return { ...DEFAULTS };
+    // A file that is there and cannot be read (permissions, EIO, a
+    // directory in its place) is not an empty one: returned as defaults, the
+    // next write renamed a fresh state over it. Every writer reads first, so
+    // throwing here stops the write too; a transient error clears itself on
+    // the next tick, a lasting one is this line until someone fixes it.
+    log.error("state_unreadable", { path: STATE_PATH, error: error.message, code: error.code });
+    throw new Error(`state file ${STATE_PATH} is unreadable (${error.code ?? error.message}); nothing was written`);
   }
   try {
     return { ...DEFAULTS, ...JSON.parse(raw) };

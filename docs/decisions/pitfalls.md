@@ -245,7 +245,10 @@
   a reader never sees half a file; a file that still fails to parse is
   renamed to `state.json.corrupt-<time>`, logged as `state_corrupt`, and
   the process starts from the seed-don't-drain defaults. Do not go back to
-  `writeFileSync` in place.
+  `writeFileSync` in place. A file that is there but cannot be READ at all
+  (permissions, EIO) throws on every access instead (`state_unreadable`):
+  read as empty, the next write renamed fresh state over it (Codex review
+  on PR #6).
 - **Every lane runs one pass at a time — since 2026-09-25.** Three found
   in review, none yet seen live: the scheduler's `setInterval` overlapped a
   tick that was still on a slow routine, and the second tick ran the next

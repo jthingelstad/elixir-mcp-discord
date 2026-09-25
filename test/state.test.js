@@ -60,3 +60,16 @@ test("a corrupt file is moved aside, never overwritten, and the next write start
     "the kept copy is untouched by the next write",
   );
 });
+
+test("a state file that is there but cannot be read stops every access, and nothing is written over it", () => {
+  // A directory in its place reads as EISDIR — the same branch as a file
+  // this user may not read (EACCES), which root cannot reproduce here.
+  fs.mkdirSync(STATE);
+  try {
+    assert.throws(() => state.get("runs"), /unreadable/);
+    assert.throws(() => state.markRun("editor", "x"), /unreadable/, "the write never happens");
+    assert.ok(fs.statSync(STATE).isDirectory(), "what was there is untouched");
+  } finally {
+    fs.rmSync(STATE, { recursive: true, force: true });
+  }
+});
