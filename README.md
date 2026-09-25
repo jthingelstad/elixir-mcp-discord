@@ -359,7 +359,8 @@ explicit (`CHANNEL_ASK`).
 ### No fallback, on purpose
 
 If Elixir MCP is down, this bot says so and stops. It has nothing else to
-consult. That makes it an honest instrument: when an answer is good, the MCP
+consult. (When the model API is what failed, it says that instead: an
+outage should be blamed on the service that had it.) That makes it an honest instrument: when an answer is good, the MCP
 server earned it.
 
 ### One thread per question

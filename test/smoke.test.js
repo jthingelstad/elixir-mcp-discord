@@ -474,3 +474,12 @@ test("a member's request reaches the operator once, three a day, and the cap sto
   config.askDailyTurnsPerMember = 20;
   notify.configure({ client: null });
 });
+
+test("a failed answer says which service failed: the model API is not Elixir MCP", async () => {
+  const { failureLine } = await import("../src/ask.js");
+  assert.match(failureLine("overloaded_error"), /Claude API/);
+  assert.doesNotMatch(failureLine("overloaded_error"), /talking to Elixir MCP/);
+  assert.match(failureLine("MCP server 'elixir-mcp' connection failed"), /talking to Elixir MCP/);
+  assert.match(failureLine("refusal"), /not able to answer/);
+  assert.match(failureLine('No price for model "x"'), /misconfigured/);
+});

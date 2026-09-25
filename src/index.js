@@ -45,6 +45,12 @@ const client = new Client({
   // the message, the reaction and sometimes the user uncached; partials let
   // the event through so it can be fetched.
   partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User],
+  // Nothing the bot writes pings anyone but the member it is replying to.
+  // Its words carry names from the record, a room it read and members'
+  // questions; without this default a post containing <@id>, a role
+  // mention or @everyone (where the role is ever granted that) would ping
+  // them. A message that sets its own allowedMentions still wins.
+  allowedMentions: { parse: [], repliedUser: true },
 });
 
 /** Logical channel name -> Discord channel, resolved once and remembered. A

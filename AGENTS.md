@@ -789,6 +789,19 @@ cannot be enforced is worse than none, because it looks like it works.
   the sweep on the review lane's pot, records `friction` on the turn and
   `filed` in the ledger, and takes `sweepFn` for tests. The prompt says it
   too: never claim a filing the call does not back.
+- **Nothing the bot writes pings anyone but the asker — since 2026-09-25.**
+  Routine posts and ask-lane chunks were sent with no `allowedMentions`
+  and the client set no default, so a `<@id>`, a mentionable role or
+  `@everyone` (if the role were ever granted it) in a post built from the
+  record, a room read or a member's question would ping. The client
+  default is `{ parse: [], repliedUser: true }`; a message that sets its
+  own still wins (the DM and notices already did).
+- **A failed answer names the service that failed — since 2026-09-25.**
+  Every ask-lane failure read "Something broke … talking to Elixir MCP",
+  an Anthropic `overloaded_error` included, in the channel that exists to
+  judge Elixir MCP. `failureLine` in `src/ask.js`: an error naming the MCP
+  server is Elixir's, a refusal is a refusal, an unpriced model is ours,
+  anything else is the model API's.
 - **Ask history skips footers and pinned messages.** `isConversational` in
   `src/ask.js` drops bot messages starting with `-#` (traces, filed notes,
   the placeholder) and anything pinned; before that the model read its own

@@ -226,6 +226,24 @@ export function tellOperatorTool({ message, channelName }) {
 }
 
 /**
+ * What a member reads when the turn failed — and WHICH service failed. Every
+ * failure used to read "talking to Elixir MCP", including the model API's
+ * own (an overloaded_error, a timeout), in a channel whose purpose is to
+ * judge whether Elixir MCP is good enough: the preview's evidence, blamed on
+ * the wrong party. The MCP connector's failures come back through the model
+ * API naming the MCP server; anything else is the model's side, or ours.
+ */
+export function failureLine(error) {
+  const text = String(error ?? "unknown error");
+  if (text === "refusal") return "I'm not able to answer that one.";
+  if (text.startsWith("No price for model"))
+    return "I can't answer right now: my model is misconfigured, and whoever runs me has been told.";
+  if (/\bmcp\b|elixir/i.test(text))
+    return `Something broke talking to Elixir MCP: \`${text.slice(0, 300)}\`. There's no local fallback here by design, so that's the whole answer.`;
+  return `The model I run on (the Claude API) failed on that one: \`${text.slice(0, 300)}\`. Elixir MCP wasn't the problem; asking again in a minute usually works.`;
+}
+
+/**
  * A PER-MEMBER CAP. One member can drain the shared ask budget for
  * everyone by chatting. ASK_DAILY_TURNS_PER_MEMBER (config.json, default
  * 20) is the line, with a polite sentence when it is reached; admins are
@@ -455,11 +473,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
     clearInterval(live.timer);
 
     if (!result.ok) {
-      await live.finish(
-        result.error === "refusal"
-          ? "I'm not able to answer that one."
-          : `Something broke on my side talking to Elixir MCP: \`${result.error}\`. There's no local fallback here by design, so that's the whole answer.`,
-      );
+      await live.finish(failureLine(result.error));
       log.error("ask_failed", { routine: routine.key, error: result.error });
       // Our failure, not their question: it does not count against them.
       countMemberTurn(message.author.id, new Date(), -1);
