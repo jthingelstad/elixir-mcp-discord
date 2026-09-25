@@ -1,9 +1,9 @@
 # systemd user unit for elixir-mcp-discord. Rendered by scripts/install-systemd.sh;
 # the placeholders are absolute paths and yours are not these.
 #
-# Runs as a USER service (systemctl --user), so it needs no root and reads the
-# .env in the checkout like every other way of running it. To keep it running
-# after you log out: `loginctl enable-linger $USER`.
+# Runs as a USER service (systemctl --user), so it needs no root; the working
+# directory is the INSTANCE, whose .env, config.json, agent/ and state/ it
+# reads. To keep it running after you log out: `loginctl enable-linger $USER`.
 [Unit]
 Description=Discord bot powered entirely by Elixir MCP
 After=network-online.target
@@ -15,6 +15,9 @@ Type=simple
 # state/ resolve against it. One checkout, several bots.
 WorkingDirectory=__INSTANCE__
 ExecStart=__NODE__ __REPO__/src/index.js
+# A setting changed from the DM that needs a restart is applied by exiting;
+# Restart=always brings it back. (systemd's INVOCATION_ID says the same.)
+Environment=SERVICE_MANAGED=1
 Restart=always
 # A job that dies on startup (bad token, missing .env) would otherwise respawn
 # instantly forever. Thirty seconds keeps a real crash loop legible in the journal.

@@ -881,6 +881,21 @@ cannot be enforced is worse than none, because it looks like it works.
   the scheduler marks every routine's current period as done; the feedback
   ledger marks history as shown. All three have posted a backlog into a channel
   at least once. Do not "helpfully" replay.
+- **The container mounts the whole instance — since 2026-09-25.** The
+  Docker recipe mounted `state/` and `agent/` and passed `.env` as
+  `--env-file`, which was right until settings moved to `config.json`
+  (2026-09-15): after that a container had no budgets (unset is
+  unlimited), no admins, no ask channel, and a DM setting change was
+  written inside the container and lost. The image now sets
+  `INSTANCE_DIR=/instance` and `SERVICE_MANAGED=1`, carries git (an
+  instance repo keeps committing), no longer `chown`s the code to the
+  runtime user, and runs setup too (`node src/setup.js /instance`, which
+  skips the service installer inside a container). Separately,
+  `serviceManaged()` read only `ppid === 1`, but a systemd `--user`
+  unit's parent is the user manager, so the README's "restarts itself
+  under systemd" was false; it reads `INVOCATION_ID` now, and the unit
+  template sets `SERVICE_MANAGED=1`. Not built here (no Docker daemon in
+  the session that made it): build and boot it once before relying on it.
 - **`state.json` is written by rename, and an unreadable one is kept — since
   2026-09-25.** Every writer in `src/state.js` is read-modify-write of the
   whole file, and `read` used to return the defaults for a torn or

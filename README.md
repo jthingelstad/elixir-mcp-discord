@@ -268,7 +268,7 @@ nobody else sees it, and anyone else who DMs it gets one polite line:
   questions to #ask-bot". Each is checked the way setup checks it and shown
   as a diff; Apply rewrites `config.json` and the change is live — only
   the command prefix and the feed poll interval restart the bot, which it
-  does itself under launchd or systemd. Keys, tokens and the wiring ids
+  does itself under launchd, systemd or Docker's restart policy. Keys, tokens and the wiring ids
   live in `.env`, which it cannot reach. `settings` shows the current
   values.
 - **Try before posting.** `try war-deck-check` runs the routine and shows
@@ -620,9 +620,12 @@ loginctl enable-linger $USER              # keep it running after you log out
 ```bash
 I=~/.elixir-mcp-discord/myclan
 docker build -t elixir-mcp-discord .
+# setup, in the image, if node is not on the host
+docker run -it --rm --user "$(id -u):$(id -g)" -v "$I:/instance" \
+  elixir-mcp-discord node src/setup.js /instance
+# the bot
 docker run -d --name elixir-mcp-discord-myclan --restart unless-stopped \
-  --env-file $I/.env -v "$I/state:/app/state" -v "$I/agent:/app/agent" \
-  elixir-mcp-discord
+  --user "$(id -u):$(id -g)" -v "$I:/instance" elixir-mcp-discord
 ```
 
 Both service templates are rendered rather than committed, because a unit file
@@ -631,9 +634,13 @@ deliberate: `node` is referenced by absolute path (neither launchd nor systemd
 reads your shell profile); the working directory is the instance so its
 `.env`, `agent/` and `state/` are the ones found; and the restart throttle is
 30 seconds so a job that dies on startup leaves a legible crash loop in the
-log instead of drowning it. The container mounts the instance's `state/` and
-`agent/` so cursors and budgets survive a replacement and a prompt edit needs
-no rebuild.
+log instead of drowning it. The container mounts the whole instance —
+`.env`, `config.json`, `agent/`, `state/` — as the host user that owns it,
+so settings, cursors and budgets survive a replacement, a prompt edit needs
+no rebuild, and a setting that needs a restart is applied by the restart
+policy. (Before 2026-09-25 the recipe mounted only `state/` and `agent/`;
+a container started that way has no `config.json`, which means no
+budgets, no admins and no ask channel.)
 
 Every boot checks the channels again — in the guild, the role can see, post
 and read history, plus threads for an ask channel — and complains in the log

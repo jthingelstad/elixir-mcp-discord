@@ -759,11 +759,24 @@ ok("everything checked out");
 
 // --- 12. Run it -------------------------------------------------------------------
 
+// Inside the image (Dockerfile) there is no service manager to install into
+// and no scripts/ to install with: the container IS the service.
+const inContainer = fs.existsSync("/.dockerenv") || fs.existsSync("/run/.containerenv");
+const installer = inContainer
+  ? null
+  : os.platform() === "darwin"
+    ? "install-launchd.sh"
+    : os.platform() === "linux"
+      ? "install-systemd.sh"
+      : null;
 if (interactive) {
   heading("run it");
-  const installer =
-    os.platform() === "darwin" ? "install-launchd.sh" : os.platform() === "linux" ? "install-systemd.sh" : null;
-  if (!installer) {
+  if (inContainer) {
+    note("start the container with this instance mounted (see the Dockerfile):");
+    note(
+      'docker run -d --restart unless-stopped --user "$(id -u):$(id -g)" -v "<instance>:/instance" elixir-mcp-discord',
+    );
+  } else if (!installer) {
     note(`start it with: INSTANCE_DIR=${instanceDir} npm start`);
   } else if (await yesNo(`Install and start it now as a service (${installer})?`, true)) {
     const label = `com.poapkings.elixir-mcp-discord.${path.basename(instanceDir)}`;
@@ -792,8 +805,8 @@ if (interactive) {
   } else {
     note(`later: ./scripts/${installer} ${instanceDir}`);
   }
-} else if (!checkOnly) {
-  note(`next: ./scripts/install-launchd.sh ${instanceDir}`);
+} else if (!checkOnly && installer) {
+  note(`next: ./scripts/${installer} ${instanceDir}`);
 }
 if (!checkOnly && unresolved.length === 0) {
   note("next: DM the bot from an admin account. It introduces itself, offers the");

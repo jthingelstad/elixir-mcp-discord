@@ -228,10 +228,13 @@ export function writeConfig(next) {
 }
 
 /** Is a supervisor going to bring this process back if it exits? launchd is
- *  pid 1 on macOS; systemd system units too. SERVICE_MANAGED=1 says so
- *  explicitly for anything else. */
-export function serviceManaged() {
-  return process.env.SERVICE_MANAGED === "1" || process.ppid === 1;
+ *  pid 1 on macOS; systemd system units too. A systemd USER unit's parent is
+ *  the user's manager, not pid 1 — which is how install-systemd.sh installs
+ *  it — so until 2026-09-25 "restarts itself under systemd" was not true;
+ *  systemd sets INVOCATION_ID for every unit it starts. SERVICE_MANAGED=1
+ *  says so explicitly for anything else (the Dockerfile sets it). */
+export function serviceManaged(env = process.env, ppid = process.ppid) {
+  return env.SERVICE_MANAGED === "1" || Boolean(env.INVOCATION_ID) || ppid === 1;
 }
 
 /** Drain and exit so the service restarts on the new config.json — only
