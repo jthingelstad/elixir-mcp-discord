@@ -198,6 +198,14 @@
   the scheduler marks every routine's current period as done; the feedback
   ledger marks history as shown. All three have posted a backlog into a channel
   at least once. Do not "helpfully" replay.
+- **A container still says which commit it is — since 2026-09-25.** The
+  boot line's `build=<version>+<sha>` is how a deploy is verified, and the
+  image left `.git` out, so a bot built from the checkout would have logged
+  the version alone. `.dockerignore` now lets `.git/HEAD`, `.git/refs` and
+  `.git/packed-refs` through (never the objects), a first build stage makes
+  an empty `.git` when the context has none (a tarball), and `buildId`
+  reads a packed ref as well as a loose one — a fresh clone packs them.
+  Not built here either; the first real build's boot line is the check.
 - **Docker is the recommended install — since 2026-09-25 (Jamie's D1).**
   `scripts/install-docker.sh <instance>...` writes one `compose.yml` beside
   the instances (one service each: `restart: unless-stopped`, `init`, the

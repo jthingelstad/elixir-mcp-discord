@@ -24,6 +24,15 @@
 #
 #   docker run -it --rm --user "$(id -u):$(id -g)" -v "$I:/instance" \
 #     elixir-mcp-discord node src/setup.js /instance
+
+# The build context, once, so the final stage can take .git's HEAD and refs
+# when the context has them (a checkout) and an empty .git when it does not
+# (a tarball) — COPY of a path that may be absent would fail the build.
+FROM node:24-alpine AS context
+WORKDIR /src
+COPY . .
+RUN mkdir -p .git
+
 FROM node:24-alpine
 
 RUN apk add --no-cache git
@@ -42,6 +51,8 @@ RUN npm ci --omit=dev
 # The code, and the example prompts setup copies into a new instance.
 COPY src ./src
 COPY agent ./agent
+# Which commit this is, for the boot line's build=<version>+<sha>.
+COPY --from=context /src/.git ./.git
 
 VOLUME /instance
 USER node
