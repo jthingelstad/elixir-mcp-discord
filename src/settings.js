@@ -47,6 +47,11 @@ function isTimezone(tz) {
 }
 
 const money = (name) => (v) =>
+  v === "" || (Number.isFinite(Number(v)) && Number(v) >= 0) ? null : `${name} must be a number of dollars`;
+/** A monthly lane budget also takes "unlimited" — said on purpose, since an
+ *  unset one is the default cap (config.js). Nothing else does: "unlimited"
+ *  for TURN_RESERVE_USD read as NaN, and a NaN reserve let a lane overshoot. */
+const laneMoney = (name) => (v) =>
   v === "" || /^unlimited$/i.test(v) || (Number.isFinite(Number(v)) && Number(v) >= 0)
     ? null
     : `${name} must be a number of dollars, or "unlimited" (empty returns it to the default cap)`;
@@ -68,16 +73,16 @@ const effort = (v) => (EFFORTS.has(v.toLowerCase()) ? null : `effort is one of $
 export const SETTINGS = {
   MONTHLY_BUDGET_USD: {
     about: 'monthly budget for scheduled and event posts, USD, or "unlimited"; unset = the $10 default cap',
-    check: money("MONTHLY_BUDGET_USD"),
+    check: laneMoney("MONTHLY_BUDGET_USD"),
   },
   ASK_MONTHLY_BUDGET_USD: {
     about:
       'monthly budget for members\' questions (and their 👎 sweeps), USD, or "unlimited"; unset = the $10 default cap',
-    check: money("ASK_MONTHLY_BUDGET_USD"),
+    check: laneMoney("ASK_MONTHLY_BUDGET_USD"),
   },
   REVIEW_MONTHLY_BUDGET_USD: {
     about: 'monthly budget for the review lane and DM turns, USD, or "unlimited"; unset = the $10 default cap',
-    check: money("REVIEW_MONTHLY_BUDGET_USD"),
+    check: laneMoney("REVIEW_MONTHLY_BUDGET_USD"),
   },
   ASK_DAILY_TURNS_PER_MEMBER: {
     about: "questions one member may ask per day; 0 = no cap; admins exempt",

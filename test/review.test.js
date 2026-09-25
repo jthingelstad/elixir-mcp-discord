@@ -1066,6 +1066,10 @@ test("a channel setting resolves a #name to an id the bot is granted in", async 
     { id: "2", name: "ask-bot", role: "ask" },
   ];
   assert.deepEqual(checkSetting("CHANNEL_ASK", "#ask-bot", { entries }), { ok: true, value: "2", shown: "#ask-bot" });
+  // "unlimited" is a lane budget's word only: a NaN reserve disarms the strict check.
+  assert.equal(checkSetting("ASK_MONTHLY_BUDGET_USD", "unlimited", { entries }).ok, true);
+  assert.equal(checkSetting("TURN_RESERVE_USD", "unlimited", { entries }).ok, false);
+  assert.equal(checkSetting("DAILY_USD_CAP", "unlimited", { entries }).ok, false);
   assert.deepEqual(checkSetting("CHANNEL_ASK", "77", { entries }), { ok: true, value: "77", shown: "#news" });
   assert.match(checkSetting("CHANNEL_ASK", "#elsewhere", { entries }).error, /not a channel the bot is granted in/);
 });

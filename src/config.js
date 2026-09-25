@@ -355,7 +355,10 @@ export const config = {
   // the floor for that estimate; the real figure climbs to the largest turn
   // the lane has actually produced.
   get turnReserveUsd() {
-    return num("TURN_RESERVE_USD", "0.30");
+    // A reserve that is not a number (NaN) makes every reserve comparison
+    // false, and the strict check stops being strict: the default instead.
+    const reserve = num("TURN_RESERVE_USD", "0.30");
+    return Number.isFinite(reserve) && reserve >= 0 ? reserve : 0.3;
   },
 
   // Soft guard on top of the monthly budgets: the process stops answering once

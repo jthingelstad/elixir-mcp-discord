@@ -27,6 +27,11 @@ lock the operator out of the DM turn that sets it. `budget.status()`
 carries `source` (set / default / unlimited); boot logs each lane and DMs
 the defaulted ones once a day. `$0` now turns a lane off: `check` read
 `!budget` as unlimited, so a zero budget was the opposite of what it said.
+`"unlimited"` is a lane budget's word only (`laneMoney` in
+`src/settings.js`): accepted for `TURN_RESERVE_USD` it read as NaN, and a
+NaN reserve makes every reserve comparison false, so the strict check let a
+lane overshoot; `config.turnReserveUsd` falls back to 0.30 for anything
+that is not a number.
 
 **Strict means checked BEFORE the call.** A lane refuses to start a turn that
 could take it past its budget, estimating from the largest turn that lane has
