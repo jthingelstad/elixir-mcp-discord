@@ -469,12 +469,22 @@ test("a member's request reaches the operator once, three a day, and the cap sto
   await Promise.all(burst);
   assert.equal(calls, 2, "the cap holds for questions asked at once");
 
-  // A turn that fails on our side gives the question back.
+  // A turn that fails on our side gives the question back — a failed call,
+  // or a throw on the way to one — and only once.
+  const { memberTurnsToday } = await import("../src/ask.js");
   state.set({ askCounts: null });
   await handleAsk(fakeMessage("breaks").message, ROUTINE, {
     askFn: async () => ({ ...RESULT, ok: false, error: "overloaded_error" }),
   });
-  assert.equal((await import("../src/ask.js")).memberTurnsToday("42"), 0);
+  assert.equal(memberTurnsToday("42"), 0);
+  await handleAsk(fakeMessage("throws").message, ROUTINE, {
+    askFn: async () => {
+      throw new Error("socket hang up");
+    },
+  });
+  assert.equal(memberTurnsToday("42"), 0, "a throw before the answer gives it back too");
+  await handleAsk(fakeMessage("answered").message, ROUTINE, { askFn: async () => RESULT });
+  assert.equal(memberTurnsToday("42"), 1, "an answered question counts");
   config.askDailyTurnsPerMember = 20;
   notify.configure({ client: null });
 });

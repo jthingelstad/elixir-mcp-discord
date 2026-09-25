@@ -91,6 +91,13 @@ class LiveMessage {
     this.rendered = null;
     this.next = null;
     this.timer = setInterval(() => this.flush(), EDIT_MS);
+    // Never the reason the process stays up: the Discord client is.
+    this.timer.unref?.();
+  }
+
+  /** Stop editing: on finish, and when the turn threw before it could. */
+  stop() {
+    clearInterval(this.timer);
   }
 
   update(content) {
@@ -113,7 +120,7 @@ class LiveMessage {
   }
 
   async finish(content) {
-    clearInterval(this.timer);
+    this.stop();
     this.next = content.slice(0, 2000);
     this.rendered = null; // force the last write through
     await this.flush();
@@ -394,8 +401,19 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
   }
   // Counted when the turn STARTS. Counted after the answer, a burst of
   // questions — or several threads at once — all passed the check above
-  // before the first one was counted.
+  // before the first one was counted. Given back, once, if the turn fails
+  // on our side before the model has answered: a failed call, or a throw
+  // on the way to it (the thread, the history, the placeholder, the call).
   countMemberTurn(message.author.id);
+  let settled = false;
+  const giveBack = () => {
+    if (settled) return;
+    settled = true;
+    countMemberTurn(message.author.id, new Date(), -1);
+  };
+  // Outside the try, so a throw after the placeholder still stops its timer:
+  // one left running edited nothing, every 1.5 s, for the life of the process.
+  let live = null;
 
   try {
     const inThread = Boolean(message.channel?.isThread?.());
@@ -409,7 +427,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
     const thread = inThread ? null : await threadFor(message);
     const target = thread ?? message.channel;
     const placeholder = thread ? await thread.send("-# thinking…") : await message.reply("-# thinking…");
-    const live = new LiveMessage(placeholder);
+    live = new LiveMessage(placeholder);
     const toolsSoFar = [];
     let streamed = "";
 
@@ -474,13 +492,13 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
       },
     });
 
-    clearInterval(live.timer);
+    live.stop();
 
     if (!result.ok) {
       await live.finish(failureLine(result.error));
       log.error("ask_failed", { routine: routine.key, error: result.error });
       // Our failure, not their question: it does not count against them.
-      countMemberTurn(message.author.id, new Date(), -1);
+      giveBack();
       record(result, { error: result.error });
       await notify(
         "answer failed",
@@ -490,6 +508,8 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
       return;
     }
 
+    // The model answered — the paid part is done — so the question counts.
+    settled = true;
     const answer = result.text || "I got nothing back for that.";
     const friction = detectFriction({
       text: answer,
@@ -568,6 +588,8 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
       }
     }
   } catch (error) {
+    live?.stop();
+    giveBack();
     log.error("ask_crashed", {
       error: error.message,
       stack: error.stack?.slice(0, 400),

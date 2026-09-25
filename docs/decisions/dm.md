@@ -88,8 +88,11 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
 - **`ASK_DAILY_TURNS_PER_MEMBER`** (config.json, default 20, live): one
   member cannot drain the shared ask pot; admins exempt; `state.askCounts`.
   Since 2026-09-25 a question is counted when its turn STARTS (and given
-  back if the turn fails on our side): counted after the answer, five
-  questions sent at once all passed a cap of two.
+  back, once, if the turn fails on our side before the model has answered
+  — a failed call or a throw on the way to one): counted after the answer,
+  five questions sent at once all passed a cap of two. A throw also stops
+  the placeholder's edit timer now (`LiveMessage.stop`); one left running
+  ticked every 1.5 s for the life of the process.
 - **Every accepted change is a commit** (`src/instance-git.js`) when the
   instance directory is a git repository: apply, undo and a one-shot's
   retirement commit `config.json` and `agent/` with the proposal's summary
