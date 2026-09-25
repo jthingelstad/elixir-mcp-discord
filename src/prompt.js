@@ -211,7 +211,25 @@ export const MEMORY_MAX_CHARS = 6000;
  */
 export const MEMORY_ENTRY = /^- (\d{4}-\d{2}-\d{2}) \((turns [^)]+|from owner)\)(?: until (\d{4}-\d{2}-\d{2}))?: (.+)$/;
 
+/**
+ * The example entries agent/memory.md shipped with from 2026-09-14 to
+ * 2026-09-25, as live lines. Setup copies that file into every new
+ * instance and each line parsed as an entry, so every bot set up in that
+ * window was told, as its operator, that "we call war days 'boat days'" —
+ * and the review can never remove an owner's line. The example file now
+ * keeps its examples in a comment; these three are not entries wherever
+ * they are still sitting.
+ */
+const SHIPPED_EXAMPLES = new Set([
+  "- 2026-09-14 (turns a1b2c3d4, e5f6a7b8): pass the segment to battles_meta_cards or it answers for the whole corpus",
+  '- 2026-09-14 (from owner): we call war days "boat days"',
+  "- 2026-09-14 (from owner) until 2026-09-21: the clan is pushing for top 10 in war this week",
+]);
+
+let exampleWarned = false;
+
 export function parseMemoryEntry(line) {
+  if (SHIPPED_EXAMPLES.has(line.trim())) return null;
   const m = MEMORY_ENTRY.exec(line.trim());
   if (!m) return null;
   return {
@@ -232,11 +250,32 @@ export function liveMemoryLines(text, today = new Date().toISOString().slice(0, 
   });
 }
 
+/** What of memory.md reaches the prompt: not what is inside an HTML comment
+ *  (the file's notes to the operator, which are paid for on every turn
+ *  otherwise), not an expired entry, not a shipped example. */
+export function memoryText(raw, today = undefined) {
+  const uncommented = raw.replace(/<!--[\s\S]*?-->/g, "");
+  const lines = liveMemoryLines(uncommented, today).filter((line) => {
+    if (!SHIPPED_EXAMPLES.has(line.trim())) return true;
+    if (!exampleWarned) {
+      exampleWarned = true;
+      log.warn("memory_example_ignored", { hint: "delete the example lines dated 2026-09-14 from agent/memory.md" });
+    }
+    return false;
+  });
+  // A title and nothing under it is an empty memory, not a MEMORY block.
+  if (!lines.some((line) => line.trim() && !line.trim().startsWith("#"))) return "";
+  return lines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function readMemory({ dir = config.agentDir, today = undefined } = {}) {
   const file = path.join(dir, "memory.md");
   try {
     const raw = fs.readFileSync(file, "utf8");
-    const text = liveMemoryLines(raw, today).join("\n").trim();
+    const text = memoryText(raw, today);
     if (!text) return null;
     if (text.length > MEMORY_MAX_CHARS) {
       log.warn("memory_clipped", { file, chars: text.length, max: MEMORY_MAX_CHARS });

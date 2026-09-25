@@ -231,7 +231,10 @@ Accepted edits are the bot's memory. `agent/memory.md` collects how to do
 this job here — which tool answers what, what your clan calls things; the
 house rules and a routine's brief change only when a rule itself was wrong.
 It never learns facts about the game (Elixir has those) and never anything
-about a person.
+about a person. A new instance starts with none: the file's notes to you
+sit in an HTML comment, which the bot never reads. (If yours was set up
+before 2026-09-25 and still has three example lines dated 2026-09-14 — one
+says war days are "boat days" — delete them; they are ignored either way.)
 
 It runs on its own model and its own budget (`REVIEW_MODEL`,
 `REVIEW_MONTHLY_BUDGET_USD`), so it can never cost a member an answer.

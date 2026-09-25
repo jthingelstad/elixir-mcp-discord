@@ -271,6 +271,16 @@ design is there. The short version:
   `edit.by === "owner"`, which only the DM lane sets).
   `REVIEW_AUTO_MEMORY=true` lets the review write it without a click (never
   `identity.md`, never a brief), still reported by DM with Undo.
+  **Since 2026-09-25 the example file has no entries.** It shipped three
+  example lines, indented as a code block — and `parseMemoryEntry` trims,
+  so each was a live entry in every instance setup copied it into: every
+  new bot was told, as its operator, that the clan calls war days "boat
+  days", and the review could never remove an owner's line. The notes and
+  examples are now inside an HTML comment with `YYYY-MM-DD` placeholders;
+  `memoryText` drops comments (so the file's own notes are no longer paid
+  for on every turn) and a title with nothing under it; and the three old
+  lines are `SHIPPED_EXAMPLES` — never an entry, never in the prompt,
+  `memory_example_ignored` once in the log — wherever they still sit.
 - **Its own lane.** `review` beside `routines` and `ask` in `src/budget.js`,
   `REVIEW_MODEL` (default `claude-opus-5`), `REVIEW_EFFORT`, `REVIEW_AT` in
   the operator's timezone as a pseudo-routine on the same run ledger

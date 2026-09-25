@@ -30,7 +30,7 @@ import {
 } from "../src/review.js";
 import { parseVerdict } from "../src/feedback.js";
 import { looksLikeCorrection } from "../src/ask.js";
-import { readMemory, systemFor } from "../src/prompt.js";
+import { readMemory, systemFor, parseMemoryEntry } from "../src/prompt.js";
 import { parseRoutine } from "../src/routines.js";
 import { handleAsk } from "../src/ask.js";
 import { handleReaction } from "../src/reactions.js";
@@ -562,6 +562,30 @@ test("memory.md rides the system prompt after the house rules; expired lines dro
   assert.doesNotMatch(system, /last week's push/, "expired entries are not loaded");
   assert.equal(readMemory({ dir: path.join(dir, "nowhere") }), null);
   assert.doesNotMatch(systemFor(routine, { identity: "Plain.", memory: null }), /MEMORY/);
+});
+
+test("the example memory.md is empty memory, and the examples it used to ship are never read as entries", (t) => {
+  const shipped = fs.readFileSync(path.join(import.meta.dirname, "..", "agent", "memory.md"), "utf8");
+  assert.equal(readMemory({ dir: agentDir(t, { "memory.md": shipped }) }), null, "notes in a comment, no entries");
+
+  // An instance set up between 2026-09-14 and 2026-09-25 holds the old
+  // examples as live lines, beside whatever it has learned since.
+  const legacy = [
+    "# Memory",
+    "",
+    "    - 2026-09-14 (turns a1b2c3d4, e5f6a7b8): pass the segment to battles_meta_cards or it answers for the whole corpus",
+    '    - 2026-09-14 (from owner): we call war days "boat days"',
+    "    - 2026-09-14 (from owner) until 2026-09-21: the clan is pushing for top 10 in war this week",
+    "",
+    "<!-- a note to the operator -->",
+    "- 2026-09-20 (from owner): the war channel is #battle-plans",
+  ].join("\n");
+  const memory = readMemory({ dir: agentDir(t, { "memory.md": legacy }), today: "2026-09-18" });
+  assert.doesNotMatch(memory, /boat days/, "the example owner line is not a house rule");
+  assert.doesNotMatch(memory, /battles_meta_cards/);
+  assert.doesNotMatch(memory, /note to the operator/, "comments are not paid for on every turn");
+  assert.match(memory, /the war channel is #battle-plans/, "what the operator said still is");
+  assert.equal(parseMemoryEntry('- 2026-09-14 (from owner): we call war days "boat days"'), null);
 });
 
 test("the review clock is a schedule routine in the operator's zone, off when the lane is off", () => {
