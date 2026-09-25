@@ -49,7 +49,9 @@ older a session might remember.
 
 - **The gate is `npm run verify`** — prettier (120 columns; prose and
   `agent/` untouched), oxlint (correctness rules, the same set as
-  `elixir-mcp` minus React), knip (dead files, exports, dependencies), then
+  `elixir-mcp` minus React, plus `no-undef` since 2026-09-25 — oxlint's
+  correctness category does not include it, and an undefined identifier is
+  the `LiveMessage` class of bug), knip (dead files, exports, dependencies), then
   the tests. Run it before every commit; CI (`.github/workflows/verify.yml`)
   runs the same four steps on Node 22 and 24 and a separate `npm run audit`.
   A red step names itself. `npm run format` fixes formatting; `oxlint

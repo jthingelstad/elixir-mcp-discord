@@ -597,7 +597,9 @@ post/skip/split behaviour, prompt assembly, the ask path end to end, the
 ledger, the review lane's proposals and buttons, the DM console, settings,
 and the instance repository. The ask-path test exists because a refactor
 once deleted `LiveMessage` and every static check passed — a missing symbol
-is a runtime `ReferenceError`, and members found out instead.
+is a runtime `ReferenceError`, and members found out instead. Since
+2026-09-25 lint has `no-undef` too, so that one no longer gets past the
+static checks either.
 
 A tag is a release: `npm version minor && git push --follow-tags` runs
 `verify`, checks the tag matches `package.json`, and publishes the commits
