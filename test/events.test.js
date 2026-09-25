@@ -16,6 +16,7 @@ import {
   readerName,
   readWindow,
   pollRoutine,
+  eventsForDryRun,
   CARRY_RELEASE_HOURS,
 } from "../src/events.js";
 import * as state from "../src/state.js";
@@ -284,4 +285,33 @@ test("the catch-up is bounded, and says what it left unread", async () => {
     args.to ? { ok: false, error: "transport: boom" } : fakeHub(busyHour, { pageSize: 3 }).call(name, args);
   const failed = await readWindow("2026-09-25T10:55:00.000Z", { reader: "x" }, { call: failing });
   assert.equal(failed.ok, false, "a failed continuation fails the read, so the cursor stays");
+});
+
+test("a dry run hands the model the items the way the live lane does: its kinds, oldest first", async () => {
+  // No cursor: the rehearsal reads the last 24 hours, which the hub serves
+  // newest first. The live lane re-sorts; the rehearsal must too, or it is
+  // rehearsing a different prompt.
+  const editor = { key: "dry-run-order-editor", wake: ["member_joined", "returned"], carry: ["badge_earned"] };
+  const hub = fakeHub(busyHour, { pageSize: 50 });
+  const found = await eventsForDryRun(editor, { call: hub.call });
+  assert.deepEqual(hub.calls[0].args.kinds, ["member_joined", "returned", "badge_earned"], "the routine's kinds");
+  assert.equal(hub.calls[0].args.mark_read, false, "a rehearsal moves nothing");
+  assert.equal(hub.calls[0].args.reader, undefined);
+  assert.deepEqual(
+    found.events.timeline.map((i) => i.subject_name),
+    ["late", "joiner", "b1", "b2", "b3", "b4", "b5"],
+  );
+
+  // With a cursor, the pending window is read to its start like the live one.
+  state.setCursor(editor.key, "2026-09-25T10:55:00.000Z");
+  const busy = fakeHub(busyHour, { pageSize: 3 });
+  const pending = await eventsForDryRun(editor, { call: busy.call });
+  assert.equal(pending.count, 7);
+  assert.ok(busy.calls.length > 1, "the older pages were read");
+  assert.ok(
+    busy.calls.every((c) => c.args.mark_read === false && c.args.reader === undefined),
+    "and nothing was marked",
+  );
+  assert.equal(pending.events.timeline[0].subject_name, "late");
+  assert.equal(state.cursorFor(editor.key), "2026-09-25T10:55:00.000Z", "the cursor is untouched");
 });

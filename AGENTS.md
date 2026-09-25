@@ -816,12 +816,18 @@ cannot be enforced is worse than none, because it looks like it works.
 - **The feed is a TIMELINE since contract 3.0.0 (2026-09-13, two shape
   changes in one evening).** The tool is `elixir_timeline` (`mark_read:
   false` + our own ISO cursor); the response carries `timeline[]` — what
-  happened, oldest first, typed items `{at, subject_tag, subject_name, kind,
-  section, text, facts}` — and `entries[]`, one per subject as context
+  happened, typed items `{at, observed_at, subject_tag, subject_name, kind,
+  section, text, facts}`, NEWEST first since hub contract 7.0.0 (2026-09-23,
+  the timeline is a newsfeed) — and `entries[]`, one per subject as context
   (for an agent, ONE clan entry). A routine wakes only for the item kinds
   or sections it names (`kinds:` / `sections:` front matter; `relevant()` in
   `src/events.js`): a routine naming nothing fires on every poll. The model
-  is handed `{window, timeline: items, entries}`. A file still saying
+  is handed `{window, timeline: items, entries}` with the items re-sorted
+  OLDEST first by `oldestFirst` — what `prompt.js` and the editor brief
+  tell it — in the live lane and, since 2026-09-25, the dry run too, which
+  had passed the hub's newest-first order straight through (and now asks
+  the server for the routine's kinds and reads a busy pending window to its
+  start, as the live lane does). A file still saying
   `topics:` fails to parse with the migration in the message. There is no
   war-day-open item; a war-day post is a `clock` routine's job
   (`game_clock` says when; since 2026-09-17).

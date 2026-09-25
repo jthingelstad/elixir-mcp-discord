@@ -181,17 +181,23 @@ export async function readWindow(from, options = {}, { call = callTool, maxPages
  * about (or there is no cursor yet) it reads the last 24 hours instead,
  * because "nothing happened, nothing to show" is a useless answer to
  * somebody trying to improve the wording of the brief.
+ *
+ * The items reach the model as the live lane hands them: the routine's
+ * kinds asked of the server, the pending window read to its start, oldest
+ * first. The hub serves newest first (contract 7.0.0), and a rehearsal that
+ * showed the model the other order was rehearsing a different prompt.
  */
-export async function eventsForDryRun(routine) {
+export async function eventsForDryRun(routine, { call = callTool } = {}) {
   const cursor = state.cursorFor(routine.key);
   const seeded = typeof cursor === "string";
-  const payload = (result, items) => ({ window: result.window, timeline: items, entries: result.entries });
+  const payload = (result, items) => ({ window: result.window, timeline: oldestFirst(items), entries: result.entries });
+  const filters = { sections: routine.sections, kinds: subscribedKinds(routine) };
   if (seeded) {
-    const pending = await read(cursor, { sections: routine.sections });
+    const pending = await readWindow(cursor, filters, { call });
     const items = pending.ok ? relevant(pending.timeline, routine) : [];
     if (items.length) return { events: payload(pending, items), count: items.length, note: `pending since ${cursor}` };
   }
-  const day = await read(null, { sections: routine.sections });
+  const day = await read(null, { ...filters, call });
   if (!day.ok) return { events: null, count: 0, note: `feed unreadable: ${day.error}` };
   const items = relevant(day.timeline, routine);
   const why = seeded ? "nothing new since the cursor" : "no cursor yet (seeds on the first live poll)";

@@ -183,7 +183,9 @@ npm run routines                            # what will run, where, and this mon
 A dry run makes a real model call and shows you the answer, the tools it
 called, the shapes they returned and what it cost — without waiting for 12:30
 and without touching the channel. Files are re-read on every run, so editing a
-prompt needs no restart and no deploy.
+prompt needs no restart and no deploy. An event routine's dry run is handed
+the timeline the way the live lane hands it (the routine's kinds, oldest
+first) and moves no cursor.
 
 ## Reviewing what it said
 
