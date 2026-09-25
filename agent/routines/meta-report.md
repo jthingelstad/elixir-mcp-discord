@@ -11,6 +11,10 @@ Report what the corpus says about the current meta. Use battles_meta_decks and
 battles_meta_cards, and collections_browse or collections_get if a curated
 collection is relevant.
 
+This is a week's report: pass `days: 7` to every meta read. Without a window
+the meta tools read the current season to date, which is not this week; each
+response's `applied.window` says what was read.
+
 Two parts: what is rising and falling across the recorded corpus this week, and
 how your clan's play compares — what are you over-playing or under-playing
 relative to it.
