@@ -31,3 +31,20 @@ process.env.ANTHROPIC_API_KEY ||= "sk-ant-test";
 process.env.STATE_PATH ||= path.join(os.tmpdir(), `elixir-mcp-discord-test-${process.pid}.json`);
 // The turn ledger too: a test turn must not land in a live instance's record.
 process.env.LEDGER_DIR ||= path.join(os.tmpdir(), `elixir-mcp-discord-test-${process.pid}-turns`);
+
+// NO NETWORK, enforced (since 2026-09-25). A test that reached a real
+// service used to pass anyway — the friction sweep in the runner called
+// the Claude API with the dummy key above on every run, got a 401, and the
+// failure was swallowed as designed. Now any fetch is refused, and a test
+// file that tried one fails at exit, naming the URLs.
+const attempted = [];
+globalThis.fetch = async (input) => {
+  const url = typeof input === "string" ? input : (input?.url ?? String(input));
+  attempted.push(url);
+  throw new Error(`network is disabled in tests: ${url}`);
+};
+process.on("exit", () => {
+  if (attempted.length === 0) return;
+  console.error(`network attempted in tests (${attempted.length}): ${[...new Set(attempted)].join(", ")}`);
+  process.exitCode = 1;
+});

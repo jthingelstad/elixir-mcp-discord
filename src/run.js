@@ -379,6 +379,8 @@ async function runRoutineNow(
     resolve = resolveById,
     overrides = {},
     lane = laneFor(routine),
+    // The post-turn friction sweep is a model call of its own; a test injects it.
+    sweepFn = sweepFriction,
   } = {},
 ) {
   const blocked = spendBlock(lane);
@@ -655,7 +657,7 @@ async function runRoutineNow(
     ...(afterPost ? { error: `after_post: ${afterPost}` } : {}),
   });
   if (friction) {
-    const summary = await sweepFriction({
+    const summary = await sweepFn({
       question: `Scheduled routine "${routine.key}":\n${routine.prompt}`,
       answer: posted,
       friction,

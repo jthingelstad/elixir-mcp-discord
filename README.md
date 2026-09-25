@@ -595,7 +595,8 @@ files, exports and dependencies nothing uses; `npm run audit` checks runtime
 dependencies for high-severity advisories in a separate job. Dependabot
 opens a grouped PR for dev tooling weekly.
 
-No network, no spend in the tests: the model call and Discord are both
+No network, no spend in the tests — enforced: `scripts/setup-tests.js`
+refuses every fetch and fails the file that tried one. The model call and Discord are both
 injectable. They cover routine parsing (every mistake a hand-edited file can
 make), the schedule arithmetic including a DST boundary, the runner's
 post/skip/split behaviour, prompt assembly, the ask path end to end, the

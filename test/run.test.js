@@ -6,8 +6,13 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { runRoutine } from "../src/run.js";
+import { runRoutine as runLive } from "../src/run.js";
 import { parseRoutine } from "../src/routines.js";
+
+/** The runner with its friction sweep — a model call of its own — played
+ *  by a fake: a turn with tool errors used to reach the Claude API from
+ *  here, and the 401 was swallowed as designed. */
+const runRoutine = (routine, options = {}) => runLive(routine, { sweepFn: async () => null, ...options });
 
 function fakeChannel() {
   const sent = [];
