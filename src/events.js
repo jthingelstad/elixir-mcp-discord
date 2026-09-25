@@ -479,9 +479,24 @@ export function startEventLoop(routinesFn, resolveChannel) {
     seeded = true;
   };
 
-  void run().catch((error) => log.error("events_tick_failed", { error: error.message }));
-  return setInterval(
-    () => void run().catch((error) => log.error("events_tick_failed", { error: error.message })),
-    config.eventPollSeconds * 1000,
-  );
+  // One poll at a time. A turn can outlast the interval (a busy window, a slow
+  // model), and the cursor moves only after it succeeds — so an overlapping
+  // tick read the same window from the same cursor and posted it twice.
+  let busy = false;
+  const tick = async () => {
+    if (busy) {
+      log.info("events_tick_skipped", { reason: "previous poll still running" });
+      return;
+    }
+    busy = true;
+    try {
+      await run();
+    } catch (error) {
+      log.error("events_tick_failed", { error: error.message });
+    } finally {
+      busy = false;
+    }
+  };
+  void tick();
+  return setInterval(() => void tick(), config.eventPollSeconds * 1000);
 }

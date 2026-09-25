@@ -28,6 +28,15 @@ test("a write lands whole and leaves no temporary file behind", () => {
   assert.deepEqual(siblings(), []);
 });
 
+test("the same timeline item carried twice is held once", () => {
+  const badge = { kind: "badge_earned", subject_tag: "#A", at: "2026-09-25T10:00:00Z", text: "A earned a badge" };
+  const card = { kind: "card_unlocked", subject_tag: "#B", at: "2026-09-25T10:05:00Z", text: "B unlocked a card" };
+  state.addCarry("editor", [badge]);
+  // A release turn failed, the cursor stayed, and the next poll re-read the window.
+  state.addCarry("editor", [badge, card]);
+  assert.deepEqual(state.carried("editor"), [badge, card]);
+});
+
 test("a missing file is a fresh install, read as the defaults", () => {
   assert.equal(state.get("runs"), null);
   assert.deepEqual(state.get("cursors"), {});

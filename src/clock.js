@@ -77,7 +77,7 @@ export async function fire(routine, resolveChannel, { key, runFn = runRoutine } 
       `${routine.key} was due and not run: the routines lane is ${blocked.reason}. It runs again when the budget resets.`,
       { fingerprint: `budget:routines:${blocked.reason}`, every: 24 * HOUR_MS },
     );
-    return null;
+    return { ok: false, blocked: blocked.reason };
   }
   // Marked BEFORE the call, like the scheduler: a crash mid-post must not
   // leave the boundary eligible again — and a boundary already marked (two
@@ -115,6 +115,11 @@ export function startClockLane(
       return result.ok ? (result.body ?? null) : null;
     });
   const timers = new Map();
+  // { [routineKey]: { key, until } } — a boundary the budget declined. It is
+  // not marked (it should run once the lane has room), so the re-plan after
+  // the decline saw the same boundary, late, and armed it at zero delay: a
+  // loop of clock reads for the whole catch-up window. It waits RETRY_MS now.
+  const held = new Map();
   let planTimer = null;
   let stopped = false;
 
@@ -164,16 +169,23 @@ export function startClockLane(
           continue;
         }
       }
-      const delay = Math.min(MAX_TIMER_MS, Math.max(0, armed.at - at));
+      const hold = held.get(routine.key);
+      const fireAt = hold?.key === armed.key && hold.until > at ? new Date(hold.until) : armed.at;
+      if (fireAt === armed.at) held.delete(routine.key);
+      const delay = Math.min(MAX_TIMER_MS, Math.max(0, fireAt - at));
       log.info("clock_armed", {
         routine: routine.key,
-        at: armed.at.toISOString(),
+        at: fireAt.toISOString(),
         key: armed.key,
         late: armed.late ?? false,
+        held: fireAt === armed.at ? undefined : true,
       });
       const timer = setTimeout(() => {
         timers.delete(routine.key);
         void fire(routine, resolveChannel, { key: armed.key, runFn })
+          .then((run) => {
+            if (run?.blocked) held.set(routine.key, { key: armed.key, until: new Date(now().getTime() + RETRY_MS) });
+          })
           .catch((error) => log.error("clock_fire_failed", { routine: routine.key, error: error.message }))
           .finally(() => void plan());
       }, delay);

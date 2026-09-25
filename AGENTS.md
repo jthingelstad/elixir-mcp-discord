@@ -875,6 +875,19 @@ cannot be enforced is worse than none, because it looks like it works.
   renamed to `state.json.corrupt-<time>`, logged as `state_corrupt`, and
   the process starts from the seed-don't-drain defaults. Do not go back to
   `writeFileSync` in place.
+- **Every lane runs one pass at a time — since 2026-09-25.** Three found
+  in review, none yet seen live: the scheduler's `setInterval` overlapped a
+  tick that was still on a slow routine, and the second tick ran the next
+  due routine that the first then ran again (`tick` now re-reads `runs`
+  before each `markRun`, and `startScheduler` skips a tick while one runs);
+  the event loop's did the same with a turn longer than
+  `EVENT_POLL_SECONDS`, reading the unmoved cursor's window twice
+  (`events_tick_skipped` now); and a clock boundary the budget declined is
+  left unmarked by design, so the re-plan after the decline armed it again
+  at zero delay — 30 `game_clock` reads in 50 ms in the test, for the whole
+  catch-up window live. `fire` returns `{ blocked }` and the lane holds that
+  boundary `RETRY_MS`. A failed release turn also no longer carries the
+  same items twice (`addCarry` keeps one of each).
 - **Sonnet 5 has no mid-conversation system messages** and rejects
   `budget_tokens` and sampling params. Thinking is `{type: "adaptive"}`; depth
   is `output_config.effort`.

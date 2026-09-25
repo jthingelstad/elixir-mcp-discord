@@ -173,10 +173,23 @@ export function carried(routineKey) {
   return read().carry?.[routineKey] ?? [];
 }
 
+/** One timeline item, whoever re-read it: a release turn that fails leaves
+ *  the cursor where it was, and the next poll carries the same items again. */
+const itemId = (item) => [item?.kind, item?.subject_tag, item?.at, item?.observed_at, item?.text].join("|");
+
 export function addCarry(routineKey, items) {
   if (!items?.length) return;
   const state = read();
-  const kept = [...(state.carry?.[routineKey] ?? []), ...items].slice(-CARRY_CAP);
+  const held = state.carry?.[routineKey] ?? [];
+  const seen = new Set(held.map(itemId));
+  const fresh = [];
+  for (const item of items) {
+    const id = itemId(item);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    fresh.push(item);
+  }
+  const kept = [...held, ...fresh].slice(-CARRY_CAP);
   write({ ...state, carry: { ...state.carry, [routineKey]: kept } });
 }
 
