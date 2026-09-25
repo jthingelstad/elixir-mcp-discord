@@ -246,14 +246,15 @@ export function planEdit({ file, edit, current, by = null }) {
     if (op === "replace" && !replacement.trim()) return { ok: false, error: "replace is empty; use remove to delete" };
     let next = text.slice(0, first) + replacement + text.slice(first + find.length);
     if (op === "remove") next = next.replace(/\n{3,}/g, "\n\n");
-    // What the operator said is theirs to remove, never the review's.
-    if (
-      file === "memory.md" &&
-      op === "remove" &&
-      edit.by !== "owner" &&
-      find.split("\n").some((l) => parseMemoryEntry(l)?.source === "owner")
-    ) {
-      return { ok: false, error: "that entry came from the operator; only they remove it" };
+    // What the operator said is theirs to remove or reword, never the
+    // review's (the guard covered `remove` only until 2026-09-25, so a
+    // `replace` could reword an owner line); and nobody but the operator
+    // writes a line that says it came from them.
+    if (file === "memory.md" && edit.by !== "owner") {
+      if (find.split("\n").some((l) => parseMemoryEntry(l)?.source === "owner"))
+        return { ok: false, error: "that entry came from the operator; only they change or remove it" };
+      if (replacement.split("\n").some((l) => parseMemoryEntry(l)?.source === "owner"))
+        return { ok: false, error: '"(from owner)" is the operator\'s provenance; a review cites turns' };
     }
     const preview = [
       ...find.split("\n").map((l) => `- ${l}`),

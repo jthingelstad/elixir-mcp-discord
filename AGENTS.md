@@ -291,7 +291,18 @@ design is there. The short version:
   question, edit anything outside `agent/`, edit a routine's front matter
   (the operator can, by DM — below), read the ledger into a member-facing
   turn. The `EDITABLE` pattern and `planEdit` are the fence; the tests pin
-  them.
+  them. **Since 2026-09-25 the fence is in code, not in the schema.**
+  `planEdit`'s operator-only checks read `edit.by === "owner"`, and the
+  review's `propose_change` handler passed the model's `edit` straight
+  through — a tool's `enum` and `additionalProperties: false` are advice
+  to the model when the tool is not strict, and the review reads members'
+  words from the ledger. A test even created and deleted routines through
+  the review lane that way. `reviewEdit` now rebuilds the edit from `op`
+  (append/replace/remove only), `text`, `find` and `replace`, refuses
+  `config.json`, and requires `(turns …)` provenance on any memory line a
+  review writes (with `REVIEW_AUTO_MEMORY`, that line is applied unseen).
+  `planEdit` also fences `replace` of an operator's memory line, not only
+  `remove`, and refuses a non-owner line that claims `(from owner)`.
 
 ## The DM is the operator's console — since 2026-09-14
 

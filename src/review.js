@@ -43,7 +43,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { config } from "./config.js";
 import { ask, spendBlock } from "./claude.js";
-import { MECHANICS, MEMORY_MAX_CHARS } from "./prompt.js";
+import { MECHANICS, MEMORY_MAX_CHARS, parseMemoryEntry } from "./prompt.js";
 import { renderTurn } from "./turns.js";
 import { dueRoutines, periodKey, lastOccurrence } from "./schedule.js";
 import { chunk } from "./post.js";
@@ -235,6 +235,36 @@ mattered most, cited by turn id.
 **Proposed** — one line per proposal you made (or "nothing this week", which
 is a fine outcome). Never put a member's name, id or tag in the report.`;
 
+/** What a review may send as an edit, rebuilt from the tool input.
+ *
+ *  planEdit's fences read `edit.by === "owner"` — settings, a routine's
+ *  front matter, creating or deleting one, removing what the operator said
+ *  — and before 2026-09-25 the review's handler passed the model's `edit`
+ *  object straight through. The input schema's `additionalProperties:
+ *  false` and `enum` are advice to the model, not validation (the tool is
+ *  not strict), and the review reads members' words from the ledger. So the
+ *  edit is rebuilt from the three fields a review may send, and a memory
+ *  line it writes must cite turns: "(from owner)" is the operator's word,
+ *  and with REVIEW_AUTO_MEMORY a review line is applied with no click. */
+export function reviewEdit(file, edit) {
+  const op = edit?.op;
+  if (!["append", "replace", "remove"].includes(op))
+    return { error: `a review proposes append, replace or remove, not ${JSON.stringify(op ?? null)}` };
+  if (file === "config.json")
+    return { error: "settings are the operator's; the review edits only the text under agent/" };
+  const clean = { op };
+  for (const key of ["text", "find", "replace"]) if (edit[key] !== undefined) clean[key] = String(edit[key]);
+  if (file === "memory.md") {
+    const written = op === "append" ? clean.text : op === "replace" ? clean.replace : "";
+    const lines = String(written ?? "").split("\n");
+    if (lines.some((line) => parseMemoryEntry(line)?.source === "owner"))
+      return { error: 'a review\'s memory line cites the turns that taught it: "- YYYY-MM-DD (turns a, b): ..."' };
+    if (op === "append" && parseMemoryEntry(clean.text ?? "")?.source !== "turns")
+      return { error: 'a memory entry from a review is "- YYYY-MM-DD (turns a1b2c3d4, ...): ..."' };
+  }
+  return { edit: clean };
+}
+
 function proposeTool({ files, proposals, max }) {
   return {
     name: "propose_change",
@@ -277,10 +307,12 @@ function proposeTool({ files, proposals, max }) {
         return { ok: false, code: "cap", error: `that is already ${max} proposals, the cap for one review` };
       const ids = (turn_ids || []).map(String).filter(Boolean);
       if (ids.length === 0) return { ok: false, code: "uncited", error: "cite the turn ids that taught this" };
+      const { edit: safe, error } = reviewEdit(file, edit);
+      if (error) return { ok: false, code: "refused", error };
       // The plan runs against the file plus any earlier proposal to the same
       // file this review, so two edits to memory.md do not both claim slot 20.
       const current = proposals.filter((p) => p.file === file).at(-1)?.next ?? files[file] ?? null;
-      const plan = planEdit({ file, edit, current });
+      const plan = planEdit({ file, edit: safe, current });
       if (!plan.ok) return { ok: false, code: "refused", error: plan.error };
       const proposal = {
         id: `p${proposals.length + 1}`,
@@ -289,7 +321,7 @@ function proposeTool({ files, proposals, max }) {
         rule: String(rule ?? "").slice(0, 80),
         turnIds: ids.slice(0, 12),
         summary: String(summary ?? "").slice(0, 300),
-        edit,
+        edit: safe,
         preview: plan.preview.slice(0, 1500),
         next: plan.next,
       };
