@@ -697,6 +697,13 @@ Every boot checks the channels again — in the guild, the role can see, post
 and read history, plus threads for an ask channel — and complains in the log
 and in the first channel that works. The lanes that work keep working.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md): bugs and docs are welcome as pull
+requests; product changes start as an issue with the evidence.
+[AGENTS.md](AGENTS.md) has the rules and the map of
+[docs/decisions/](docs/decisions/), the dated reason for most of the code.
+
 ## License
 
 MIT.
