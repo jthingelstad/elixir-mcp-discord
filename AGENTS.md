@@ -814,8 +814,8 @@ cannot be enforced is worse than none, because it looks like it works.
   `feedback`, which is not a tool. `resolveToolName` matches against the live
   `tools/list`.
 - **The feed is a TIMELINE since contract 3.0.0 (2026-09-13, two shape
-  changes in one evening).** The tool is `elixir_timeline` (`mark_read:
-  false` + our own ISO cursor); the response carries `timeline[]` — what
+  changes in one evening).** The tool is `elixir_timeline` (a named
+  `reader` + our own ISO cursor, below); the response carries `timeline[]` — what
   happened, typed items `{at, observed_at, subject_tag, subject_name, kind,
   section, text, facts}`, NEWEST first since hub contract 7.0.0 (2026-09-23,
   the timeline is a newsfeed) — and `entries[]`, one per subject as context
@@ -846,10 +846,20 @@ cannot be enforced is worse than none, because it looks like it works.
   `events_unread` (WARN) counts what the bound or a one-instant burst
   left unread. A failed continuation fails the poll, so the cursor stays
   and the next tick reads the window again.
-- **The seen bookmark is per ACCOUNT (an agent is its own account).** Every
-  event routine polls with `mark_read: false` and keeps its own ISO cursor
-  in `state/state.json`; a pre-2.0.0 integer cursor re-seeds from now. Never
-  flip that to `true` as a "simplification".
+- **The read pointer is per READER — since hub contract 3.18.0
+  (2026-09-18).** Until then the hub kept one pointer per ACCOUNT (an
+  agent is its own account), so every routine polled with `mark_read:
+  false` and the rule here was never to flip it. Now each event routine
+  polls as its own `reader` (`readerName`: `<instance>-<routine>`) with
+  `mark_read: true`, which moves that reader's pointer only — never the
+  account's unnamed one, never another routine's or instance's — and makes
+  `meta.timeline_pending` count against it. The local ISO cursor in
+  `state/state.json` still decides `from`, and it moves only after a
+  successful turn, so a failed turn re-reads its window even though the
+  hub's pointer ran ahead; a pre-2.0.0 integer cursor re-seeds from now.
+  Reads that must move nothing — the seed, the dry run, `npm run probe`,
+  a busy window's older pages — pass no reader and `mark_read: false`.
+  Never mark without a reader: that moves the account's shared pointer.
 - **Seed, don't drain.** First run saves the timeline window's end and starts there;
   the scheduler marks every routine's current period as done; the feedback
   ledger marks history as shown. All three have posted a backlog into a channel

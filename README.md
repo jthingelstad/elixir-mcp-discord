@@ -472,12 +472,14 @@ budgets, because they look like they work.
 
 ## Operating notes
 
-- **Cursors are per routine, and local.** `elixir_timeline` advances one
-  `activity_seen_at` marker per *account* (an agent is its own account),
-  so two consumers on one key eat each other's notifications. Every routine
-  polls with `mark_read: false` and keeps its own position. On first run each
-  seeds from the newest event rather than draining the backlog into your
-  channel.
+- **Cursors are per routine.** Each event routine reads `elixir_timeline`
+  as its own named `reader` (`<instance>-<routine>`, Elixir MCP contract
+  3.18.0) with `mark_read: true`, which moves only that reader's pointer on
+  the server — never the account's (an agent is its own account) and never
+  another routine's or instance's. Where the next read starts is still the
+  routine's own cursor in `state/`, moved only after a successful turn, so a
+  failed turn reads its window again. On first run each seeds from now
+  rather than draining the backlog into your channel.
 - **A busy window is read to its start.** Elixir MCP serves the newest items
   of a window too big for one page and counts the rest (`has_more`,
   `timeline_more`); before the turn the bot reads the older ones back by

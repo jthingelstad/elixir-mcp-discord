@@ -9,11 +9,12 @@
  *
  * CURSORS ARE PER ROUTINE, not per bot. Two event routines watching different
  * topics are two independent readers, and a shared position would let the
- * quiet one skip what the busy one already consumed. They are also kept here
- * rather than acknowledged server-side: `elixir_timeline` advances a single
- * per-ACCOUNT `activity_seen_at` marker, so anything else polling the same
- * account would eat notifications this bot never showed anybody. We poll with
- * `mark_read: false` and leave that marker exactly where it was.
+ * quiet one skip what the busy one already consumed. Since hub contract
+ * 3.18.0 each routine also reads as its own named `reader` and marks it
+ * (src/events.js), which moves that reader's pointer and never the account's
+ * `activity_seen_at`. The cursor kept here is still what `from` comes from:
+ * it moves only after a successful turn, so a failed one reads its window
+ * again even though the hub's pointer has moved on.
  */
 
 import fs from "node:fs";
