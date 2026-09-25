@@ -237,11 +237,12 @@ export function memberTurnsToday(userId, now = new Date()) {
   return counts.date === today ? counts.byUser?.[userId] || 0 : 0;
 }
 
-export function countMemberTurn(userId, now = new Date()) {
+/** `delta: -1` gives a question back when the turn failed on our side. */
+export function countMemberTurn(userId, now = new Date(), delta = 1) {
   const today = now.toISOString().slice(0, 10);
   const counts = state.get("askCounts") || {};
   const byUser = counts.date === today ? { ...counts.byUser } : {};
-  byUser[userId] = (byUser[userId] || 0) + 1;
+  byUser[userId] = Math.max(0, (byUser[userId] || 0) + delta);
   state.set({ askCounts: { date: today, byUser } });
 }
 
@@ -372,6 +373,10 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
     log.info("ask_member_capped", { user: message.author.id, cap });
     return;
   }
+  // Counted when the turn STARTS. Counted after the answer, a burst of
+  // questions — or several threads at once — all passed the check above
+  // before the first one was counted.
+  countMemberTurn(message.author.id);
 
   try {
     const inThread = Boolean(message.channel?.isThread?.());
@@ -456,6 +461,8 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
           : `Something broke on my side talking to Elixir MCP: \`${result.error}\`. There's no local fallback here by design, so that's the whole answer.`,
       );
       log.error("ask_failed", { routine: routine.key, error: result.error });
+      // Our failure, not their question: it does not count against them.
+      countMemberTurn(message.author.id, new Date(), -1);
       record(result, { error: result.error });
       await notify(
         "answer failed",
@@ -498,7 +505,6 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
     const ungrounded = looksUngrounded({ text: answer, called: result.called });
     if (ungrounded) await footnote(UNGROUNDED_FOOTER, "ungrounded_footer");
 
-    countMemberTurn(message.author.id);
     state.rememberTurn(
       result.turnId,
       turnRecord({ routine, lane, question, text: answer, result, channelId: target?.id }),

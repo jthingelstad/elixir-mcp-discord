@@ -444,6 +444,33 @@ test("a member's request reaches the operator once, three a day, and the cap sto
   await handleAsk(third, ROUTINE, { askFn: async () => assert.fail("capped: no model call") });
   assert.match(blocked[0].text, /questions from you today/);
   assert.ok(posted.length > 0);
+
+  // A burst: every question arrives before the first answer. Counted after
+  // the answer, all of them passed the check.
+  state.set({ askCounts: null });
+  let calls = 0;
+  let release;
+  const slow = new Promise((resolve) => (release = resolve));
+  const burst = [1, 2, 3, 4, 5].map((i) =>
+    handleAsk(fakeMessage(`quick ${i}`).message, ROUTINE, {
+      askFn: async () => {
+        calls += 1;
+        await slow;
+        return RESULT;
+      },
+    }),
+  );
+  await new Promise((r) => setTimeout(r, 20));
+  release();
+  await Promise.all(burst);
+  assert.equal(calls, 2, "the cap holds for questions asked at once");
+
+  // A turn that fails on our side gives the question back.
+  state.set({ askCounts: null });
+  await handleAsk(fakeMessage("breaks").message, ROUTINE, {
+    askFn: async () => ({ ...RESULT, ok: false, error: "overloaded_error" }),
+  });
+  assert.equal((await import("../src/ask.js")).memberTurnsToday("42"), 0);
   config.askDailyTurnsPerMember = 20;
   notify.configure({ client: null });
 });
