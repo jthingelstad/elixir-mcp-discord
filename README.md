@@ -480,6 +480,12 @@ budgets, because they look like they work.
   routine's own cursor in `state/`, moved only after a successful turn, so a
   failed turn reads its window again. On first run each seeds from now
   rather than draining the backlog into your channel.
+- **`state/state.json` is replaced, never rewritten in place.** A crash or
+  a full disk mid-write leaves the previous state. If the file is ever
+  unreadable (a hand edit gone wrong), it is moved to
+  `state.json.corrupt-<time>` with an `ERROR state_corrupt` line, and the
+  bot starts over from a fresh state rather than overwriting it — this
+  month's spend is in the kept copy.
 - **A busy window is read to its start.** Elixir MCP serves the newest items
   of a window too big for one page and counts the rest (`has_more`,
   `timeline_more`); before the turn the bot reads the older ones back by

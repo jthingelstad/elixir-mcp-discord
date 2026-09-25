@@ -864,6 +864,17 @@ cannot be enforced is worse than none, because it looks like it works.
   the scheduler marks every routine's current period as done; the feedback
   ledger marks history as shown. All three have posted a backlog into a channel
   at least once. Do not "helpfully" replay.
+- **`state.json` is written by rename, and an unreadable one is kept — since
+  2026-09-25.** Every writer in `src/state.js` is read-modify-write of the
+  whole file, and `read` used to return the defaults for a torn or
+  hand-broken file as it does for a missing one, so the next `markRun`
+  saved the defaults plus one key: the month's spend back to $0, every
+  cursor and run gone. `npm run try` and `probe` write the same file as the
+  running service. Now `write` goes to a temp file, fsyncs and renames, so
+  a reader never sees half a file; a file that still fails to parse is
+  renamed to `state.json.corrupt-<time>`, logged as `state_corrupt`, and
+  the process starts from the seed-don't-drain defaults. Do not go back to
+  `writeFileSync` in place.
 - **Sonnet 5 has no mid-conversation system messages** and rejects
   `budget_tokens` and sampling params. Thinking is `{type: "adaptive"}`; depth
   is `output_config.effort`.

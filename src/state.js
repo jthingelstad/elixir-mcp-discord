@@ -20,6 +20,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { instanceDir } from "./config.js";
+import { log } from "./log.js";
 
 // Relative to the INSTANCE directory, not the checkout. Several instances of
 // one checkout must never share a state file; see instanceDir in config.js.
@@ -90,17 +91,59 @@ const LAST_POSTS_KEEP = 10;
 const LAST_POST_CHARS = 700;
 const TURNS_KEEP = 200;
 
+/**
+ * A missing file is a fresh install. An UNREADABLE one is not: before
+ * 2026-09-25 both returned the defaults, and every writer here is
+ * read-modify-write of the whole file, so the next `markRun` saved the
+ * defaults plus one key — the month's spend back to $0 (a budget that could
+ * be spent twice), every cursor and run gone. The bad file is now moved
+ * aside, never overwritten, and said out loud; what starts afresh is the
+ * same seed-don't-drain state a new install gets.
+ */
 function read() {
+  let raw;
   try {
-    return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(STATE_PATH, "utf8")) };
-  } catch {
+    raw = fs.readFileSync(STATE_PATH, "utf8");
+  } catch (error) {
+    if (error.code !== "ENOENT") log.error("state_unreadable", { path: STATE_PATH, error: error.message });
+    return { ...DEFAULTS };
+  }
+  try {
+    return { ...DEFAULTS, ...JSON.parse(raw) };
+  } catch (error) {
+    const kept = `${STATE_PATH}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+    try {
+      fs.renameSync(STATE_PATH, kept);
+    } catch {
+      // Another process moved it first; its copy is the one kept.
+    }
+    log.error("state_corrupt", {
+      path: STATE_PATH,
+      error: error.message,
+      kept,
+      hint: "starting from a fresh state (cursors and the run ledger re-seed; this month's spend is in the kept copy)",
+    });
     return { ...DEFAULTS };
   }
 }
 
+/**
+ * Write to a temporary file, flush it, then rename it into place. A rename
+ * is atomic, so a reader — this process or `npm run try` beside the service —
+ * sees the old state or the new one and never half a file, and a crash or a
+ * full disk mid-write leaves the previous state where it was.
+ */
 function write(state) {
   fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
-  fs.writeFileSync(STATE_PATH, `${JSON.stringify(state, null, 2)}\n`);
+  const tmp = `${STATE_PATH}.tmp-${process.pid}`;
+  const fd = fs.openSync(tmp, "w");
+  try {
+    fs.writeSync(fd, `${JSON.stringify(state, null, 2)}\n`);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.renameSync(tmp, STATE_PATH);
 }
 
 export function get(key) {
