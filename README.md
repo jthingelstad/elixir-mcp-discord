@@ -138,8 +138,9 @@ and each choice comes back as a proposal with an Apply button. In order:
    and never asks for it.
 7. **Identity** — nothing to type: tell the bot about the clan in the DM and
    it proposes the lines to keep. `identity.md` is yours to edit any time.
-8. **Budgets** — the two pots (an estimate once routines exist; the bot
-   says what a set would cost when you choose it).
+8. **Budgets** — the three pots: routines, members' questions, and your
+   DMs with the bot plus its reviews (an estimate once routines exist; the
+   bot says what a set would cost when you choose it).
 9. **Admins** — each user id checked to be a member of the server. These are
    the people the bot DMs.
 10. Writes `.env` and offers to install and start the service, showing the
@@ -439,8 +440,10 @@ bot stops slightly short of your number rather than slightly past it. A lane
 that runs out says so — in the log for routines, and in the channel for asks,
 in a sentence aimed at a member rather than an operator.
 
-Months are UTC calendar months and nothing rolls over. `npm run routines`,
-`/budget` and `budget` in the DM all show where you are, and "raise the ask
+Months are UTC calendar months and nothing rolls over. A pot left unset
+is unlimited, and the boot log warns about each one that is. `npm run
+routines`, `/budget` and `budget` in the DM all show where you are — all
+three pots, the review one whether or not the review is on, and "raise the ask
 budget to $15" in the DM changes it, live. `ASK_DAILY_TURNS_PER_MEMBER`
 (default 20) keeps one member from spending the ask pot for everyone.
 

@@ -641,6 +641,12 @@ values.ASK_MONTHLY_BUDGET_USD = await askValid("Monthly budget for member questi
   fallback: values.ASK_MONTHLY_BUDGET_USD || "10.00",
   validate: numberIn("a budget", 0),
 });
+// The third pot pays for your DMs to the bot and, if you turn it on, the
+// weekly review. Unasked, it was unset — unlimited — on every install.
+values.REVIEW_MONTHLY_BUDGET_USD = await askValid("Monthly budget for your DMs with the bot and its reviews, USD", {
+  fallback: values.REVIEW_MONTHLY_BUDGET_USD || "10.00",
+  validate: numberIn("a budget", 0),
+});
 save("budgets");
 
 heading("Polling and commands");

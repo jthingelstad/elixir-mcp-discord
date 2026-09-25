@@ -107,7 +107,7 @@ export function budgetReply(status = budget.status()) {
     const cap = b.budget === null ? "no budget set" : `of ${money(b.budget)}`;
     const left = b.remaining === null ? "" : ` · ${money(b.remaining)} left`;
     const mark = b.state === "ok" ? "" : ` · **${b.state}**`;
-    return `**${b.lane}** — ${money(b.spent)} ${cap}${left}${mark}`;
+    return `**${b.label}** — ${money(b.spent)} ${cap}${left}${mark}`;
   });
   return [
     `**Spend so far in ${status[0]?.month ?? budget.monthKey()}**`,

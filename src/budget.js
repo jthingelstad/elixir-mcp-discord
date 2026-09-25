@@ -112,13 +112,17 @@ export function record(lane, usd, now = new Date()) {
 
 /** What to show an operator: per lane, this month. */
 export function status(now = new Date()) {
-  // The review lane is listed only when it is on: an "unlimited" line for a
-  // lane that never spends is a warning about nothing.
-  return LANES.filter((lane) => lane !== "review" || config.review.enabled).map((lane) => {
+  // Every lane, the review lane included whether or not REVIEW is on: the
+  // operator's DM turns are charged to it, and while it was hidden with the
+  // review off, an install whose setup never asked for its budget spent
+  // without a limit and nothing — boot log, /budget, `status` — said so.
+  return LANES.map((lane) => {
     const budget = budgetFor(lane);
     const used = spent(lane, now);
     return {
       lane,
+      // What an operator calls it: DM turns ride the review lane's pot.
+      label: lane === "review" ? "review + DMs" : lane,
       month: monthKey(now),
       spent: used,
       budget: budget ?? null,

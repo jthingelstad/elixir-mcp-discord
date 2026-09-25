@@ -673,10 +673,19 @@ If the commands never appear, the bot was invited without the
 
 ## Money is configuration, not code
 
-Two monthly pots, split by who spends them: `MONTHLY_BUDGET_USD` for what the
-bot decides to do (schedules, event briefs) and `ASK_MONTHLY_BUDGET_USD` for
-what clan members ask for. One pot would let a chatty afternoon cancel the
-01:00 war-deck post, with silence as the only symptom.
+Three monthly pots, split by who spends them: `MONTHLY_BUDGET_USD` for what the
+bot decides to do (schedules, event briefs), `ASK_MONTHLY_BUDGET_USD` for
+what clan members ask for (their 👎 sweeps included), and
+`REVIEW_MONTHLY_BUDGET_USD` for the operator: the review lane and every DM
+turn. One pot would let a chatty afternoon cancel the 01:00 war-deck post,
+with silence as the only symptom.
+
+**Since 2026-09-25 setup asks for all three and every surface shows all
+three.** Setup asked for two, so the third was unset — unlimited — on every
+install, and `budget.status()` hid the review lane while `REVIEW` was off,
+so the boot log's unlimited-budget warning, `/budget` and `status` never
+mentioned that the operator's DM turns (on `REVIEW_MODEL`, Opus at high
+effort by default) had no ceiling. The status line reads `review + DMs`.
 
 **Strict means checked BEFORE the call.** A lane refuses to start a turn that
 could take it past its budget, estimating from the largest turn that lane has
