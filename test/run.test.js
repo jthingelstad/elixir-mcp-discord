@@ -6,8 +6,13 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { runRoutine } from "../src/run.js";
+import { runRoutine as runLive } from "../src/run.js";
 import { parseRoutine } from "../src/routines.js";
+
+/** The runner with its friction sweep — a model call of its own — played
+ *  by a fake: a turn with tool errors used to reach the Claude API from
+ *  here, and the 401 was swallowed as designed. */
+const runRoutine = (routine, options = {}) => runLive(routine, { sweepFn: async () => null, ...options });
 
 function fakeChannel() {
   const sent = [];
@@ -135,12 +140,19 @@ test("a long post is split rather than truncated", async () => {
   assert.equal(channel.sent.map((m) => m.text).join("\n"), long);
 });
 
-test("a dry run composes without touching Discord", async () => {
+test("a dry run composes without touching Discord, and asks for a rehearsal's toolset", async () => {
+  let policy;
   const run = await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "01:00" }), {
     dryRun: true,
-    askFn: async () => answer("Would have posted this."),
+    askFn: async (args) => ((policy = args.policy), answer("Would have posted this.")),
   });
   assert.equal(run.text, "Would have posted this.");
+  assert.equal(policy, "rehearsal", "a rehearsal writes nothing upstream");
+  await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "01:00" }), {
+    channel: fakeChannel(),
+    askFn: async (args) => ((policy = args.policy), answer("Posted.")),
+  });
+  assert.equal(policy, "routines");
 });
 
 test("a failed turn is reported, not posted", async () => {
@@ -365,6 +377,49 @@ test("a turn posts through post_message to the channel it chose, and the rules h
     "Two joined today.\n\nOne left: an elder.\n\nagain",
     "the posts are the output; trailing prose is not",
   );
+});
+
+test("a post that went out is delivered even when the API round after it fails", async () => {
+  const { POST_TOOL } = await import("../src/run.js");
+  const news = fakeChannel();
+  const entries = [{ id: "11", name: "news", topic: "", visibility: "everyone", threads: false, role: null }];
+  const run = await runRoutine(routine({ trigger: "events", kinds: "member_joined", may_skip: true }), {
+    channel: null,
+    entries,
+    resolve: async () => news,
+    events: { window: null, timeline: [], entries: [] },
+    askFn: async ({ localTools }) => {
+      await localTools.find((t) => t.name === POST_TOOL.name).handler({ channel_id: "11", content: "A joined." });
+      // The round that follows the tool result: overloaded, mid-stream.
+      return { ...answer(""), ok: false, error: "overloaded_error" };
+    },
+  });
+  assert.equal(news.sent.length, 1);
+  assert.equal(run.ok, true, "delivered, so the cursor moves and the next poll does not post it again");
+  assert.deepEqual(
+    run.posts.map((p) => p.channel),
+    ["#news"],
+  );
+});
+
+test("a post Discord refused is not counted as posted", async () => {
+  const { POST_TOOL } = await import("../src/run.js");
+  const refusing = { ...fakeChannel(), send: () => Promise.reject(new Error("Missing Permissions")) };
+  const entries = [{ id: "11", name: "news", topic: "", visibility: "everyone", threads: false, role: null }];
+  let seen;
+  const run = await runRoutine(routine({ trigger: "schedule", at: "01:00", may_skip: true }), {
+    channel: null,
+    entries,
+    resolve: async () => refusing,
+    askFn: async ({ localTools }) => {
+      seen = await localTools.find((t) => t.name === POST_TOOL.name).handler({ channel_id: "11", content: "News." });
+      return answer("SKIP", { called: ["post_message"], trace: [] });
+    },
+  });
+  assert.equal(seen.ok, false);
+  assert.equal(seen.code, "send_failed");
+  assert.match(seen.error, /Missing Permissions/);
+  assert.deepEqual(run.posts, [], "nothing reached the channel, so nothing is recorded as a post");
 });
 
 test("with a directory, no post call and prose still goes to the routine's default; SKIP still skips", async () => {

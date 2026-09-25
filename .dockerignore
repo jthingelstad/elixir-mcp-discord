@@ -3,7 +3,12 @@ state
 .env
 .env.*
 !.env.example
-.git
+# Only what names the commit (src/build.js): HEAD and the refs, not the
+# objects, so a bot built from a checkout logs build=<version>+<sha>.
+.git/*
+!.git/HEAD
+!.git/refs
+!.git/packed-refs
 test
 launchd
 systemd

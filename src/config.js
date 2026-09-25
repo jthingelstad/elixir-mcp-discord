@@ -264,6 +264,34 @@ function validTimezone(tz) {
 
 const num = (name, fallback) => Number(optional(name, fallback));
 const money = (name) => (lookup(name) ? Number(lookup(name)) : null);
+
+/**
+ * WHAT AN UNSET MONTHLY BUDGET MEANS — a cap, since 2026-09-25, not the
+ * absence of one. Unset used to be unlimited with a boot-log warning, and
+ * that failed open three ways: a container started without config.json
+ * had no budgets at all, the review lane (every DM turn) was unset on
+ * every install because setup never asked for it, and a hand edit that
+ * dropped a key lifted the ceiling silently. The repo already refuses a
+ * model it cannot price, because a budget that cannot be enforced is worse
+ * than none; this is the same rule. "unlimited" is how an operator says no
+ * cap on purpose. A value that is not a number is the default too — a
+ * typo must not open the lane.
+ */
+export const DEFAULT_LANE_BUDGET_USD = 10;
+
+export function budgetSource(name) {
+  const raw = String(lookup(name) ?? "").trim();
+  if (/^unlimited$/i.test(raw)) return "unlimited";
+  if (raw && Number.isFinite(Number(raw)) && Number(raw) >= 0) return "set";
+  return "default";
+}
+
+const laneBudget = (name) => {
+  const source = budgetSource(name);
+  if (source === "unlimited") return null;
+  if (source === "default") return DEFAULT_LANE_BUDGET_USD;
+  return Number(lookup(name));
+};
 let lastGoodTimezone = null;
 
 export const config = {
@@ -313,10 +341,10 @@ export const config = {
   // for. One pot means a chatty afternoon quietly cancels tomorrow's war-deck
   // nudge and the only symptom is silence.
   get monthlyBudgetUsd() {
-    return money("MONTHLY_BUDGET_USD");
+    return laneBudget("MONTHLY_BUDGET_USD");
   },
   get askMonthlyBudgetUsd() {
-    return money("ASK_MONTHLY_BUDGET_USD");
+    return laneBudget("ASK_MONTHLY_BUDGET_USD");
   },
   // One member cannot spend the shared ask pot for everyone. 0 = no cap.
   get askDailyTurnsPerMember() {
@@ -327,7 +355,10 @@ export const config = {
   // the floor for that estimate; the real figure climbs to the largest turn
   // the lane has actually produced.
   get turnReserveUsd() {
-    return num("TURN_RESERVE_USD", "0.30");
+    // A reserve that is not a number (NaN) makes every reserve comparison
+    // false, and the strict check stops being strict: the default instead.
+    const reserve = num("TURN_RESERVE_USD", "0.30");
+    return Number.isFinite(reserve) && reserve >= 0 ? reserve : 0.3;
   },
 
   // Soft guard on top of the monthly budgets: the process stops answering once
@@ -393,7 +424,7 @@ export const config = {
       return optional("REVIEW_EFFORT", "high");
     },
     get monthlyBudgetUsd() {
-      return money("REVIEW_MONTHLY_BUDGET_USD");
+      return laneBudget("REVIEW_MONTHLY_BUDGET_USD");
     },
     // "sun 20:00" — weekday (or "daily") and wall time. Weekly is the shape
     // this was designed for: enough turns to see a pattern, few enough

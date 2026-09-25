@@ -1,6 +1,6 @@
 # Proactive posting: the record is the trigger — 2026-09-16
 
-**Outcome:** SHIPPED 2026-09-17 (7eaa36b, hub contract 3.9.0) — Jamie said yes to all six decisions; what shipped is in AGENTS.md, "The record is the trigger". The rest of this file is the proposal as written.
+**Outcome:** SHIPPED 2026-09-17 (7eaa36b, hub contract 3.9.0) — Jamie said yes to all six decisions; what shipped is in docs/decisions/timeline.md ("The record is the trigger"). The rest of this file is the proposal as written.
 
 **Status:** proposal. Nothing here is applied; the shipped routines are as
 they were. The decisions for Jamie are listed first, each a yes/no with the

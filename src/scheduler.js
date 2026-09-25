@@ -9,7 +9,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { config } from "./config.js";
+import { config, channelEnvName } from "./config.js";
 import { dueRoutines, currentPeriods } from "./schedule.js";
 import { runRoutine } from "./run.js";
 import { spendBlock } from "./claude.js";
@@ -40,7 +40,7 @@ export function retireOnce(routine, { agentDir = config.agentDir } = {}) {
   }
 }
 
-export async function tick(routines, resolveChannel, now = new Date()) {
+export async function tick(routines, resolveChannel, now = new Date(), { runFn = runRoutine } = {}) {
   const due = dueRoutines(routines, { now, ledger: state.get("runs") || {} });
   if (due.length === 0) return;
   const blocked = spendBlock("routines");
@@ -61,6 +61,10 @@ export async function tick(routines, resolveChannel, now = new Date()) {
   }
 
   for (const { routine, periodKey } of due) {
+    // `due` was read before the first routine in it ran, and a turn can take
+    // minutes: whoever else ran this period since (another tick, another
+    // process) has marked it, and it is theirs.
+    if ((state.get("runs") || {})[routine.key] === periodKey) continue;
     // Recorded BEFORE the call, not after. A crash mid-post must not leave the
     // routine eligible again on the next tick and post twice.
     state.markRun(routine.key, periodKey);
@@ -72,12 +76,20 @@ export async function tick(routines, resolveChannel, now = new Date()) {
         routine: routine.key,
         channel: routine.channel,
       });
+      await notify(
+        "routine skipped",
+        `${routine.key} was due and did not run: its channel "${routine.channel}" could not be found. Bind ${channelEnvName(routine.channel)} in config.json, or set the routine's channel: to a channel the bot may post in.`,
+        { fingerprint: `channel_missing:${routine.key}` },
+      );
       continue;
     }
-    const run = await runRoutine(routine, { channel }).catch((error) => {
+    const run = await runFn(routine, { channel }).catch(async (error) => {
       log.error("scheduled_crashed", {
         routine: routine.key,
         error: error.message,
+      });
+      await notify("routine crashed", `${routine.key}: ${error.message.slice(0, 300)}`, {
+        fingerprint: `crashed:${routine.key}`,
       });
       return null;
     });
@@ -109,8 +121,21 @@ export function startScheduler(routinesFn, resolveChannel) {
       .join(","),
   });
 
-  const run = () =>
-    tick(routinesFn(), resolveChannel).catch((error) => log.error("scheduler_tick_failed", { error: error.message }));
+  // One tick at a time. A tick that runs two due routines, the first of which
+  // takes longer than a minute, used to overlap the next tick — which ran the
+  // second routine, and then the first tick ran it again.
+  let busy = false;
+  const run = async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      await tick(routinesFn(), resolveChannel);
+    } catch (error) {
+      log.error("scheduler_tick_failed", { error: error.message });
+    } finally {
+      busy = false;
+    }
+  };
   void run();
   return setInterval(run, 60_000);
 }

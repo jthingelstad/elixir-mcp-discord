@@ -110,3 +110,38 @@ test("settings are live: a change to config.json is seen on the next read, no re
   assert.equal(needsRestart(["COMMAND_PREFIX"]), true);
   assert.equal(needsRestart(["EVENT_POLL_SECONDS"]), true);
 });
+
+test("a supervisor is recognised: launchd (pid 1), systemd user units (INVOCATION_ID), or SERVICE_MANAGED=1", async () => {
+  const { serviceManaged } = await import("../src/settings.js");
+  assert.equal(serviceManaged({}, 1), true, "launchd, or a systemd system unit");
+  assert.equal(serviceManaged({ INVOCATION_ID: "5f0c…" }, 812), true, "a systemd --user unit's parent is not pid 1");
+  assert.equal(serviceManaged({ SERVICE_MANAGED: "1" }, 0), true, "the container sets it; node is pid 1 there");
+  assert.equal(serviceManaged({}, 4242), false, "a terminal: say a restart is needed, do not exit");
+});
+
+test("an unset monthly budget is a cap, not unlimited; 'unlimited' has to be said; a typo is the cap too", async () => {
+  const { _setSettings, budgetSource, DEFAULT_LANE_BUDGET_USD } = await import("../src/config.js");
+  try {
+    _setSettings({ CHANNEL_ASK: "2" });
+    assert.equal(config.askMonthlyBudgetUsd, DEFAULT_LANE_BUDGET_USD);
+    assert.equal(budgetSource("ASK_MONTHLY_BUDGET_USD"), "default");
+    assert.equal(config.review.monthlyBudgetUsd, DEFAULT_LANE_BUDGET_USD, "the DM lane too");
+
+    _setSettings({ CHANNEL_ASK: "2", ASK_MONTHLY_BUDGET_USD: "unlimited" });
+    assert.equal(config.askMonthlyBudgetUsd, null);
+    assert.equal(budgetSource("ASK_MONTHLY_BUDGET_USD"), "unlimited");
+
+    _setSettings({ CHANNEL_ASK: "2", ASK_MONTHLY_BUDGET_USD: "15$" });
+    assert.equal(
+      config.askMonthlyBudgetUsd,
+      DEFAULT_LANE_BUDGET_USD,
+      "a value that is not a number never opens the lane",
+    );
+
+    _setSettings({ CHANNEL_ASK: "2", ASK_MONTHLY_BUDGET_USD: "0" });
+    assert.equal(config.askMonthlyBudgetUsd, 0);
+    assert.equal(budgetSource("ASK_MONTHLY_BUDGET_USD"), "set");
+  } finally {
+    _setSettings(null);
+  }
+});

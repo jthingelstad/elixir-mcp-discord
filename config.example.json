@@ -1,5 +1,5 @@
 {
-  "_about": "Every setting the bot may change about itself. Flat, same key names the docs use. Written by npm run setup; editable from the DM ('raise the ask budget to $15'), which shows the diff and restarts the bot to apply. Secrets and wiring (keys, tokens, the Elixir URL, the app and server ids) are in .env, not here. Keys starting with _ are notes and ignored.",
+  "_about": "Every setting the bot may change about itself. Flat, same key names the docs use. Written by npm run setup; editable from the DM ('raise the ask budget to $15'), which shows the diff; applied live, and only COMMAND_PREFIX and EVENT_POLL_SECONDS restart the bot. Secrets and wiring (keys, tokens, the Elixir URL, the app and server ids) are in .env, not here. Keys starting with _ are notes and ignored.",
 
   "_channels": "Where the bot LISTENS: the ask channel, where members' questions are answered in threads. Where it POSTS is not configured: every channel where its role is explicitly granted Send Messages is in its directory and the model chooses. A routine may name a default with channel:, bound here as CHANNEL_<NAME> or matched by channel name.",
   "CHANNEL_ASK": "",
@@ -7,9 +7,10 @@
   "_admins": "Discord user ids who may use the admin slash commands, DM the bot as its operator, and receive its notices and review proposals. Everything they do costs money, so this is an allow-list. Empty means no DMs go anywhere.",
   "ADMIN_USER_IDS": "",
 
-  "_budgets": "Strict, UTC calendar months, per lane, nothing rolls over. A lane refuses to START a turn that could take it past the line, using the largest turn it has ever produced as the estimate. Unset means unlimited, which the boot log warns about.",
+  "_budgets": "Strict, UTC calendar months, per lane, nothing rolls over. A lane refuses to START a turn that could take it past the line, using the largest turn it has ever produced as the estimate. Each is dollars or \"unlimited\"; a budget left unset (or not a number) is capped at $10 a month and the boot log and a DM say so. 0 turns the lane off.",
   "MONTHLY_BUDGET_USD": "20.00",
   "ASK_MONTHLY_BUDGET_USD": "10.00",
+  "REVIEW_MONTHLY_BUDGET_USD": "10.00",
   "_ASK_DAILY_TURNS_PER_MEMBER": "Questions one member may ask per day, so nobody drains the shared pot; 0 = no cap; admins exempt. Default 20.",
   "_TURN_RESERVE_USD": "What one turn is assumed to cost before this install has seen one. Default 0.30.",
   "_DAILY_USD_CAP": "An extra ceiling on top of the monthly budgets. Unset means none.",
@@ -32,7 +33,6 @@
   "REVIEW": "off",
   "REVIEW_MODEL": "claude-opus-5",
   "REVIEW_EFFORT": "high",
-  "REVIEW_MONTHLY_BUDGET_USD": "10.00",
   "REVIEW_AT": "sun 20:00",
   "REVIEW_AUTO_MEMORY": "false",
   "REVIEW_MAX_PROPOSALS": "3",

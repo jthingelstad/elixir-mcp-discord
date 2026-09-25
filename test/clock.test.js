@@ -7,6 +7,8 @@ import { test } from "node:test";
 import { armFrom, nextPlanAt, startClockLane } from "../src/clock.js";
 import { parseRoutine } from "../src/routines.js";
 import * as state from "../src/state.js";
+import * as budget from "../src/budget.js";
+import { config } from "../src/config.js";
 
 const doc = (fields) =>
   `---\n${Object.entries(fields)
@@ -82,4 +84,37 @@ test("the lane arms a timer per routine, fires once per boundary, seeds a bounda
   await new Promise((r) => setTimeout(r, 30));
   assert.deepEqual(fired, ["nudge"], "the same boundary never fires twice");
   lane2.stop();
+});
+
+test("a boundary the budget declines waits to retry instead of re-arming at once", async () => {
+  state.set({ runs: { nudge: "war_day_closes_at@2026-09-18T10:00:00.000Z" } });
+  const before = config.monthlyBudgetUsd;
+  config.monthlyBudgetUsd = 1;
+  budget.record("routines", 5);
+  let reads = 0;
+  const clock = { war_day_closes_at: "2026-09-19T10:00:00.000Z", day_ends_at: "2026-09-19T10:00:00.000Z" };
+  const lane = startClockLane(
+    () => [nudge],
+    async () => null,
+    {
+      readClock: async () => {
+        reads += 1;
+        return clock;
+      },
+      runFn: async () => assert.fail("the lane is over budget"),
+      // Thirty minutes late, inside catch-up: armed at zero delay.
+      now: () => new Date("2026-09-19T06:30:00Z"),
+    },
+  );
+  try {
+    await lane.plan();
+    await new Promise((r) => setTimeout(r, 50));
+    // The lane plans on start and the test plans again; the decline re-plans
+    // once and holds the boundary for ten minutes.
+    assert.ok(reads <= 3, `one decline, then a ten-minute wait — not a loop (${reads} reads)`);
+    assert.equal(state.get("runs").nudge, "war_day_closes_at@2026-09-18T10:00:00.000Z", "declined, so not marked");
+  } finally {
+    lane.stop();
+    config.monthlyBudgetUsd = before;
+  }
 });

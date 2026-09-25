@@ -167,6 +167,39 @@ export async function listTools() {
   return { ok: true, tools: result.body?.tools || [] };
 }
 
+/**
+ * THE CATALOG: what the server publishes and which of it only reads —
+ * from `tools/list` at runtime, never a list in this repo. Elixir MCP
+ * annotates every tool (MCP `annotations.readOnlyHint`); six of its 54 on
+ * an agent door write something (feedback, identity mappings, nicknames,
+ * tracked clans and players, collections), and src/tools.js decides which
+ * of those each kind of turn may use. Kept for an hour, and shared with
+ * resolveToolName above.
+ *
+ * `annotated` is false when no tool carries a readOnlyHint at all — an
+ * older server, or another MCP server — which the policy treats as "cannot
+ * tell", not as "everything writes".
+ */
+const CATALOG_TTL_MS = 60 * 60 * 1000;
+let catalog = null;
+
+export async function toolCatalog({ list = listTools, now = Date.now(), fresh = false } = {}) {
+  if (!fresh && catalog && now - catalog.at < CATALOG_TTL_MS) return catalog;
+  const listed = await list();
+  if (!listed.ok) {
+    log.warn("tool_catalog_unavailable", { error: listed.error });
+    return catalog ?? { ok: false, error: listed.error, tools: [], annotated: false };
+  }
+  const tools = listed.tools.map((tool) => ({
+    name: tool.name,
+    readOnly: tool.annotations?.readOnlyHint === true,
+  }));
+  const annotated = listed.tools.some((tool) => typeof tool.annotations?.readOnlyHint === "boolean");
+  catalog = { ok: true, at: now, tools, annotated };
+  publishedTools = tools.map((tool) => tool.name);
+  return catalog;
+}
+
 /** One `tools/call`, unwrapped to the tool's parsed JSON body. */
 export async function callTool(name, args = {}) {
   const result = await rpc("tools/call", { name, arguments: args });

@@ -1,6 +1,6 @@
 # elixir-mcp-discord
 
-[![tests](https://github.com/jthingelstad/elixir-mcp-discord/actions/workflows/test.yml/badge.svg)](https://github.com/jthingelstad/elixir-mcp-discord/actions/workflows/test.yml)
+[![verify](https://github.com/jthingelstad/elixir-mcp-discord/actions/workflows/verify.yml/badge.svg)](https://github.com/jthingelstad/elixir-mcp-discord/actions/workflows/verify.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)](package.json)
 
@@ -17,15 +17,31 @@ your bot — no fork, no code to edit.
 
 ## Quick start
 
+With Docker — recommended for a machine that is always on, and nothing to
+install but a Docker runtime ([docs/DOCKER.md](docs/DOCKER.md) explains
+each step and the words):
+
+```bash
+git clone https://github.com/jthingelstad/elixir-mcp-discord && cd elixir-mcp-discord
+docker build -t elixir-mcp-discord .
+mkdir -p ~/.elixir-mcp-discord/myclan
+docker run -it --rm --user "$(id -u):$(id -g)" -v ~/.elixir-mcp-discord/myclan:/instance \
+  elixir-mcp-discord node src/setup.js /instance    # guided: keys, Discord app, channels
+./scripts/install-docker.sh ~/.elixir-mcp-discord/myclan   # runs it; then DM the bot
+```
+
+With Node 22 on the host — the path for working on the code, and for
+launchd or systemd:
+
 ```bash
 git clone https://github.com/jthingelstad/elixir-mcp-discord && cd elixir-mcp-discord
 npm install
 npm run setup -- ~/.elixir-mcp-discord/myclan     # guided: keys, Discord app, channels; then DM the bot
 ```
 
-That is the whole install. Setup asks for each thing, tries it against the
-service it is for before writing anything, and at the end offers to start the
-bot as a service. You need three things in hand: an **Elixir MCP agent key**
+Either way that is the whole install. Setup asks for each thing, tries it
+against the service it is for before writing anything, and at the end
+offers to start the bot as a service (outside a container). You need three things in hand: an **Elixir MCP agent key**
 (elixir.poapkings.com > Account > Agents > Create agent), a **Claude API
 key** (console.anthropic.com), and a **Discord application** with a bot token
 (discord.com/developers). Setup explains the rest as it goes, including the
@@ -138,12 +154,14 @@ and each choice comes back as a proposal with an Apply button. In order:
    and never asks for it.
 7. **Identity** — nothing to type: tell the bot about the clan in the DM and
    it proposes the lines to keep. `identity.md` is yours to edit any time.
-8. **Budgets** — the two pots (an estimate once routines exist; the bot
-   says what a set would cost when you choose it).
+8. **Budgets** — the three pots: routines, members' questions, and your
+   DMs with the bot plus its reviews (an estimate once routines exist; the
+   bot says what a set would cost when you choose it).
 9. **Admins** — each user id checked to be a member of the server. These are
    the people the bot DMs.
-10. Writes `.env` and offers to install and start the service, showing the
-    boot check's lines from the log. Then DM it.
+10. Writes `.env` and `config.json` (after every section, so a cancelled
+    run keeps what you typed) and offers to install and start the service,
+    showing the boot check's lines from the log. Then DM it.
 
 Every failure comes with its fix and a chance to retry; `skip` moves on.
 Re-running keeps every value on Enter, so it is also how you rotate one key,
@@ -230,7 +248,10 @@ Accepted edits are the bot's memory. `agent/memory.md` collects how to do
 this job here — which tool answers what, what your clan calls things; the
 house rules and a routine's brief change only when a rule itself was wrong.
 It never learns facts about the game (Elixir has those) and never anything
-about a person.
+about a person. A new instance starts with none: the file's notes to you
+sit in an HTML comment, which the bot never reads. (If yours was set up
+before 2026-09-25 and still has three example lines dated 2026-09-14 — one
+says war days are "boat days" — delete them; they are ignored either way.)
 
 It runs on its own model and its own budget (`REVIEW_MODEL`,
 `REVIEW_MONTHLY_BUDGET_USD`), so it can never cost a member an answer.
@@ -258,8 +279,9 @@ nobody else sees it, and anyone else who DMs it gets one polite line:
   transcript — what it was asked, what it thought, what every tool
   returned. Tell it what it should have done and it proposes the change.
 - **Run the calendar.** `routines` lists what runs and when. "Move the
-  movers post to 7:30", "turn off the rival scout", "add a Friday war
-  recap in #war that skips quiet weeks", "make the meta report shorter" —
+  meta report to Saturday at 9", "turn off the war-deck nudge", "add a
+  Friday war recap in #war that skips quiet weeks", "make the meta report
+  shorter" —
   each becomes a proposal on the routine's file, checked the way the bot
   loads it, live on Apply with no restart.
 - **Change a setting.** "Raise the ask budget to $15", "run the review
@@ -267,7 +289,7 @@ nobody else sees it, and anyone else who DMs it gets one polite line:
   questions to #ask-bot". Each is checked the way setup checks it and shown
   as a diff; Apply rewrites `config.json` and the change is live — only
   the command prefix and the feed poll interval restart the bot, which it
-  does itself under launchd or systemd. Keys, tokens and the wiring ids
+  does itself under launchd, systemd or Docker's restart policy. Keys, tokens and the wiring ids
   live in `.env`, which it cannot reach. `settings` shows the current
   values.
 - **Try before posting.** `try war-deck-check` runs the routine and shows
@@ -352,10 +374,25 @@ people's words and "post this in #announcements" must stay a request rather
 than an instruction. Where the bot *listens* is the one binding that stays
 explicit (`CHANNEL_ASK`).
 
+### What it may change in Elixir
+
+Almost everything Elixir MCP offers only reads. Six tools write something
+— feedback, identity links, nicknames, tracked clans and players,
+collections — and the server marks which. Each kind of turn gets every
+read and only the writes it needs: a routine and the weekly review may
+file feedback; a member's question and your DM may also link who is
+asking; a rehearsal (`npm run try`, `try` in the DM, a proposal's **Try
+it**, `npm run review`) writes nothing at all. Nothing the bot does can
+track a clan or player on your account. `npm run probe` prints the
+split. For belt and braces, untick `recordings:write` and
+`collections:write` on your agent's page in Elixir; the hub enforces that
+on the next call.
+
 ### No fallback, on purpose
 
 If Elixir MCP is down, this bot says so and stops. It has nothing else to
-consult. That makes it an honest instrument: when an answer is good, the MCP
+consult. (When the model API is what failed, it says that instead: an
+outage should be blamed on the service that had it.) That makes it an honest instrument: when an answer is good, the MCP
 server earned it.
 
 ### One thread per question
@@ -372,9 +409,11 @@ without them it answers in the channel and says so in the log.
 A member connecting their own agent has added their own player, so their agent
 knows them. This one has no such link and does not fake one with a local
 nickname table: it passes `on_behalf_of` with the Discord id, and the first
-time somebody is not recognised it asks which player they are and calls
-`elixir_identify` once. From then on the server remembers — for them, and for
-everyone who asks later.
+time somebody is not recognised it asks which player they are and links them
+once. From then on the server remembers — for them, and for everyone who asks
+later. The link is always to whoever sent the message: the model names a
+player, and the bot supplies who is asking from Discord itself, so nobody can
+type their way into linking someone else.
 
 ### Feedback is a feature, not an afterthought
 
@@ -387,6 +426,12 @@ still has the context that made the gap obvious, and via a post-turn sweep when
 a tool errored or an answer conceded a limit and nothing was filed. Maintainer
 replies are posted back into the channel. Members watching their complaint get
 answered is the point.
+
+Readers take part too: a 👎 on any post or answer sends the turn back for
+one reflection and at most one filing (reply to the message with what was
+wrong, and that reply is the strongest evidence it gets); a 👍 files
+praise with no model call. A 👎 is paid from the ask budget, since a
+member started it, and one turn takes at most three.
 
 ### Silence is a valid output
 
@@ -433,8 +478,12 @@ bot stops slightly short of your number rather than slightly past it. A lane
 that runs out says so — in the log for routines, and in the channel for asks,
 in a sentence aimed at a member rather than an operator.
 
-Months are UTC calendar months and nothing rolls over. `npm run routines`,
-`/budget` and `budget` in the DM all show where you are, and "raise the ask
+Months are UTC calendar months and nothing rolls over. Each pot is a
+number of dollars or `"unlimited"`, said on purpose; one left unset (or
+set to something that is not a number) is capped at $10 a month, and the
+boot log and a DM say which. `0` turns a lane off. `npm run
+routines`, `/budget` and `budget` in the DM all show where you are — all
+three pots, the review one whether or not the review is on, and "raise the ask
 budget to $15" in the DM changes it, live. `ASK_DAILY_TURNS_PER_MEMBER`
 (default 20) keeps one member from spending the ask pot for everyone.
 
@@ -447,11 +496,16 @@ report needs:
 ```markdown
 ---
 trigger: schedule
-model: claude-haiku-4-5
+model: claude-sonnet-5
 effort: low
 max_tokens: 2000
 ---
 ```
+
+`effort` (and the adaptive thinking it tunes) is sent only to models that
+take them. `claude-haiku-4-5` takes neither — either is an API error there —
+so a Haiku routine runs without thinking and its `effort` is ignored; mark
+another such model `"adaptive": false` in `models.json`.
 
 `max_tokens` (default 6000) caps thinking plus text plus tool arguments for
 one turn; at `effort: high` a routine that makes several large reads can
@@ -468,7 +522,8 @@ catalog in `src/pricing.js`). That file is operator-owned for the same reason
 the prompts are: prices change, and the person paying the bill should be able
 to correct one without a deploy. **An unpriced model stops the bot at boot**
 rather than being billed at zero — budgets you cannot enforce are worse than no
-budgets, because they look like they work.
+budgets, because they look like they work — and a routine whose `model:` is
+changed to an unpriced one later fails before the call, not after it.
 
 ## Operating notes
 
@@ -480,16 +535,23 @@ budgets, because they look like they work.
   routine's own cursor in `state/`, moved only after a successful turn, so a
   failed turn reads its window again. On first run each seeds from now
   rather than draining the backlog into your channel.
+- **`state/state.json` is replaced, never rewritten in place.** A crash or
+  a full disk mid-write leaves the previous state. If the file is ever
+  unreadable (a hand edit gone wrong), it is moved to
+  `state.json.corrupt-<time>` with an `ERROR state_corrupt` line, and the
+  bot starts over from a fresh state rather than overwriting it — this
+  month's spend is in the kept copy.
 - **A busy window is read to its start.** Elixir MCP serves the newest items
   of a window too big for one page and counts the rest (`has_more`,
   `timeline_more`); before the turn the bot reads the older ones back by
   window (the same `from`, `to` at the cut, `mark_read: false`), up to four
   more pages, so a join under an hour of badges is still posted. What the
   bound leaves unread is an `events_unread` warning in the log.
-- **A routine remembers what it posted.** `recall: 3` hands the model that
-  routine's last three posts, from its own ledger in `state/`, so a daily
-  spotlight can rotate and a movers post does not name the same three players
-  every morning. It is the bot's own output, not game data.
+- **A routine can remember what it posted.** `recall: 3` hands the model
+  that routine's last three posts, from its own ledger in `state/`, so a
+  recurring post you write can rotate instead of repeating itself. None of
+  the shipped routines use it — the editor is handed the news itself — but
+  the field is yours. It is the bot's own output, not game data.
 - **Failed calls are visible under the post.** When a turn's tool calls
   errored, a one-line footer says which and how many, whether or not the
   routine shows a trace; a reply that states figures without having called a
@@ -529,9 +591,9 @@ and nothing shared but the code:
 
 ```
 ~/.elixir-mcp-discord/
-  kings/     .env  agent/  state/
-  shipit/    .env  agent/  state/
-  rookies/   .env  agent/  state/
+  kings/     .env  config.json  agent/  state/
+  shipit/    .env  config.json  agent/  state/
+  rookies/   .env  config.json  agent/  state/
 ```
 
 Run `npm run setup` once per directory. Two things to know:
@@ -565,14 +627,17 @@ files, exports and dependencies nothing uses; `npm run audit` checks runtime
 dependencies for high-severity advisories in a separate job. Dependabot
 opens a grouped PR for dev tooling weekly.
 
-No network, no spend in the tests: the model call and Discord are both
+No network, no spend in the tests — enforced: `scripts/setup-tests.js`
+refuses every fetch and fails the file that tried one. The model call and Discord are both
 injectable. They cover routine parsing (every mistake a hand-edited file can
 make), the schedule arithmetic including a DST boundary, the runner's
 post/skip/split behaviour, prompt assembly, the ask path end to end, the
 ledger, the review lane's proposals and buttons, the DM console, settings,
 and the instance repository. The ask-path test exists because a refactor
 once deleted `LiveMessage` and every static check passed — a missing symbol
-is a runtime `ReferenceError`, and members found out instead.
+is a runtime `ReferenceError`, and members found out instead. Since
+2026-09-25 lint has `no-undef` too, so that one no longer gets past the
+static checks either.
 
 A tag is a release: `npm version minor && git push --follow-tags` runs
 `verify`, checks the tag matches `package.json`, and publishes the commits
@@ -600,15 +665,19 @@ journalctl --user -u elixir-mcp-discord-myclan -f
 loginctl enable-linger $USER              # keep it running after you log out
 ```
 
-**Docker:**
+**Docker** ([docs/DOCKER.md](docs/DOCKER.md) is the whole story, moving a
+bot off launchd included):
 
 ```bash
-I=~/.elixir-mcp-discord/myclan
-docker build -t elixir-mcp-discord .
-docker run -d --name elixir-mcp-discord-myclan --restart unless-stopped \
-  --env-file $I/.env -v "$I/state:/app/state" -v "$I/agent:/app/agent" \
-  elixir-mcp-discord
+./scripts/install-docker.sh ~/.elixir-mcp-discord/myclan              # one bot
+./scripts/install-docker.sh ~/.elixir-mcp-discord/{kings,shipit}      # several, one compose.yml
+./scripts/install-docker.sh ~/.elixir-mcp-discord/myclan --image 0.4.0  # the published image
+cd ~/.elixir-mcp-discord && docker compose logs -f myclan
 ```
+
+The script writes `compose.yml` beside the instances — one service each,
+restarted when it exits, run as you, logs rotated — and refuses while a
+launchd job or systemd unit for the same instance is still running.
 
 Both service templates are rendered rather than committed, because a unit file
 is nothing but absolute paths and yours are not these. Three things in them are
@@ -616,13 +685,24 @@ deliberate: `node` is referenced by absolute path (neither launchd nor systemd
 reads your shell profile); the working directory is the instance so its
 `.env`, `agent/` and `state/` are the ones found; and the restart throttle is
 30 seconds so a job that dies on startup leaves a legible crash loop in the
-log instead of drowning it. The container mounts the instance's `state/` and
-`agent/` so cursors and budgets survive a replacement and a prompt edit needs
-no rebuild.
+log instead of drowning it. The container mounts the whole instance —
+`.env`, `config.json`, `agent/`, `state/` — as the host user that owns it,
+so settings, cursors and budgets survive a replacement, a prompt edit needs
+no rebuild, and a setting that needs a restart is applied by the restart
+policy. (Before 2026-09-25 the recipe mounted only `state/` and `agent/`;
+a container started that way has no `config.json`, which means no
+budgets, no admins and no ask channel.)
 
 Every boot checks the channels again — in the guild, the role can see, post
 and read history, plus threads for an ask channel — and complains in the log
 and in the first channel that works. The lanes that work keep working.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md): bugs and docs are welcome as pull
+requests; product changes start as an issue with the evidence.
+[AGENTS.md](AGENTS.md) has the rules and the map of
+[docs/decisions/](docs/decisions/), the dated reason for most of the code.
 
 ## License
 

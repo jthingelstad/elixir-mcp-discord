@@ -8,7 +8,17 @@
  */
 
 import { Client, GatewayIntentBits, Partials, Events } from "discord.js";
-import { config, provenance, channelEnvName, instanceDir, envFile, configFile, envLoaded, migrated } from "./config.js";
+import {
+  config,
+  provenance,
+  channelEnvName,
+  instanceDir,
+  envFile,
+  configFile,
+  envLoaded,
+  migrated,
+  DEFAULT_LANE_BUDGET_USD,
+} from "./config.js";
 import { handleAsk, isThreadOf } from "./ask.js";
 import { handleReaction } from "./reactions.js";
 import { startEventLoop } from "./events.js";
@@ -24,7 +34,7 @@ import * as directory from "./directory.js";
 import { buildId } from "./build.js";
 import { drain, count } from "./inflight.js";
 import { commandName } from "./commands.js";
-import { rateFor } from "./pricing.js";
+import { rateFor, UnpricedModel } from "./pricing.js";
 import * as budget from "./budget.js";
 import { initialize, describePrincipal } from "./mcp.js";
 import { log } from "./log.js";
@@ -45,6 +55,12 @@ const client = new Client({
   // the message, the reaction and sometimes the user uncached; partials let
   // the event through so it can be fetched.
   partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User],
+  // Nothing the bot writes pings anyone but the member it is replying to.
+  // Its words carry names from the record, a room it read and members'
+  // questions; without this default a post containing <@id>, a role
+  // mention or @everyone (where the role is ever granted that) would ping
+  // them. A message that sets its own allowedMentions still wins.
+  allowedMentions: { parse: [], repliedUser: true },
 });
 
 /** Logical channel name -> Discord channel, resolved once and remembered. A
@@ -122,7 +138,30 @@ function reportPrincipal(handshake) {
   if (principal) state.set({ principal });
 }
 
-client.once(Events.ClientReady, async (ready) => {
+/**
+ * A boot that throws (an unpriced model, a channel check that crashed) used
+ * to leave a half-started process: the handler's rejection only reached the
+ * unhandledRejection log line, so the ask and DM lanes answered while no
+ * scheduler, feed, clock or review ever started, and the supervisor never
+ * restarted it because it never exited. It exits now — after the drain, with
+ * a notice — and launchd or systemd brings it back.
+ */
+client.once(
+  Events.ClientReady,
+  (ready) =>
+    void boot(ready).catch(async (error) => {
+      log.error("boot_failed", { error: error.message, stack: error.stack?.slice(0, 400) });
+      // An unpriced model has already said so, with the fix.
+      if (!(error instanceof UnpricedModel)) {
+        await notify.notify("boot failed", `${error.message.slice(0, 300)} — exiting so the service restarts.`, {
+          fingerprint: `boot_failed:${error.message.slice(0, 60)}`,
+        });
+      }
+      await shutdown("boot_failed", 1);
+    }),
+);
+
+async function boot(ready) {
   log.info("discord_ready", { user: ready.user.tag, guild: config.discord.guildId, build: buildId() });
   notify.configure({ client });
   // Which instance this is, first. One checkout can run several bots, and a
@@ -251,14 +290,26 @@ client.once(Events.ClientReady, async (ready) => {
     }
   }
 
+  const defaulted = [];
   for (const lane of budget.status()) {
-    log[lane.budget ? "info" : "warn"]("budget", {
+    log[lane.source === "set" ? "info" : "warn"]("budget", {
       lane: lane.lane,
       month: lane.month,
       spent: lane.spent.toFixed(2),
-      budget: lane.budget ? lane.budget.toFixed(2) : "UNLIMITED",
+      budget: lane.budget === null ? "UNLIMITED" : lane.budget.toFixed(2),
+      source: lane.source,
       state: lane.state,
     });
+    if (lane.source === "default") defaulted.push(lane);
+  }
+  // An unset budget is capped, not open (config.js, since 2026-09-25): say
+  // so where the operator reads, once a day, with the fix.
+  if (defaulted.length) {
+    await notify.notify(
+      "budget not set",
+      `${defaulted.map((l) => `${budget.BUDGET_KEYS[l.lane]} (${l.label})`).join(", ")} ${defaulted.length === 1 ? "is" : "are"} not set, so ${defaulted.length === 1 ? "it is" : "each is"} capped at $${DEFAULT_LANE_BUDGET_USD.toFixed(2)} a month. Set a number, or "unlimited" if you mean no cap — "raise the ask budget to $15" here does it.`,
+      { fingerprint: `budget_default:${defaulted.map((l) => l.lane).join(",")}`, every: 24 * 3600 * 1000 },
+    );
   }
   for (const routine of routines) {
     log.info("routine_loaded", {
@@ -305,7 +356,7 @@ client.once(Events.ClientReady, async (ready) => {
   const clockLane = startClockLane(() => routinesFor("clock"), resolveChannel);
   stoppers.push(() => clockLane.stop());
   timers.push(startReview(client));
-});
+}
 
 /**
  * GRACEFUL SHUTDOWN. SIGTERM (what `launchctl kickstart -k` and systemd
@@ -319,7 +370,7 @@ const stoppers = [];
 const DRAIN_MS = 45_000;
 let shuttingDown = false;
 
-async function shutdown(signal) {
+async function shutdown(signal, code = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
   for (const timer of timers) clearInterval(timer);
@@ -330,7 +381,7 @@ async function shutdown(signal) {
   if (left) log.warn("shutdown_abandoned_turns", { inFlight: left });
   await client.destroy().catch(() => {});
   log.info("shutdown_complete");
-  process.exit(0);
+  process.exit(code);
 }
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));

@@ -81,6 +81,21 @@ test("no budget configured is unlimited, and says so rather than reading as zero
   assert.equal(budget.status()[0].state, "unlimited");
 });
 
+test("the review lane is in every status, review on or off: the operator's DMs spend it", () => {
+  const before = { enabled: config.review.enabled, budget: config.review.monthlyBudgetUsd };
+  try {
+    config.review.enabled = false;
+    config.review.monthlyBudgetUsd = null;
+    const review = budget.status().find((b) => b.lane === "review");
+    assert.ok(review, "listed with the review off");
+    assert.equal(review.state, "unlimited", "and an unset pot says so");
+    assert.equal(review.label, "review + DMs");
+  } finally {
+    config.review.enabled = before.enabled;
+    config.review.monthlyBudgetUsd = before.budget;
+  }
+});
+
 test("status reports what an operator needs to decide anything", () => {
   budget.record("ask", 4.5);
   const ask = budget.status().find((b) => b.lane === "ask");
@@ -153,4 +168,12 @@ test("slash commands are declared, gated, and describe themselves", async () => 
   assert.match(reply, /routines/);
   assert.match(reply, /\$40\.00/);
   assert.match(reply, /\$20\.00/);
+});
+
+test("a $0 budget turns the lane off; it is not read as unlimited", () => {
+  config.askMonthlyBudgetUsd = 0;
+  const verdict = budget.check("ask");
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.reason, "exhausted");
+  assert.equal(budget.status().find((b) => b.lane === "ask").state, "exhausted");
 });

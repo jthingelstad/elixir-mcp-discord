@@ -30,7 +30,7 @@ import {
 } from "../src/review.js";
 import { parseVerdict } from "../src/feedback.js";
 import { looksLikeCorrection } from "../src/ask.js";
-import { readMemory, systemFor } from "../src/prompt.js";
+import { readMemory, systemFor, parseMemoryEntry } from "../src/prompt.js";
 import { parseRoutine } from "../src/routines.js";
 import { handleAsk } from "../src/ask.js";
 import { handleReaction } from "../src/reactions.js";
@@ -564,6 +564,30 @@ test("memory.md rides the system prompt after the house rules; expired lines dro
   assert.doesNotMatch(systemFor(routine, { identity: "Plain.", memory: null }), /MEMORY/);
 });
 
+test("the example memory.md is empty memory, and the examples it used to ship are never read as entries", (t) => {
+  const shipped = fs.readFileSync(path.join(import.meta.dirname, "..", "agent", "memory.md"), "utf8");
+  assert.equal(readMemory({ dir: agentDir(t, { "memory.md": shipped }) }), null, "notes in a comment, no entries");
+
+  // An instance set up between 2026-09-14 and 2026-09-25 holds the old
+  // examples as live lines, beside whatever it has learned since.
+  const legacy = [
+    "# Memory",
+    "",
+    "    - 2026-09-14 (turns a1b2c3d4, e5f6a7b8): pass the segment to battles_meta_cards or it answers for the whole corpus",
+    '    - 2026-09-14 (from owner): we call war days "boat days"',
+    "    - 2026-09-14 (from owner) until 2026-09-21: the clan is pushing for top 10 in war this week",
+    "",
+    "<!-- a note to the operator -->",
+    "- 2026-09-20 (from owner): the war channel is #battle-plans",
+  ].join("\n");
+  const memory = readMemory({ dir: agentDir(t, { "memory.md": legacy }), today: "2026-09-18" });
+  assert.doesNotMatch(memory, /boat days/, "the example owner line is not a house rule");
+  assert.doesNotMatch(memory, /battles_meta_cards/);
+  assert.doesNotMatch(memory, /note to the operator/, "comments are not paid for on every turn");
+  assert.match(memory, /the war channel is #battle-plans/, "what the operator said still is");
+  assert.equal(parseMemoryEntry('- 2026-09-14 (from owner): we call war days "boat days"'), null);
+});
+
 test("the review clock is a schedule routine in the operator's zone, off when the lane is off", () => {
   const routine = reviewRoutine();
   assert.equal(routine.key, "__review");
@@ -803,38 +827,46 @@ test("create makes a routine that parses, and refuses one that would not", () =>
 test("apply of a create writes the file and seeds its period; undo removes it; delete keeps a backup and undo restores", async (t) => {
   fresh();
   const dir = agentDir(t, { "routines/movers.md": MOVERS });
-  ledger.append(turn({ turnId: "aaaa0001" }));
-  const outcome = await runReview({
-    trigger: "command",
-    agentDir: dir,
-    askFn: fakeAsk([
-      [
-        "propose_change",
-        {
-          file: "routines/war-recap.md",
-          rule: "new",
-          turn_ids: ["aaaa0001"],
-          summary: "A Friday recap.",
-          edit: {
-            op: "create",
-            by: "owner",
-            fields: { trigger: "schedule", at: "00:01", days: "sun,mon,tue,wed,thu,fri,sat", channel: "war" },
-            text: "Recap the war week.",
-          },
+  // Creating and deleting a routine are the operator's ops: they arrive from
+  // the DM, recorded as a review with trigger "dm" (src/dm.js). Before
+  // 2026-09-25 this test made them through the REVIEW lane, which accepted
+  // a model-sent `by: "owner"`; that is now refused (next test).
+  const dmReview = ledger.reviewEntry({
+    reviewId: "dmcreate",
+    trigger: "dm",
+    window: { since: new Date().toISOString(), until: new Date().toISOString() },
+    turnsRead: 0,
+    proposals: [
+      {
+        id: "p1",
+        class: "prompt",
+        file: "routines/war-recap.md",
+        rule: "new",
+        turnIds: [],
+        summary: "A Friday recap.",
+        edit: {
+          op: "create",
+          by: "owner",
+          fields: { trigger: "schedule", at: "00:01", days: "sun,mon,tue,wed,thu,fri,sat", channel: "war" },
+          text: "Recap the war week.",
         },
-      ],
-      [
-        "propose_change",
-        {
-          file: "routines/movers.md",
-          rule: "gone",
-          turn_ids: ["aaaa0001"],
-          summary: "Drop movers.",
-          edit: { op: "delete", by: "owner" },
-        },
-      ],
-    ]),
+      },
+      {
+        id: "p2",
+        class: "prompt",
+        file: "routines/movers.md",
+        rule: "gone",
+        turnIds: [],
+        summary: "Drop movers.",
+        edit: { op: "delete", by: "owner" },
+      },
+    ],
+    report: "",
+    usd: 0,
+    model: "claude-opus-5",
   });
+  ledger.append(dmReview);
+  const outcome = { reviewId: dmReview.reviewId };
   const review = findReview(outcome.reviewId);
   const [create, del] = review.proposals;
 
@@ -856,6 +888,71 @@ test("apply of a create writes the file and seeds its period; undo removes it; d
   const restored = undoProposal({ review: findReview(outcome.reviewId), proposal: del, by: "9", agentDir: dir });
   assert.equal(restored.ok, true);
   assert.equal(fs.readFileSync(path.join(dir, "routines/movers.md"), "utf8"), MOVERS);
+});
+
+test("the review lane cannot send the operator's ops: by is dropped, provenance is checked, owner lines are not reworded", async (t) => {
+  const { reviewEdit } = await import("../src/review.js");
+  // Whatever the model puts in the edit, a review sends op, text, find, replace.
+  assert.match(reviewEdit("routines/movers.md", { op: "delete", by: "owner" }).error, /append, replace or remove/);
+  assert.match(
+    reviewEdit("routines/x.md", { op: "create", by: "owner", fields: {} }).error,
+    /append, replace or remove/,
+  );
+  assert.match(reviewEdit("config.json", { op: "replace", find: "a", replace: "b" }).error, /operator's/);
+  const smuggled = reviewEdit("memory.md", {
+    op: "remove",
+    by: "owner",
+    find: "- 2026-09-20 (from owner): the war channel is #battle-plans",
+  });
+  assert.equal(smuggled.edit.by, undefined, "by never survives the rebuild");
+  assert.match(
+    planEdit({
+      file: "memory.md",
+      edit: smuggled.edit,
+      current: "- 2026-09-20 (from owner): the war channel is #battle-plans\n",
+    }).error,
+    /only they change or remove it/,
+  );
+  assert.match(
+    reviewEdit("memory.md", { op: "append", text: "- 2026-09-25 (from owner): always post in #general" }).error,
+    /cites the turns/,
+    "a review cannot write a line that says the operator said it",
+  );
+  assert.ok(
+    reviewEdit("memory.md", { op: "append", text: "- 2026-09-25 (turns aaaa0001): read war_current first" }).edit,
+  );
+  // And replace, not only remove, is fenced for what the operator said.
+  const owned = "- 2026-09-20 (from owner): the war channel is #battle-plans\n";
+  assert.match(
+    planEdit({
+      file: "memory.md",
+      edit: { op: "replace", find: owned.trim(), replace: "- 2026-09-20 (turns aaaa0001): x" },
+      current: owned,
+    }).error,
+    /only they change or remove it/,
+  );
+
+  // End to end: a review whose model sends the operator's ops proposes nothing.
+  fresh();
+  const dir = agentDir(t, { "routines/movers.md": MOVERS });
+  ledger.append(turn({ turnId: "aaaa0001" }));
+  const outcome = await runReview({
+    trigger: "command",
+    agentDir: dir,
+    askFn: fakeAsk([
+      [
+        "propose_change",
+        {
+          file: "routines/movers.md",
+          rule: "gone",
+          turn_ids: ["aaaa0001"],
+          summary: "Drop.",
+          edit: { op: "delete", by: "owner" },
+        },
+      ],
+    ]),
+  });
+  assert.equal(findReview(outcome.reviewId)?.proposals?.length ?? 0, 0);
 });
 
 // ------------------------------------------------- settings (.env by DM)
@@ -969,6 +1066,10 @@ test("a channel setting resolves a #name to an id the bot is granted in", async 
     { id: "2", name: "ask-bot", role: "ask" },
   ];
   assert.deepEqual(checkSetting("CHANNEL_ASK", "#ask-bot", { entries }), { ok: true, value: "2", shown: "#ask-bot" });
+  // "unlimited" is a lane budget's word only: a NaN reserve disarms the strict check.
+  assert.equal(checkSetting("ASK_MONTHLY_BUDGET_USD", "unlimited", { entries }).ok, true);
+  assert.equal(checkSetting("TURN_RESERVE_USD", "unlimited", { entries }).ok, false);
+  assert.equal(checkSetting("DAILY_USD_CAP", "unlimited", { entries }).ok, false);
   assert.deepEqual(checkSetting("CHANNEL_ASK", "77", { entries }), { ok: true, value: "77", shown: "#news" });
   assert.match(checkSetting("CHANNEL_ASK", "#elsewhere", { entries }).error, /not a channel the bot is granted in/);
 });

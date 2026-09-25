@@ -122,15 +122,30 @@ function postTool({ routine, entries, dryRun, posts, resolve = resolveById }) {
         };
       }
       const record = { channelId: entry.id, channelName: entry.name, text, messages: [] };
-      posts.push(record);
-      if (dryRun) return { ok: true, body: { posted: true, channel: `#${entry.name}`, dry_run: true } };
-      const channel = await resolve(entry.id);
-      if (!channel) {
-        posts.pop();
-        return { ok: false, code: "unresolvable", error: `#${entry.name} could not be fetched` };
+      if (dryRun) {
+        posts.push(record);
+        return { ok: true, body: { posted: true, channel: `#${entry.name}`, dry_run: true } };
       }
-      record.messages = await post(channel, text, routine.maxChars);
+      const channel = await resolve(entry.id);
+      if (!channel) return { ok: false, code: "unresolvable", error: `#${entry.name} could not be fetched` };
+      // A post is recorded once Discord has it. Recorded before the send, a
+      // refused one still counted: the run returned ok, the cursor moved, the
+      // silence clock was stamped, and nothing was in the channel.
+      try {
+        record.messages = await post(channel, text, routine.maxChars);
+      } catch (error) {
+        log.error("post_failed", { routine: routine.key, channel: entry.name, error: error.message });
+        // Over 2,000 characters a post is several messages; the ones that
+        // went out are in the channel, and the turn must know them.
+        if (error.sent?.length) posts.push({ ...record, messages: error.sent, channel });
+        return {
+          ok: false,
+          code: "send_failed",
+          error: `Discord refused the post to #${entry.name}${error.sent?.length ? ` after ${error.sent.length} part(s) went out; do not repeat those` : ""}: ${error.message}`,
+        };
+      }
       record.channel = channel;
+      posts.push(record);
       return {
         ok: true,
         body: { posted: true, channel: `#${entry.name}`, message_id: record.messages.at(-1)?.id ?? null },
@@ -364,6 +379,8 @@ async function runRoutineNow(
     resolve = resolveById,
     overrides = {},
     lane = laneFor(routine),
+    // The post-turn friction sweep is a model call of its own; a test injects it.
+    sweepFn = sweepFriction,
   } = {},
 ) {
   const blocked = spendBlock(lane);
@@ -424,7 +441,7 @@ async function runRoutineNow(
       }),
     );
   };
-  const result = await askFn({
+  let result = await askFn({
     system,
     messages: [{ role: "user", content: userMessageFor(routine, { events, recent, withTool }) }],
     maxTokens: routine.maxTokens,
@@ -432,6 +449,8 @@ async function runRoutineNow(
     effort: routine.effort,
     routineKey: routine.key,
     lane,
+    // A dry run reads and writes nothing, upstream included (src/tools.js).
+    policy: dryRun ? "rehearsal" : lane,
     localTools: withTool
       ? [
           postTool({ routine, entries: directoryEntries, dryRun: dryRun || false, posts, resolve }),
@@ -440,6 +459,22 @@ async function runRoutineNow(
       : [],
     nudge: withTool ? ({ text, truncated }) => deliveryNudge(routine, { text, posts, truncated }) : null,
   });
+
+  // A round that failed AFTER post_message went out (the API call that
+  // follows every tool result: a 529, a dropped stream) still delivered.
+  // Returned as a failure, the event cursor stayed and the next poll posted
+  // the same news again; it is a delivered turn with the error noted.
+  let afterPost = null;
+  if (!result.ok && posts.length > 0 && !dryRun) {
+    afterPost = result.error;
+    log.warn("routine_failed_after_post", {
+      routine: routine.key,
+      turnId: result.turnId,
+      posts: posts.length,
+      error: result.error,
+    });
+    result = { ...result, ok: true, text: "" };
+  }
 
   if (!result.ok) {
     log.error("routine_failed", { routine: routine.key, error: result.error });
@@ -621,9 +656,10 @@ async function runRoutineNow(
     footers,
     ungrounded,
     friction: friction?.reason ?? null,
+    ...(afterPost ? { error: `after_post: ${afterPost}` } : {}),
   });
   if (friction) {
-    const summary = await sweepFriction({
+    const summary = await sweepFn({
       question: `Scheduled routine "${routine.key}":\n${routine.prompt}`,
       answer: posted,
       friction,

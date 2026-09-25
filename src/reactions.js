@@ -13,7 +13,20 @@
  * Each kind is handled once per turn. A 👎 the sweep could make nothing of
  * is released again, so the reader can reply with what was wrong and react a
  * second time; the reply is then part of the filing.
+ *
+ * A 👎 is a model call a member starts, so it is paid from the ask lane and
+ * bounded (since 2026-09-25). Before, removing and re-adding a bare 👎 swept
+ * the same turn again every time — a paid call and a "Noted" line in the
+ * channel per toggle, charged to the lane of the post, so a member could
+ * spend the budget the scheduled posts run on. Now a turn is swept without
+ * a note once, and at most SWEEPS_PER_TURN times in all.
  */
+
+/** How many 👎 sweeps one turn gets, whoever reacts and whatever they reply. */
+export const SWEEPS_PER_TURN = 3;
+
+/** Member-initiated, so the members' pot pays — never the schedule's. */
+const SWEEP_LANE = "ask";
 
 import { ask, spendBlock } from "./claude.js";
 import { callTool } from "./mcp.js";
@@ -65,7 +78,7 @@ function describeTurn(turn, note) {
  * recorded as a finding for the review lane — or null for nothing.
  */
 export async function sweepReaction({ turn, note }) {
-  const blocked = spendBlock(turn.lane || "routines");
+  const blocked = spendBlock(SWEEP_LANE);
   if (blocked) {
     log.warn("reaction_sweep_over_budget", { turnId: turn.turnId, reason: blocked.reason });
     return null;
@@ -86,7 +99,7 @@ ${CLASSIFY_RULES}`;
 
   const result = await ask({
     system,
-    lane: turn.lane || "routines",
+    lane: SWEEP_LANE,
     routineKey: "reaction-sweep",
     maxTokens: 3000,
     messages: [{ role: "user", content: describeTurn(turn, note) }],
@@ -156,6 +169,20 @@ export async function handleReaction(reaction, user, { sweepFn = sweepReaction, 
   }
 
   const note = await readerNote(message, user);
+  if (!note && turn.reactions?.bare) {
+    // Swept once with nothing to go on, and asked for a reply. The same 👎
+    // again is not new evidence: no call, no second "Noted". Released, so a
+    // reply and a 👎 still sweep.
+    state.markReaction(turn.turnId, kind, false);
+    log.info("reaction_sweep_repeated", { turnId: turn.turnId });
+    return { kind, filed: false, repeated: true };
+  }
+  const sweeps = state.countSweep(turn.turnId);
+  if (sweeps > SWEEPS_PER_TURN) {
+    // The mark stays set: this turn takes no more 👎 sweeps from anyone.
+    log.info("reaction_sweep_capped", { turnId: turn.turnId, sweeps: SWEEPS_PER_TURN });
+    return { kind, filed: false, capped: true };
+  }
   ledger.append(ledger.reactionEntry({ turnId: turn.turnId, reaction: kind, userId: user.id, note: note || null }));
   const summary = await sweepFn({ turn, note });
   if (summary && typeof summary === "object") {
@@ -174,6 +201,7 @@ export async function handleReaction(reaction, user, { sweepFn = sweepReaction, 
   // Nothing specific to file. Release the mark so a second 👎 after a reply
   // gets swept with the reader's words in hand.
   if (!note) {
+    state.markReaction(turn.turnId, "bare");
     state.markReaction(turn.turnId, kind, false);
     await respond(
       "-# 📮 Noted. Reply to this message with what was wrong and react 👎 again, and it will be filed with the maintainer.",

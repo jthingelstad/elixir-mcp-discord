@@ -20,6 +20,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { instanceDir } from "./config.js";
+import { log } from "./log.js";
 
 // Relative to the INSTANCE directory, not the checkout. Several instances of
 // one checkout must never share a state file; see instanceDir in config.js.
@@ -90,17 +91,66 @@ const LAST_POSTS_KEEP = 10;
 const LAST_POST_CHARS = 700;
 const TURNS_KEEP = 200;
 
+/**
+ * A missing file is a fresh install. An UNREADABLE one is not: before
+ * 2026-09-25 both returned the defaults, and every writer here is
+ * read-modify-write of the whole file, so the next `markRun` saved the
+ * defaults plus one key — the month's spend back to $0 (a budget that could
+ * be spent twice), every cursor and run gone. The bad file is now moved
+ * aside, never overwritten, and said out loud; what starts afresh is the
+ * same seed-don't-drain state a new install gets. One that cannot be READ
+ * at all is left where it is and every access throws until it can.
+ */
 function read() {
+  let raw;
   try {
-    return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(STATE_PATH, "utf8")) };
-  } catch {
+    raw = fs.readFileSync(STATE_PATH, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return { ...DEFAULTS };
+    // A file that is there and cannot be read (permissions, EIO, a
+    // directory in its place) is not an empty one: returned as defaults, the
+    // next write renamed a fresh state over it. Every writer reads first, so
+    // throwing here stops the write too; a transient error clears itself on
+    // the next tick, a lasting one is this line until someone fixes it.
+    log.error("state_unreadable", { path: STATE_PATH, error: error.message, code: error.code });
+    throw new Error(`state file ${STATE_PATH} is unreadable (${error.code ?? error.message}); nothing was written`);
+  }
+  try {
+    return { ...DEFAULTS, ...JSON.parse(raw) };
+  } catch (error) {
+    const kept = `${STATE_PATH}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+    try {
+      fs.renameSync(STATE_PATH, kept);
+    } catch {
+      // Another process moved it first; its copy is the one kept.
+    }
+    log.error("state_corrupt", {
+      path: STATE_PATH,
+      error: error.message,
+      kept,
+      hint: "starting from a fresh state (cursors and the run ledger re-seed; this month's spend is in the kept copy)",
+    });
     return { ...DEFAULTS };
   }
 }
 
+/**
+ * Write to a temporary file, flush it, then rename it into place. A rename
+ * is atomic, so a reader — this process or `npm run try` beside the service —
+ * sees the old state or the new one and never half a file, and a crash or a
+ * full disk mid-write leaves the previous state where it was.
+ */
 function write(state) {
   fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
-  fs.writeFileSync(STATE_PATH, `${JSON.stringify(state, null, 2)}\n`);
+  const tmp = `${STATE_PATH}.tmp-${process.pid}`;
+  const fd = fs.openSync(tmp, "w");
+  try {
+    fs.writeSync(fd, `${JSON.stringify(state, null, 2)}\n`);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.renameSync(tmp, STATE_PATH);
 }
 
 export function get(key) {
@@ -130,10 +180,23 @@ export function carried(routineKey) {
   return read().carry?.[routineKey] ?? [];
 }
 
+/** One timeline item, whoever re-read it: a release turn that fails leaves
+ *  the cursor where it was, and the next poll carries the same items again. */
+const itemId = (item) => [item?.kind, item?.subject_tag, item?.at, item?.observed_at, item?.text].join("|");
+
 export function addCarry(routineKey, items) {
   if (!items?.length) return;
   const state = read();
-  const kept = [...(state.carry?.[routineKey] ?? []), ...items].slice(-CARRY_CAP);
+  const held = state.carry?.[routineKey] ?? [];
+  const seen = new Set(held.map(itemId));
+  const fresh = [];
+  for (const item of items) {
+    const id = itemId(item);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    fresh.push(item);
+  }
+  const kept = [...held, ...fresh].slice(-CARRY_CAP);
   write({ ...state, carry: { ...state.carry, [routineKey]: kept } });
 }
 
@@ -269,6 +332,17 @@ export function markReaction(turnId, kind, value = true) {
   else delete reactions[kind];
   write({ ...state, turns: { ...state.turns, [turnId]: { ...turn, reactions } } });
   return true;
+}
+
+/** Count one more 👎 sweep of a turn and return the new count (0 for an
+ *  unknown turn). Kept beside the reaction marks, which survive a re-record. */
+export function countSweep(turnId) {
+  const state = read();
+  const turn = state.turns?.[turnId];
+  if (!turn) return 0;
+  const sweeps = (turn.reactions?.sweeps ?? 0) + 1;
+  write({ ...state, turns: { ...state.turns, [turnId]: { ...turn, reactions: { ...turn.reactions, sweeps } } } });
+  return sweeps;
 }
 
 export function markRun(routineKey, periodKey) {

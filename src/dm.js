@@ -14,7 +14,7 @@
  *                          shown to you only; "post it" sends it
  *   ask as yourself        anything about the record, answered on your behalf,
  *                          without cluttering the ask channel
- *   run the calendar       "routines"; "move the movers post to 7:30", "add a
+ *   run the calendar       "routines"; "move the meta report to 7:30", "add a
  *                          Friday war recap in #war" — a proposal on the
  *                          routine's file, parser-checked, live on Apply
  *   see what it knows      "memory" — the current memory.md, with expiry
@@ -55,6 +55,7 @@ import { buildId } from "./build.js";
 import { callTool } from "./mcp.js";
 import * as budget from "./budget.js";
 import { deckLinkTool } from "./deck-link.js";
+import { linkMeTool } from "./link.js";
 import { planEdit, proposalMessage, toComponents, readAgentFiles } from "./review.js";
 import { isConversational } from "./ask.js";
 import { detectFriction, sweepFriction } from "./feedback.js";
@@ -878,6 +879,7 @@ async function converse(message, options = {}) {
     maxTokens: routine.maxTokens,
     routineKey: "dm",
     lane: "review",
+    policy: "dm",
     localTools: [
       proposeTool({ files, proposals, by: "owner", operatorId: message.author.id }),
       routinesTool(),
@@ -889,6 +891,7 @@ async function converse(message, options = {}) {
       statusTool(),
       estimateTool(),
       deckLinkTool(),
+      linkMeTool({ authorId: message.author.id }),
     ],
     maxRounds: 8,
   });

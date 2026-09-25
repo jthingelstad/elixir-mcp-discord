@@ -16,6 +16,7 @@
     "no-implicit-coercion": ["error", { "allow": ["!!"] }],
     "no-unused-expressions": "error",
     "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "caughtErrors": "none" }],
+    "no-undef": "error",
     "no-var": "error",
     "object-shorthand": ["error", "always"],
     "prefer-const": ["error", { "destructuring": "all" }],

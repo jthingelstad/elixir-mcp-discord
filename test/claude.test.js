@@ -11,6 +11,19 @@ import { ask } from "../src/claude.js";
 
 const usage = { input_tokens: 100, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 50 };
 
+/** A server catalog as tools/list annotates it: two reads and three writes. */
+const CATALOG = async () => ({
+  ok: true,
+  annotated: true,
+  tools: [
+    { name: "players_summary", readOnly: true },
+    { name: "battles_meta_decks", readOnly: true },
+    { name: "elixir_send_feedback", readOnly: false },
+    { name: "elixir_identify", readOnly: false },
+    { name: "elixir_track_clan", readOnly: false },
+  ],
+});
+
 function playing(responses) {
   const requests = [];
   const stream = (params) => {
@@ -52,6 +65,7 @@ test("a turn cut off at max_tokens is resumed once with the caller's message; th
       return args.truncated ? "OUT OF ROOM." : null;
     },
     stream,
+    catalogFn: CATALOG,
   });
   assert.equal(requests.length, 2, "one resume round");
   assert.equal(asked.length, 1);
@@ -83,6 +97,7 @@ test("cut off twice is truncated, and a turn with no nudge is never resumed", as
     messages: [{ role: "user", content: "go" }],
     nudge: () => "OUT OF ROOM.",
     stream: twice.stream,
+    catalogFn: CATALOG,
   });
   assert.equal(twice.requests.length, 2, "asked again once, not forever");
   assert.equal(out.truncated, true);
@@ -90,8 +105,92 @@ test("cut off twice is truncated, and a turn with no nudge is never resumed", as
   assert.equal(out.stopReason, "max_tokens");
 
   const plain = playing([{ content: [{ type: "text", text: "Half an ans" }], stop_reason: "max_tokens", usage }]);
-  const bare = await ask({ system: "s", messages: [{ role: "user", content: "go" }], stream: plain.stream });
+  const bare = await ask({
+    system: "s",
+    messages: [{ role: "user", content: "go" }],
+    stream: plain.stream,
+    catalogFn: CATALOG,
+  });
   assert.equal(plain.requests.length, 1, "no nudge, no second ask");
   assert.equal(bare.truncated, true);
   assert.equal(bare.resumed, false);
+});
+
+test("a model without adaptive thinking is sent neither thinking nor effort; the rest are sent both", async () => {
+  const done = { content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage };
+  const haiku = playing([done]);
+  const out = await ask({
+    system: "s",
+    messages: [{ role: "user", content: "go" }],
+    model: "claude-haiku-4-5",
+    effort: "low",
+    stream: haiku.stream,
+    catalogFn: CATALOG,
+  });
+  assert.equal(out.ok, true);
+  assert.equal(haiku.requests[0].thinking, undefined, "adaptive thinking is a 400 on Haiku 4.5");
+  assert.equal(haiku.requests[0].output_config, undefined, "and so is effort");
+
+  const sonnet = playing([done]);
+  await ask({
+    system: "s",
+    messages: [{ role: "user", content: "go" }],
+    model: "claude-sonnet-5",
+    stream: sonnet.stream,
+    catalogFn: CATALOG,
+  });
+  assert.equal(sonnet.requests[0].thinking.type, "adaptive");
+  assert.ok(sonnet.requests[0].output_config.effort);
+});
+
+test("an unpriced model is refused before the call, not discovered on the bill", async () => {
+  const { stream, requests } = playing([]);
+  const out = await ask({
+    system: "s",
+    messages: [{ role: "user", content: "go" }],
+    model: "claude-nonesuch-9",
+    stream,
+    catalogFn: CATALOG,
+  });
+  assert.equal(out.ok, false);
+  assert.match(out.error, /No price for model "claude-nonesuch-9"/);
+  assert.equal(requests.length, 0, "nothing was sent, so nothing was paid for");
+  assert.ok(out.turnId, "and the failure is still a turn the ledger can hold");
+});
+
+test("the toolset switches off the writes a kind of turn may not make; a rehearsal makes none", async () => {
+  const done = { content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage };
+  const configsFor = async (policy) => {
+    const { stream, requests } = playing([done]);
+    await ask({ system: "s", messages: [{ role: "user", content: "go" }], policy, stream, catalogFn: CATALOG });
+    const toolset = requests[0].tools.find((t) => t.type === "mcp_toolset");
+    return Object.keys(toolset.configs ?? {}).sort();
+  };
+  assert.deepEqual(await configsFor("rehearsal"), ["elixir_identify", "elixir_send_feedback", "elixir_track_clan"]);
+  assert.deepEqual(await configsFor("routines"), ["elixir_identify", "elixir_track_clan"]);
+  assert.deepEqual(
+    await configsFor("ask"),
+    ["elixir_identify", "elixir_track_clan"],
+    "no member steers the bot into tracking a clan, or links anyone the runner did not name (link_me)",
+  );
+  assert.deepEqual(await configsFor("nonsense"), await configsFor("rehearsal"), "an unknown kind is the strictest");
+});
+
+test("a switched-off tool the API hands back to run is refused on the direct path too", async () => {
+  const handedBack = { type: "tool_use", id: "toolu_1", name: "elixir-mcp_track_clan", input: { clan_tag: "#X" } };
+  const { stream, requests } = playing([
+    { content: [handedBack], stop_reason: "tool_use", usage },
+    { content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage },
+  ]);
+  const out = await ask({
+    system: "s",
+    messages: [{ role: "user", content: "go" }],
+    policy: "ask",
+    stream,
+    catalogFn: CATALOG,
+  });
+  assert.equal(out.ok, true);
+  const result = requests[1].messages.at(-1).content[0];
+  assert.equal(result.is_error, true);
+  assert.match(result.content, /not available in this turn/);
 });

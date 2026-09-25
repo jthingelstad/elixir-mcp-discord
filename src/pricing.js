@@ -33,7 +33,9 @@ const CATALOG = {
   "claude-opus-4-6": { input: 5, output: 25 },
   "claude-sonnet-5": { input: 2, output: 10 },
   "claude-sonnet-4-6": { input: 3, output: 15 },
-  "claude-haiku-4-5": { input: 1, output: 5 },
+  // No adaptive thinking and no effort parameter: both are a 400 here, so a
+  // turn on this model sends neither (src/claude.js).
+  "claude-haiku-4-5": { input: 1, output: 5, adaptive: false },
 };
 
 function complete(rate) {
@@ -42,6 +44,9 @@ function complete(rate) {
     output: rate.output,
     cacheWrite: rate.cacheWrite ?? rate.input * 1.25,
     cacheRead: rate.cacheRead ?? rate.input * 0.1,
+    // Adaptive thinking and `output_config.effort`: every current model but
+    // Haiku 4.5. `"adaptive": false` in models.json says so for another.
+    adaptive: rate.adaptive !== false,
   };
 }
 

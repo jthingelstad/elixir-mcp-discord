@@ -47,9 +47,14 @@ function isTimezone(tz) {
 }
 
 const money = (name) => (v) =>
-  v === "" || (Number.isFinite(Number(v)) && Number(v) >= 0)
+  v === "" || (Number.isFinite(Number(v)) && Number(v) >= 0) ? null : `${name} must be a number of dollars`;
+/** A monthly lane budget also takes "unlimited" — said on purpose, since an
+ *  unset one is the default cap (config.js). Nothing else does: "unlimited"
+ *  for TURN_RESERVE_USD read as NaN, and a NaN reserve let a lane overshoot. */
+const laneMoney = (name) => (v) =>
+  v === "" || /^unlimited$/i.test(v) || (Number.isFinite(Number(v)) && Number(v) >= 0)
     ? null
-    : `${name} must be a number of dollars (or empty for unlimited)`;
+    : `${name} must be a number of dollars, or "unlimited" (empty returns it to the default cap)`;
 const onOff = (v) => (["on", "off"].includes(v.toLowerCase()) ? null : "on or off");
 const trueFalse = (v) => (["true", "false"].includes(v.toLowerCase()) ? null : "true or false");
 const intAtLeast = (min, what) => (v) =>
@@ -67,16 +72,17 @@ const effort = (v) => (EFFORTS.has(v.toLowerCase()) ? null : `effort is one of $
 /** What the DM may change, with what makes a value acceptable. */
 export const SETTINGS = {
   MONTHLY_BUDGET_USD: {
-    about: "monthly budget for scheduled and event posts, USD; empty = unlimited",
-    check: money("MONTHLY_BUDGET_USD"),
+    about: 'monthly budget for scheduled and event posts, USD, or "unlimited"; unset = the $10 default cap',
+    check: laneMoney("MONTHLY_BUDGET_USD"),
   },
   ASK_MONTHLY_BUDGET_USD: {
-    about: "monthly budget for members' questions, USD; empty = unlimited",
-    check: money("ASK_MONTHLY_BUDGET_USD"),
+    about:
+      'monthly budget for members\' questions (and their 👎 sweeps), USD, or "unlimited"; unset = the $10 default cap',
+    check: laneMoney("ASK_MONTHLY_BUDGET_USD"),
   },
   REVIEW_MONTHLY_BUDGET_USD: {
-    about: "monthly budget for the review lane and DM turns, USD",
-    check: money("REVIEW_MONTHLY_BUDGET_USD"),
+    about: 'monthly budget for the review lane and DM turns, USD, or "unlimited"; unset = the $10 default cap',
+    check: laneMoney("REVIEW_MONTHLY_BUDGET_USD"),
   },
   ASK_DAILY_TURNS_PER_MEMBER: {
     about: "questions one member may ask per day; 0 = no cap; admins exempt",
@@ -228,10 +234,13 @@ export function writeConfig(next) {
 }
 
 /** Is a supervisor going to bring this process back if it exits? launchd is
- *  pid 1 on macOS; systemd system units too. SERVICE_MANAGED=1 says so
- *  explicitly for anything else. */
-export function serviceManaged() {
-  return process.env.SERVICE_MANAGED === "1" || process.ppid === 1;
+ *  pid 1 on macOS; systemd system units too. A systemd USER unit's parent is
+ *  the user's manager, not pid 1 — which is how install-systemd.sh installs
+ *  it — so until 2026-09-25 "restarts itself under systemd" was not true;
+ *  systemd sets INVOCATION_ID for every unit it starts. SERVICE_MANAGED=1
+ *  says so explicitly for anything else (the Dockerfile sets it). */
+export function serviceManaged(env = process.env, ppid = process.ppid) {
+  return env.SERVICE_MANAGED === "1" || Boolean(env.INVOCATION_ID) || ppid === 1;
 }
 
 /** Drain and exit so the service restarts on the new config.json — only

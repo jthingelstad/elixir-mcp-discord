@@ -33,9 +33,10 @@
 import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "./config.js";
-import { costOf } from "./pricing.js";
+import { costOf, rateFor } from "./pricing.js";
 import * as budget from "./budget.js";
-import { callTool, resolveToolName } from "./mcp.js";
+import { callTool, resolveToolName, toolCatalog } from "./mcp.js";
+import { disabledTools } from "./tools.js";
 import { log } from "./log.js";
 import * as state from "./state.js";
 
@@ -64,11 +65,17 @@ const mcpServers = [
  * much was actually served from cache; the trace footer shows it, because a
  * cache that silently stopped hitting is a cost regression nobody would see.
  */
-const MCP_TOOLSET = {
-  type: "mcp_toolset",
-  mcp_server_name: config.mcp.serverName,
-  cache_control: { type: "ephemeral" },
-};
+/** The server's tools, with the writes this kind of turn may not use
+ *  switched off (src/tools.js). Stable per kind of turn, so the cache
+ *  breakpoint holds: a lane's disabled set changes only with the catalog. */
+function mcpToolset(disabled = []) {
+  return {
+    type: "mcp_toolset",
+    mcp_server_name: config.mcp.serverName,
+    ...(disabled.length ? { configs: Object.fromEntries(disabled.map((name) => [name, { enabled: false }])) } : {}),
+    cache_control: { type: "ephemeral" },
+  };
+}
 
 /**
  * LOCAL tools — the few things this runner can do that the server cannot,
@@ -76,10 +83,10 @@ const MCP_TOOLSET = {
  * breakpoint on it covers them; a lane without local tools (the ask lane)
  * has a different, equally stable prefix.
  */
-function toolsFor(localTools) {
+function toolsFor(localTools, disabled) {
   return [
     ...localTools.map(({ name, description, input_schema }) => ({ name, description, input_schema })),
-    MCP_TOOLSET,
+    mcpToolset(disabled),
   ];
 }
 
@@ -290,7 +297,7 @@ function readResponse(activity, content, timings) {
  * directory, a cap reached) is a tool error the model sees, not an
  * exception.
  */
-async function executeClientSide(block, localTools, turnId) {
+async function executeClientSide(block, localTools, turnId, { disabled = [], names = null } = {}) {
   const local = localTools.find((t) => t.name === block.name);
   if (local) {
     let call;
@@ -302,7 +309,16 @@ async function executeClientSide(block, localTools, turnId) {
     log.info("client_tool_call", { turnId, tool: block.name, via: "local", ok: call.ok });
     return { name: block.name, result: outcomeOfCall(call) };
   }
-  const tool = await resolveToolName(block.name);
+  const tool = await resolveToolName(block.name, { names });
+  // This path runs a server tool over the direct client, past the
+  // connector's `configs`: a switched-off tool is refused here as well.
+  if (disabled.includes(tool)) {
+    log.warn("client_tool_refused", { turnId, tool, reason: "not available to this kind of turn" });
+    return {
+      name: tool,
+      result: outcomeOfCall({ ok: false, code: "not_available", error: `${tool} is not available in this turn` }),
+    };
+  }
   const call = await callTool(tool, block.input ?? {});
   log.info("client_tool_call", { turnId, tool, via: "mcp", ok: call.ok });
   // The direct client reports a refusal as ok:false WITH the refusal body
@@ -346,6 +362,11 @@ export async function ask({
   // and by LANE so a chatty ask channel cannot spend the schedule's budget.
   routineKey = "unattributed",
   lane = "routines",
+  // What this turn may DO through Elixir beyond reading (src/tools.js):
+  // "rehearsal" for a dry run, else the kind of turn. Defaults to the lane.
+  policy = lane,
+  // The server's tool catalog, injectable so a test never reaches the network.
+  catalogFn = toolCatalog,
   // `[{ name, description, input_schema, handler(input) -> {ok, body} }]`.
   // Executed here when the model calls them; see src/run.js.
   localTools = [],
@@ -380,6 +401,58 @@ export async function ask({
   let stopReason = null;
   let nudged = false;
   let resumed = false;
+  // What every return carries, failed or not. A round can fail AFTER a
+  // client-side tool already acted — post_message sent, then the next API
+  // call 529s — and a failure with no turnId was dropped by the ledger's
+  // reader, so the turn that put a message in a channel had no record.
+  const summary = () => ({
+    text,
+    called,
+    errors,
+    trace,
+    envelopes,
+    usd: usdTotal,
+    usage,
+    turnId,
+    ms: Date.now() - started,
+    rounds,
+    stopReason,
+    nudged,
+    resumed,
+    model,
+    effort,
+    policy,
+  });
+
+  // The price first, BEFORE anything is paid for. Boot checks the models it
+  // can see, but a routine's `model:` edited later (by hand, or set from the
+  // DM) reached the API, and costOf threw on the response — a paid call whose
+  // spend no budget ever saw, repeated every poll by an event routine.
+  let adaptive;
+  try {
+    ({ adaptive } = rateFor(model));
+  } catch (error) {
+    log.error("model_unpriced", { turnId, model, routine: routineKey });
+    return { ...summary(), ok: false, error: error.message };
+  }
+  // The writes this turn may not make, from the server's own annotations.
+  // Read before the call like the price: a rehearsal that filed with the
+  // maintainer is the reason this exists.
+  const catalog = await catalogFn();
+  const disabled = disabledTools(policy, catalog);
+  // A tool handed back to run is named against the same catalog.
+  const published = catalog?.ok ? catalog.tools.map((t) => t.name) : null;
+
+  // Thinking and effort only where the model takes them: on Haiku 4.5 either
+  // is a 400, so `model: claude-haiku-4-5` failed every turn.
+  const depth = adaptive
+    ? {
+        // "omitted" is the default on Sonnet 5 and returns empty thinking
+        // blocks. We show our work in-channel, so ask for the summary.
+        thinking: { type: "adaptive", display: "summarized" },
+        output_config: { effort },
+      }
+    : {};
 
   for (let round = 0; round < maxRounds; round += 1) {
     rounds = round + 1;
@@ -394,11 +467,8 @@ export async function ask({
         system: systemBlocks(system),
         messages: history,
         mcp_servers: mcpServers,
-        tools: toolsFor(localTools),
-        // "omitted" is the default on Sonnet 5 and returns empty thinking
-        // blocks. We show our work in-channel, so ask for the summary.
-        thinking: { type: "adaptive", display: "summarized" },
-        output_config: { effort },
+        tools: toolsFor(localTools, disabled),
+        ...depth,
       });
 
       // Per-call latency, which separates "slow because six calls" from "slow
@@ -436,15 +506,7 @@ export async function ask({
       response = await call.finalMessage();
     } catch (error) {
       log.error("claude_call_failed", { turnId, error: error.message });
-      return {
-        ok: false,
-        error: error.message,
-        called,
-        errors,
-        trace,
-        envelopes,
-        usd: usdTotal,
-      };
+      return { ...summary(), ok: false, error: error.message };
     }
 
     const usd = costOf(model, response.usage);
@@ -457,17 +519,7 @@ export async function ask({
     text = readText(response.content) || text;
     stopReason = response.stop_reason;
 
-    if (stopReason === "refusal") {
-      return {
-        ok: false,
-        error: "refusal",
-        called,
-        errors,
-        trace,
-        envelopes,
-        usd: usdTotal,
-      };
-    }
+    if (stopReason === "refusal") return { ...summary(), ok: false, error: "refusal" };
     // A CLIENT-SIDE tool call, on a connection whose tools are all server-side.
     //
     // Most of the time an mcp_toolset call comes home as `mcp_tool_use` +
@@ -490,7 +542,7 @@ export async function ask({
         history.push({ role: "assistant", content: response.content });
         const results = [];
         for (const block of pending) {
-          const { name, result } = await executeClientSide(block, localTools, turnId);
+          const { name, result } = await executeClientSide(block, localTools, turnId, { disabled, names: published });
           settle(activity, { step: activity.byId.get(block.id), name, result });
           results.push({ type: "tool_result", tool_use_id: block.id, is_error: !result.ok, content: result.raw });
         }
@@ -551,27 +603,14 @@ export async function ask({
   }
 
   return {
+    ...summary(),
     ok: true,
-    text,
-    called,
-    errors,
-    trace,
-    envelopes,
-    usd: usdTotal,
-    usage,
-    turnId,
-    ms: Date.now() - started,
-    rounds,
-    stopReason,
-    nudged,
-    // The turn was cut off at max_tokens and asked again; a post that follows
-    // was delivered on the second ask. Beside `nudged` so the review can tell
-    // "too little room" from "forgot to call the tool".
-    resumed,
-    // A max_tokens cutoff otherwise reads as a complete answer.
+    // `resumed` (in the summary): the turn was cut off at max_tokens and
+    // asked again; a post that follows was delivered on the second ask.
+    // Beside `nudged` so the review can tell "too little room" from "forgot
+    // to call the tool". A max_tokens cutoff otherwise reads as a complete
+    // answer.
     truncated: stopReason === "max_tokens" || rounds >= maxRounds,
-    model,
-    effort,
     serverVersion: state.get("serverVersion"),
   };
 }

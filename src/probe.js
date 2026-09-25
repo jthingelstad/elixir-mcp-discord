@@ -8,7 +8,8 @@
  * tool surface moving without anyone noticing.
  */
 
-import { initialize, listTools, callTool, describePrincipal } from "./mcp.js";
+import { initialize, listTools, callTool, describePrincipal, toolCatalog } from "./mcp.js";
+import { disabledTools, POLICIES } from "./tools.js";
 import * as state from "./state.js";
 import { config } from "./config.js";
 
@@ -47,6 +48,25 @@ console.log(
     .sort()
     .join(", ")}`,
 );
+
+// What each kind of turn may write (src/tools.js), from the same
+// annotations the runner reads — so "is the policy doing anything?" has an
+// answer before the first turn.
+const catalog = await toolCatalog({ list: async () => tools, fresh: true });
+if (!catalog.annotated) {
+  console.log(
+    `WARN  no tool is annotated readOnlyHint: live lanes keep every tool, rehearsals lose the prompted writes`,
+  );
+} else {
+  const writes = catalog.tools.filter((t) => !t.readOnly).map((t) => t.name);
+  console.log(`ok    ${catalog.tools.length - writes.length} read-only, ${writes.length} write: ${writes.join(", ")}`);
+  for (const policy of Object.keys(POLICIES)) {
+    const off = disabledTools(policy, catalog);
+    console.log(
+      `      ${policy.padEnd(9)} writes kept: ${writes.filter((w) => !off.includes(w)).join(", ") || "none"}`,
+    );
+  }
+}
 
 // game_clock, deliberately: it is on every principal's surface and needs no
 // subject. This check used to call elixir_my_players, which an AGENT door does

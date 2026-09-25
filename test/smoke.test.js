@@ -429,6 +429,10 @@ test("a member's request reaches the operator once, three a day, and the cap sto
     askFn: async ({ localTools }) => {
       tool = localTools.find((t) => t.name === "tell_operator");
       assert.ok(tool, "the ask lane offers tell_operator");
+      assert.ok(
+        localTools.find((t) => t.name === "link_me"),
+        "and link_me, bound to the author — elixir_identify is not the model's to address",
+      );
       return RESULT;
     },
   });
@@ -444,6 +448,52 @@ test("a member's request reaches the operator once, three a day, and the cap sto
   await handleAsk(third, ROUTINE, { askFn: async () => assert.fail("capped: no model call") });
   assert.match(blocked[0].text, /questions from you today/);
   assert.ok(posted.length > 0);
+
+  // A burst: every question arrives before the first answer. Counted after
+  // the answer, all of them passed the check.
+  state.set({ askCounts: null });
+  let calls = 0;
+  let release;
+  const slow = new Promise((resolve) => (release = resolve));
+  const burst = [1, 2, 3, 4, 5].map((i) =>
+    handleAsk(fakeMessage(`quick ${i}`).message, ROUTINE, {
+      askFn: async () => {
+        calls += 1;
+        await slow;
+        return RESULT;
+      },
+    }),
+  );
+  await new Promise((r) => setTimeout(r, 20));
+  release();
+  await Promise.all(burst);
+  assert.equal(calls, 2, "the cap holds for questions asked at once");
+
+  // A turn that fails on our side gives the question back — a failed call,
+  // or a throw on the way to one — and only once.
+  const { memberTurnsToday } = await import("../src/ask.js");
+  state.set({ askCounts: null });
+  await handleAsk(fakeMessage("breaks").message, ROUTINE, {
+    askFn: async () => ({ ...RESULT, ok: false, error: "overloaded_error" }),
+  });
+  assert.equal(memberTurnsToday("42"), 0);
+  await handleAsk(fakeMessage("throws").message, ROUTINE, {
+    askFn: async () => {
+      throw new Error("socket hang up");
+    },
+  });
+  assert.equal(memberTurnsToday("42"), 0, "a throw before the answer gives it back too");
+  await handleAsk(fakeMessage("answered").message, ROUTINE, { askFn: async () => RESULT });
+  assert.equal(memberTurnsToday("42"), 1, "an answered question counts");
   config.askDailyTurnsPerMember = 20;
   notify.configure({ client: null });
+});
+
+test("a failed answer says which service failed: the model API is not Elixir MCP", async () => {
+  const { failureLine } = await import("../src/ask.js");
+  assert.match(failureLine("overloaded_error"), /Claude API/);
+  assert.doesNotMatch(failureLine("overloaded_error"), /talking to Elixir MCP/);
+  assert.match(failureLine("MCP server 'elixir-mcp' connection failed"), /talking to Elixir MCP/);
+  assert.match(failureLine("refusal"), /not able to answer/);
+  assert.match(failureLine('No price for model "x"'), /misconfigured/);
 });

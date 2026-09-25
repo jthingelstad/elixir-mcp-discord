@@ -1,8 +1,8 @@
 /**
  * The parts of setup that touch files and arithmetic rather than people:
  * what routines the checkout offers, which an instance already has, copying
- * the chosen ones across, moving a schedule, estimating what a month costs,
- * and adding a clan's own notes to identity.md. Kept apart from the prompts
+ * the chosen ones across, moving a schedule, and estimating what a month
+ * costs. Kept apart from the prompts
  * in src/setup.js so every one of them is testable without a terminal.
  */
 
@@ -12,7 +12,7 @@ import { parseRoutine, splitFrontMatter } from "./routines.js";
 
 const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-/** "daily at 01:00", "Sun at 15:00", "on member_joined, war_day_open", "on message". */
+/** "daily at 01:00", "Sun at 15:00", "on member_joined, session_standout", "on message". */
 export function describeWhen(routine) {
   if (routine.trigger === "schedule") {
     const hhmm = `${String(routine.at.hour).padStart(2, "0")}:${String(routine.at.minute).padStart(2, "0")}`;

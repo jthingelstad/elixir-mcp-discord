@@ -1,4 +1,4 @@
 {
-  "_comment": "Model prices in USD per million tokens. This file OVERRIDES and EXTENDS the catalog shipped in src/pricing.js, and exists so the person paying the bill can correct a price or add a model without a code change. A model with no price here and none in the catalog is refused rather than treated as free, because a budget cannot be enforced against an unknown cost. cacheWrite defaults to 1.25x input and cacheRead to 0.1x input when omitted.",
+  "_comment": "Model prices in USD per million tokens. This file OVERRIDES and EXTENDS the catalog shipped in src/pricing.js, and exists so the person paying the bill can correct a price or add a model without a code change. A model with no price here and none in the catalog is refused rather than treated as free, because a budget cannot be enforced against an unknown cost. cacheWrite defaults to 1.25x input and cacheRead to 0.1x input when omitted. \"adaptive\": false marks a model that takes no adaptive thinking and no effort (the catalog marks claude-haiku-4-5); neither is sent to it.",
   "claude-sonnet-5": { "input": 2, "output": 10 }
 }
