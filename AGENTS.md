@@ -61,14 +61,15 @@ older a session might remember.
   correctness category does not include it, and an undefined identifier is
   the `LiveMessage` class of bug), knip (dead files, exports, dependencies), then
   the tests. Run it before every commit; CI (`.github/workflows/verify.yml`)
-  runs the same four steps on Node 22 and 24 and a separate `npm run audit`.
-  A red step names itself. `npm run format` fixes formatting; `oxlint
+  runs the same four steps on Node 22 and 24, a separate `npm run audit`
+  and `sh scripts/test-workflows.sh` (pinned, least-privilege workflows),
+  and a `validate` job that passes only if all of them did. A red step
+  names itself. `npm run format` fixes formatting; `oxlint
   --fix` fixes what it can.
-- **Commit directly to `main`, small and often**, one change per commit
-  with a message that says why (the commit history is the design record
-  alongside this file). No feature branches, no PRs for your own work;
-  Dependabot's PRs are the exception. Push after each commit; there is no
-  checkout lease here — one checkout, one actor at a time.
+- **Small changes, one per commit**, with a message that says why (the
+  commit history is the design record alongside this file). They reach
+  `main` only through a pull request — see *Landing changes* below.
+  There is no checkout lease here — one checkout, one actor at a time.
 - **A `src/` change is live only after each instance restarts** (launchd:
   `launchctl kickstart -k gui/$(id -u)/<label>`; Docker: `docker compose up
   -d --build` beside the compose file), one at a time, reading each boot
@@ -77,9 +78,10 @@ older a session might remember.
   is live. Verify from the boot lines and the next natural turn in the
   ledger; never run a routine early, ask the bot a question, or post as
   acceptance.
-- **A release is a tag**: bump `package.json`, `git tag v<version>`, push
-  the tag; `release.yml` verifies, checks the tag matches, and publishes
-  notes from the commits. The boot hello names the build.
+- **A release is a tag**: bump `package.json` in a PR; once it merges,
+  `git tag v<version>` on that `main` commit and push the tag;
+  `release.yml` verifies, checks the tag matches, and publishes notes from
+  the commits. The boot hello names the build.
 - **Docs are part of the change.** A behaviour that moved gets its `since
   <date>` entry in the right `docs/decisions/` file and its sentence in
   `README.md` in the same commit; a new knob goes in `config.example.json`
@@ -93,6 +95,36 @@ older a session might remember.
 - **Never:** a tool list or schema in this repo, a clan tag anywhere, local
   game data or a fallback, a member-facing turn that reads the ledger, a
   web fetch, a secret outside `.env`, an instance directory pushed anywhere.
+
+## Landing changes
+
+Since 2026-09-26 `main` takes only pull requests, merged on a green
+`validate` check (the aggregate job in `.github/workflows/verify.yml`).
+There is no bypass, Jamie's account included; the agents push as it.
+
+    git switch -c <topic>/<slug>            # before the first edit
+    npm run verify && git commit            # as often as the change needs
+    git push -u origin HEAD
+    gh pr create --fill
+    gh pr merge --auto --rebase --delete-branch
+    gh pr checks --watch --fail-fast
+    git switch main && git pull --ff-only   # once it has merged
+
+- If `main` moves under an open PR: `gh pr update-branch --rebase`.
+- A rebase merge gives the commit a new SHA on `main`. Anything that looks
+  for "my commit" there reads it from `gh pr view <n> --json mergeCommit`.
+- A check that fails and then passes on re-run is a flake, and a flake is
+  a defect: fix it in the PR or record it the same day.
+- Unfinished work stays an open PR; the checkout goes back to `main`.
+- Outside contributors: fork, then PR. Same check.
+
+**The deploy model did not change with it, on purpose.** The live bots
+build from the local checkout (`docker compose up -d --build` beside the
+compose file), not from a pinned image, and no CI gate stands in front of
+that: they run nearly live code because they are Jamie's tests, and may
+run a branch under test. `main` takes PRs, but what the bots run is
+whatever the checkout holds, and each boot line's `build=<version>+<sha>`
+records it.
 
 ## The rules that are the whole point
 

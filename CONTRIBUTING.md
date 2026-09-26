@@ -27,6 +27,11 @@ and for a bug, a test that fails without the fix.
 
 ## Pull requests
 
+`main` takes only pull requests — the maintainer's own work included —
+merged by rebase once the one required check, `validate`, is green. It
+covers what `npm run verify` runs, on Node 22 and 24, plus the runtime
+dependency audit and `sh scripts/test-workflows.sh`. Fork, branch, PR.
+
 - **Bugs, tests, docs, refactors that keep every test green:** a PR is
   welcome as is. One change per commit, with a message that says why.
 - **Product changes** — anything that changes what the bot says to

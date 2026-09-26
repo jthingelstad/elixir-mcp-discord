@@ -640,9 +640,11 @@ is a runtime `ReferenceError`, and members found out instead. Since
 2026-09-25 lint has `no-undef` too, so that one no longer gets past the
 static checks either.
 
-A tag is a release: `npm version minor && git push --follow-tags` runs
-`verify`, checks the tag matches `package.json`, and publishes the commits
-since the previous tag as the notes. `git checkout v0.3.0` is a known
+A tag is a release: bump the version in a PR (`npm version minor
+--no-git-tag-version`), and once it merges, `git tag v<version>` on that
+`main` commit and push the tag. The tag runs `verify`, checks the tag
+matches `package.json`, and publishes the commits since the previous tag
+as the notes. `git checkout v0.3.0` is a known
 build, and the boot hello names it.
 
 ## Running it as a service
