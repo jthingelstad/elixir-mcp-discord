@@ -349,9 +349,10 @@ about.
 The bot posts where *it* decides a post belongs, the way it chooses a data
 tool: from a description. Every turn that may post gets a directory of
 channels — name, topic, who can see it — and a `post_message` tool. A war
-week's result goes where the clan reads; a departure with the role they
-held can go to a leaders-only channel if one exists; a clan with one channel
-and a clan with ten need no different wiring.
+week's result goes where the clan reads, and so does a departure with the
+role they held — said as the clan's leaders classified it (left, or
+removed) when they have, through Elixir Clan's shared facts; a clan with one
+channel and a clan with ten need no different wiring.
 
 **The allow-list is Discord permissions, with one rule.** A channel is in the
 directory when the bot's role (or the bot itself) is **explicitly** granted

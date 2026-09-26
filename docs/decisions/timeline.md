@@ -55,3 +55,27 @@ yes to all six decisions the same day. What changed:
   the new code first (`wake`, `carry`, `arm`, `offset` and `trigger:
   clock` are new fields), THEN sync the routine files; the old `clan-feed`
   cursor is left behind and `editor` seeds its own at the next poll.
+
+## Departures wait for a leader's word — since 2026-09-25
+
+Jamie, 2026-09-25, as this bot takes over from elixir-bot: "Departures
+should be visible even on a kick… in clan chat everyone sees that the
+person was kicked. We then comment on it so everyone knows why." Elixir
+9.3.0 made `departure_classified` (a leader saying, through Elixir Clan,
+that a departure was a leave or a kick) visible to the clan's agent; in
+9.2.0 only leaders saw it.
+
+- `member_left` moves from `wake:` to `carry:`; `departure_classified`
+  and `award_granted` join `wake:`. A raw departure now rides until the
+  leader's word (or anything else) wakes the editor, or the carry
+  release lets it go; the brief says what the leader said and never adds a
+  reason. The shipped brief used to send a departure to a leaders-only
+  channel when one existed; a departure is clan news now, as it is in the
+  game.
+- Why: on 09-25 the editor posted an elder's raw departure within five
+  minutes, before any leader could say what happened. With sharing on in
+  Elixir Clan (per clan, per fact type, off to start) the post can say it.
+- Nothing here is any clan's process: the leader's word comes from the
+  clan's own app, and a clan without it still gets the raw departure, a
+  batch later.
+
