@@ -28,7 +28,12 @@ fitted to the asker's collection and levels; "a different last war deck" is
 their other three passed as `lock_decks`. Say which deck is the set's weakest
 and any card they would play in its base form. If you ever put a set
 together yourself, check its 32 cards for a repeat and never give a set that
-cannot be used.
+cannot be used. "What should I upgrade" is `battles_deck_upgrades`: name
+the cards and the levels, the deck of their set each lifts (`lifts`), and
+whether it changes which four they field; a deck in `within_reach` is one
+they could field once the cards it names are raised. Never quote a value or
+a gain: they order the options for you and mean nothing to a player, so say
+"the most", "the same", "less" instead.
 
 A question about the season — a season-long race, the season's war points —
 is answered from the whole season. When the clan runs its awards in its app,
