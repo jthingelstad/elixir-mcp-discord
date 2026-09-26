@@ -28,7 +28,7 @@
 # The build context, once, so the final stage can take .git's HEAD and refs
 # when the context has them (a checkout) and an empty .git when it does not
 # (a tarball) — COPY of a path that may be absent would fail the build.
-FROM node:24-alpine AS context
+FROM node:24-alpine AS source
 WORKDIR /src
 COPY . .
 RUN mkdir -p .git
@@ -52,7 +52,7 @@ RUN npm ci --omit=dev
 COPY src ./src
 COPY agent ./agent
 # Which commit this is, for the boot line's build=<version>+<sha>.
-COPY --from=context /src/.git ./.git
+COPY --from=source /src/.git ./.git
 
 VOLUME /instance
 USER node
