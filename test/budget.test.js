@@ -63,6 +63,15 @@ test("the reserve climbs to the largest turn the lane has seen", () => {
   assert.equal(budget.reserveFor("routines"), 0.42, "and never drops back");
 });
 
+test("a turn's ceiling is the whole turn, not its largest round", () => {
+  const before = budget.reserveFor("ask");
+  const now = new Date();
+  budget.record("ask", 0.3, now, "turn-rounds");
+  budget.record("ask", 0.3, now, "turn-rounds");
+  budget.record("ask", 0.3, now, "turn-rounds");
+  assert.ok(Math.abs(budget.reserveFor("ask") - Math.max(before, 0.9)) < 1e-9, "three rounds of 0.30 are a 0.90 turn");
+});
+
 test("spend is per calendar month, and does not roll over", () => {
   const august = new Date("2026-08-31T23:59:00Z");
   const september = new Date("2026-09-01T00:01:00Z");

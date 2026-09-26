@@ -29,7 +29,7 @@ import path from "node:path";
 import { callTool } from "./mcp.js";
 import { config, instanceDir } from "./config.js";
 import { runRoutine } from "./run.js";
-import { newFeedbackResponses } from "./feedback.js";
+import { markFeedbackShown, newFeedbackResponses } from "./feedback.js";
 import { directory, postable, resolveById } from "./directory.js";
 import { log } from "./log.js";
 import { notify } from "./notify.js";
@@ -426,6 +426,7 @@ export async function postFeedbackResponses(channel, { seedOnly = false } = {}) 
     // "that ships next week"), so it is also a DM — whether or not a channel
     // is bound.
     await notify("Elixir answered", text, { fingerprint: `feedback_response:${item.id}` });
+    markFeedbackShown(item.id);
     log.info("feedback_response_posted", { id: item.id, channel: channel ? channel.id : "dm only" });
   }
 }

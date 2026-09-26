@@ -56,7 +56,12 @@ export function disabledTools(policy, catalog) {
       hint: "the server marks no tool readOnlyHint; live lanes keep every tool, rehearsals lose the prompted writes",
     });
   }
-  if (policy !== "rehearsal") return [];
   const published = new Set(catalog.tools.map((t) => t.name));
+  // elixir_identify is off in every lane whatever the annotations say (D2,
+  // 2026-09-25: only link_me's handler calls it); the catalog names it, so
+  // it can be switched off by name (2026-09-26 review: unannotated, a live
+  // lane kept it).
+  if (policy !== "rehearsal")
+    return published.has("elixir_identify") && !keep.has("elixir_identify") ? ["elixir_identify"] : [];
   return PROMPTED_WRITES.filter((name) => published.has(name) && !keep.has(name));
 }

@@ -513,7 +513,7 @@ export async function ask({
     usdTotal += usd;
     usage = addUsage(usage, response.usage);
     state.addSpend(usd, routineKey);
-    budget.record(lane, usd);
+    budget.record(lane, usd, new Date(), turnId);
 
     readResponse(activity, response.content, timings);
     text = readText(response.content) || text;
@@ -610,7 +610,11 @@ export async function ask({
     // Beside `nudged` so the review can tell "too little room" from "forgot
     // to call the tool". A max_tokens cutoff otherwise reads as a complete
     // answer.
-    truncated: stopReason === "max_tokens" || rounds >= maxRounds,
+    // Out of rounds only when the last round still wanted another: a turn
+    // that ended normally on its last allowed round finished (2026-09-26
+    // review: that read as truncated, the events cursor held, and the next
+    // poll paid for the same batch again).
+    truncated: stopReason === "max_tokens" || (rounds >= maxRounds && stopReason !== "end_turn"),
     serverVersion: state.get("serverVersion"),
   };
 }

@@ -36,13 +36,13 @@ test("every policy keeps every read and only the writes it names", () => {
   ]);
 });
 
-test("without annotations a live lane keeps everything and a rehearsal loses the prompted writes; no catalog, nothing is named", () => {
+test("without annotations a live lane keeps everything but elixir_identify and a rehearsal loses the prompted writes; no catalog, nothing is named", () => {
   const bare = {
     ...annotated,
     annotated: false,
     tools: annotated.tools.map(({ name }) => ({ name, readOnly: false })),
   };
-  assert.deepEqual(disabledTools("ask", bare), []);
+  assert.deepEqual(disabledTools("ask", bare), ["elixir_identify"], "off in every lane, annotated or not");
   assert.deepEqual(disabledTools("rehearsal", bare).sort(), ["elixir_identify", "elixir_send_feedback"]);
   assert.deepEqual(
     disabledTools("rehearsal", { ok: false, tools: [] }),

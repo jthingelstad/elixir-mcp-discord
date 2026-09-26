@@ -197,6 +197,9 @@ export function parseRoutine(key, text) {
     // The output ceiling for one turn. Priced exactly, unlike input, so it is
     // the part of a turn's cost an operator can actually bound.
     maxTokens: fields.max_tokens === undefined ? 6000 : asInt(key, "max_tokens", fields.max_tokens, { min: 256 }),
+    // Said on purpose: the ask lane keeps CLAUDE_MAX_TOKENS unless the
+    // routine names its own ceiling.
+    maxTokensSet: fields.max_tokens !== undefined,
   };
 
   if (trigger === "clock") {

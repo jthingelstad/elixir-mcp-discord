@@ -793,6 +793,13 @@ export async function tick({ client, now = new Date() }) {
   const routine = reviewRoutine();
   const due = dueRoutines([routine], { now, ledger: state.get("runs") || {} });
   if (due.length === 0) return false;
+  // Over its budget the review would refuse inside runReview; mark the week
+  // done only when it can run, so the catch-up hours retry it (2026-09-26
+  // review: a blocked review lost the week).
+  if (spendBlock("review")) {
+    log.info("review_waiting_for_budget", { period: due[0].periodKey });
+    return false;
+  }
   state.markRun(routine.key, due[0].periodKey);
   const outcome = await runReview({ trigger: "schedule", now }).catch((error) => {
     log.error("review_crashed", { error: error.message });

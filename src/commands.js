@@ -185,7 +185,8 @@ export async function handleInteraction(interaction, { resolveChannel }) {
   if (command === "review") {
     if (!config.review.enabled) {
       await interaction.reply({
-        content: "The review lane is off. Set `REVIEW=on` in this instance's .env and restart.",
+        content:
+          "The review lane is off. Turn it on from a DM (`settings`), or set `REVIEW` to `on` in this instance's config.json.",
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -219,6 +220,20 @@ export async function handleInteraction(interaction, { resolveChannel }) {
     if (!routine) {
       await interaction.reply({
         content: `No routine called \`${key}\`.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    // A message routine answers questions (run live it would post its
+    // prose into the ask channel), and an events routine runs when the
+    // record hands it a batch (run live here it would have none): only a
+    // clock or schedule routine runs on demand (2026-09-26 review).
+    if (routine.trigger === "message" || routine.trigger === "events") {
+      await interaction.reply({
+        content:
+          routine.trigger === "message"
+            ? `\`${routine.key}\` answers questions; there is nothing to run. Ask it something instead.`
+            : `\`${routine.key}\` runs when the record says something happened. Rehearse it with \`try ${routine.key}\` in a DM.`,
         flags: MessageFlags.Ephemeral,
       });
       return;

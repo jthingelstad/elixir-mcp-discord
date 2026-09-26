@@ -28,12 +28,11 @@ import { startReview } from "./review.js";
 import * as notify from "./notify.js";
 import { handleDm, introduce } from "./dm.js";
 import { loadRoutines, routinesFor } from "./routines.js";
-import { registerCommands, handleInteraction } from "./commands.js";
+import { registerCommands, handleInteraction, commandName } from "./commands.js";
 import { checkChannelPermissions } from "./permissions.js";
 import * as directory from "./directory.js";
 import { buildId } from "./build.js";
 import { drain, count } from "./inflight.js";
-import { commandName } from "./commands.js";
 import { rateFor, UnpricedModel } from "./pricing.js";
 import * as budget from "./budget.js";
 import { initialize, describePrincipal } from "./mcp.js";
@@ -64,11 +63,17 @@ const client = new Client({
 });
 
 /** Logical channel name -> Discord channel, resolved once and remembered. A
- *  routine names `channel: reports`; the operator binds CHANNEL_REPORTS. */
+ *  routine names `channel: reports`; the operator binds CHANNEL_REPORTS.
+ *  A miss is remembered only for MISS_RETRY_MS: one failed fetch at boot, or
+ *  a binding added to config.json later, used to leave the routine with no
+ *  channel until a restart (2026-09-26 review). */
 const channelCache = new Map();
+const missedAt = new Map();
+const MISS_RETRY_MS = 10 * 60 * 1000;
 
 async function resolveChannel(name) {
   if (channelCache.has(name)) return channelCache.get(name);
+  if (Date.now() - (missedAt.get(name) ?? -Infinity) < MISS_RETRY_MS) return null;
   let id = config.channels.get(name);
   if (!id) {
     // Unbound in .env: a directory channel of that NAME will do, so a routine
@@ -85,7 +90,7 @@ async function resolveChannel(name) {
       expected: channelEnvName(name),
       hint: "set it in .env, or name a channel from the directory",
     });
-    channelCache.set(name, null);
+    missedAt.set(name, Date.now());
     return null;
   }
   const channel = await client.channels.fetch(id).catch((error) => {
@@ -96,7 +101,8 @@ async function resolveChannel(name) {
     });
     return null;
   });
-  channelCache.set(name, channel);
+  if (channel) channelCache.set(name, channel);
+  else missedAt.set(name, Date.now());
   return channel;
 }
 

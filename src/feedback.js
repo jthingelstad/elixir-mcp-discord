@@ -24,7 +24,7 @@
  * signature matched, which in practice is a small fraction of turns.
  */
 
-import { ask } from "./claude.js";
+import { ask, spendBlock } from "./claude.js";
 import { callTool } from "./mcp.js";
 import { log } from "./log.js";
 import * as ledger from "./ledger.js";
@@ -336,6 +336,12 @@ ${CLASSIFY_RULES}`;
           ? `The agent TOLD the member it had filed (or was filing) feedback, but made no elixir_send_feedback call in that turn. The claim is false as it stands. If what it described is a real, concrete item, file it now so the claim becomes true (ELIXIR:); if it is not worth filing, say so (NONE) and the member will be told nothing was filed.`
           : `The agent conceded a limit in its answer.`;
 
+  // A sweep is a model call on the lane's money like any other: over its
+  // budget, there is no sweep (2026-09-26 review: it never asked).
+  if (spendBlock(lane)) {
+    log.info("feedback_sweep_skipped", { lane, reason: "budget" });
+    return null;
+  }
   const result = await ask({
     system,
     lane,
@@ -415,12 +421,15 @@ export async function newFeedbackResponses({ seedOnly = false } = {}) {
 
   const items = result.items;
   const seen = new Set(state.get("answeredFeedbackIds") || []);
+  const answered = new Set();
   const fresh = [];
 
   for (const item of items) {
     const id = item.feedback_id ?? item.id;
     const response = item.response ?? item.maintainer_response;
-    if (id === undefined || !response || seen.has(id)) continue;
+    if (id === undefined || !response) continue;
+    answered.add(id);
+    if (seen.has(id)) continue;
     fresh.push({
       id,
       message: item.message || "",
@@ -428,16 +437,28 @@ export async function newFeedbackResponses({ seedOnly = false } = {}) {
       shippedIn: item.shipped_in ?? item.shippedIn ?? null,
       status: item.status ?? null,
     });
-    seen.add(id);
-  }
-
-  if (fresh.length > 0) {
-    state.set({ answeredFeedbackIds: [...seen].slice(-500) });
   }
 
   // First run marks the whole history as already shown and returns nothing.
   // Same rule as the event cursor: seed, never drain. An empty ledger meeting a
   // year of answered feedback is a channel full of old news, which is a worse
   // first impression than silence — and it happened, once, on 2026-09-08.
-  return seedOnly ? [] : fresh;
+  if (seedOnly) {
+    state.set({ answeredFeedbackIds: [...answered] });
+    return [];
+  }
+  // An id is marked shown only once it was delivered (markFeedbackShown), so
+  // a send that fails is retried, not lost; and the list forgets only ids the
+  // server no longer returns, so it is bounded by what the server holds and
+  // never drops one it still does (a slice of the last 500 would, and the
+  // reader walks every page).
+  const kept = [...seen].filter((id) => answered.has(id));
+  if (kept.length !== seen.size) state.set({ answeredFeedbackIds: kept });
+  return fresh;
+}
+
+/** One answer delivered: never shown again. */
+export function markFeedbackShown(id) {
+  const seen = state.get("answeredFeedbackIds") || [];
+  if (!seen.includes(id)) state.set({ answeredFeedbackIds: [...seen, id] });
 }

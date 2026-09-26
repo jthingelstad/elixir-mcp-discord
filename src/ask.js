@@ -297,7 +297,7 @@ export function imageBlocks(message) {
 }
 
 /**
- * A HUMAN STEPPING IN. The sikander case of 2026-09-13: the bot followed its
+ * A HUMAN STEPPING IN. A member's case of 2026-09-13: the bot followed its
  * rule and asked a member for a tag, a leader nudged it in the thread, and
  * only then did it look the name up. No error, no 👎, no friction — the
  * rule worked and the outcome was bad, and the only sign was a second person
@@ -457,6 +457,9 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
       system,
       model: routine.model,
       effort: routine.effort,
+      // A max_tokens the routine names is its ceiling (2026-09-26 review:
+      // it was ignored here); otherwise CLAUDE_MAX_TOKENS, as before.
+      ...(routine.maxTokensSet ? { maxTokens: routine.maxTokens } : {}),
       routineKey: routine.key,
       lane,
       messages: [
@@ -519,7 +522,9 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
 
     // The live message becomes the answer, so the reply the member is already
     // watching turns into the final text rather than being orphaned above it.
-    const parts = chunk(answer, routine.maxChars);
+    // Discord's own 2,000 is the ceiling whatever max_chars says: a larger
+    // max_chars made the send fail and the member read "I fell over".
+    const parts = chunk(answer, Math.min(routine.maxChars, 2000));
     await live.finish(parts[0]);
     const produced = [placeholder];
     let sent = placeholder;

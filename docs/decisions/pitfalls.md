@@ -119,7 +119,7 @@
   first. Keep the system block a stable prefix — the asker's id rides in the
   user turn for exactly this reason — and keep `cache_control` on the
   `mcp_toolset`; the trace footer's `cache N%` is how you notice it broke.
-- **Tool errors carry a code.** `readToolActivity` keeps `error.code` (from
+- **Tool errors carry a code.** `readResponse` (src/claude.js) keeps `error.code` (from
   the contract's closed set) beside the message, and `detectFriction` decides
   on it: `no_subject` (ask who is asking) and `quota_exceeded` (the ceiling
   working) are expected flows and never trigger the sweep.
@@ -298,3 +298,40 @@
   moved. It must only call tools an agent surface publishes — it used to check
   auth with `elixir_my_players`, which an agent door *refuses*, so a healthy key
   failed its own probe.
+
+## Since 2026-09-26 — an overnight review's bugs
+
+A read-only review of `src/` found these; each is fixed with a test where
+one could hold it. Live after each instance restarts on the new code.
+
+- **A turn that ended on its last allowed round read as truncated**
+  (`src/claude.js`): `rounds >= maxRounds` alone set `truncated`, so an
+  events turn that finished normally on round five held its cursor and the
+  next poll paid for the same batch. Truncated now means cut off at
+  `max_tokens`, or out of rounds while still wanting another.
+- **A channel that failed to resolve once stayed unresolved until a
+  restart** (`resolveChannel`, `src/index.js`): the miss was cached for
+  good. It is retried after ten minutes.
+- **`/run` ran any routine**: a message routine's prose went to the ask
+  channel and an events routine ran live with no timeline. It refuses both
+  now; an events routine is rehearsed with DM `try`.
+- **DM `try` handed an events routine no timeline**, and `post it` then
+  posted what it wrote about nothing. It rehearses on `eventsForDryRun`,
+  as `npm run try` and a proposal's Try it do, and spends the review pot.
+- **Maintainer replies were marked shown before they were sent**, so one
+  failed send lost the rest, and the last-500 slice would re-post old
+  answers once more than 500 existed. An answer is marked shown after it
+  is delivered, and the list forgets only ids the server no longer returns.
+- **The ask lane ignored a routine's `max_tokens`**, and a `max_chars`
+  over 2,000 failed the send ("I fell over"). An explicit `max_tokens` is
+  the ceiling; chunks are capped at Discord's 2,000.
+- **Turn ceilings held the largest ROUND** (`src/budget.js`): the reserve
+  understated a multi-round turn. The ceiling is the turn's total, by
+  turn id; the friction sweep asks `spendBlock` like every other lane.
+- **`elixir_identify` stayed on in live lanes when the server annotated
+  nothing.** It is switched off by name wherever the catalog lists it.
+- **A review blocked by its budget lost the week**: the week was marked
+  done before the check. It is checked first, so the catch-up hours retry.
+- **Real players' tags and a member's name** sat in a prompt block, a
+  tool description, a comment and three tests. Gone; a test now scans
+  `src/`, `test/` and `scripts/` for tag-shaped strings.

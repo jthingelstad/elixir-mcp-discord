@@ -555,3 +555,27 @@ test("a DM reply that claims a filing with no call behind it is swept: filed for
   });
   assert.equal(honest.sent.at(-1).content, claim);
 });
+
+test("try hands an events routine the timeline it would get now, on the review pot", async (t) => {
+  fresh();
+  const dir = fs.mkdtempSync("/tmp/dm-agent-");
+  fs.mkdirSync(`${dir}/routines`);
+  fs.writeFileSync(`${dir}/routines/editor.md`, "---\ntrigger: events\nwake: member_joined\n---\nPost the news.");
+  const previous = config.agentDir;
+  Object.defineProperty(config, "agentDir", { value: dir, configurable: true, writable: true });
+  t.after(() => {
+    Object.defineProperty(config, "agentDir", { value: previous, configurable: true, writable: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  const timeline = [{ kind: "member_joined", player_tag: "#2PP" }];
+  let seen = null;
+  const runFn = async (routine, opts) => {
+    seen = opts;
+    return { ok: true, skipped: true, text: "SKIP", posts: [], result: { usd: 0 } };
+  };
+  const rehearsal = dm("try editor");
+  await handleDm(rehearsal.message, { runFn, eventsFn: async () => ({ events: timeline }) });
+  assert.deepEqual(seen.events, timeline, "the batch it would be handed");
+  assert.equal(seen.lane, "review", "a DM turn is the operator's");
+  assert.equal(seen.dryRun, true);
+});

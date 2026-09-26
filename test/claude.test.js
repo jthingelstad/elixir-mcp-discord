@@ -116,6 +116,30 @@ test("cut off twice is truncated, and a turn with no nudge is never resumed", as
   assert.equal(bare.resumed, false);
 });
 
+test("a turn that ends on its last allowed round finished; one still paused there ran out of rounds", async () => {
+  const paused = { content: [read, result], stop_reason: "pause_turn", usage };
+  const done = { content: [{ type: "text", text: "SKIP" }], stop_reason: "end_turn", usage };
+  const ends = playing([paused, done]);
+  const finished = await ask({
+    system: "s",
+    messages: [{ role: "user", content: "go" }],
+    maxRounds: 2,
+    stream: ends.stream,
+    catalogFn: CATALOG,
+  });
+  assert.equal(finished.rounds, 2);
+  assert.equal(finished.truncated, false, "end_turn on the last round is a finished turn");
+  const stuck = playing([paused, paused]);
+  const out = await ask({
+    system: "s",
+    messages: [{ role: "user", content: "go" }],
+    maxRounds: 2,
+    stream: stuck.stream,
+    catalogFn: CATALOG,
+  });
+  assert.equal(out.truncated, true);
+});
+
 test("a model without adaptive thinking is sent neither thinking nor effort; the rest are sent both", async () => {
   const done = { content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage };
   const haiku = playing([done]);

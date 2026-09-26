@@ -98,9 +98,22 @@ export function check(lane, now = new Date()) {
   return { ok: true, spent: used, budget, reserve, remaining: budget - used };
 }
 
-/** Record what a turn actually cost, and let the lane's ceiling climb to it. */
-export function record(lane, usd, now = new Date()) {
+/** What each recent turn has cost so far, in memory: a turn is several
+ *  API rounds, recorded one at a time, and its ceiling is the whole turn's
+ *  (2026-09-26 review: the ceiling held the largest ROUND, so the reserve
+ *  understated a multi-round turn and a strict budget could overshoot). */
+const turnSoFar = new Map();
+
+/** Record what a round of a turn actually cost, and let the lane's ceiling
+ *  climb to the turn's total so far. */
+export function record(lane, usd, now = new Date(), turnId = null) {
   if (!(usd > 0)) return;
+  let turnTotal = usd;
+  if (turnId) {
+    turnTotal = (turnSoFar.get(turnId) ?? 0) + usd;
+    turnSoFar.set(turnId, turnTotal);
+    if (turnSoFar.size > 200) turnSoFar.delete(turnSoFar.keys().next().value);
+  }
   const key = monthKey(now);
   const budgets = { ...state.get("budgets") };
   const month = { ...budgets[key] };
@@ -108,9 +121,9 @@ export function record(lane, usd, now = new Date()) {
   budgets[key] = month;
 
   const ceilings = { ...state.get("turnCeilings") };
-  if (usd > (ceilings[lane] || 0)) {
-    ceilings[lane] = usd;
-    log.info("turn_ceiling_raised", { lane, usd: usd.toFixed(4) });
+  if (turnTotal > (ceilings[lane] || 0)) {
+    ceilings[lane] = turnTotal;
+    log.info("turn_ceiling_raised", { lane, usd: turnTotal.toFixed(4) });
   }
 
   // Months are kept for a year: enough to answer "what did last season cost"

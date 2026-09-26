@@ -42,6 +42,7 @@ import { ask, spendBlock } from "./claude.js";
 import { systemFor, nowLine, readMemory, parseMemoryEntry, MEMORY_MAX_CHARS } from "./prompt.js";
 import { loadRoutines } from "./routines.js";
 import { runRoutine, studyTool } from "./run.js";
+import { eventsForDryRun } from "./events.js";
 import { directory, postable, resolveById } from "./directory.js";
 import { post, chunk } from "./post.js";
 import { renderTrace } from "./trace.js";
@@ -336,7 +337,7 @@ async function retract(message, text, { deleteFn = null } = {}) {
 /** Drafts from "try", per operator, in memory only: a draft outlives nothing. */
 const drafts = new Map();
 
-async function tryRoutine(message, key, { runFn = runRoutine } = {}) {
+async function tryRoutine(message, key, { runFn = runRoutine, eventsFn = eventsForDryRun } = {}) {
   const routine = loadRoutines().routines.find((r) => r.key === key);
   if (!routine) {
     await send(
@@ -359,7 +360,12 @@ async function tryRoutine(message, key, { runFn = runRoutine } = {}) {
     : null;
   const channel = defaultId ? await resolveById(defaultId) : null;
   await send(message, `-# running \`${key}\` as a rehearsal — nothing is posted…`);
-  const run = await runFn(routine, { channel, dryRun: true, entries });
+  // An events routine rehearses on the timeline it would be handed now, as
+  // `npm run try` and a proposal's Try it do (2026-09-26 review: it got
+  // none here, and "post it" then posted what it wrote about nothing). A DM
+  // turn is the operator's, so it spends the review pot (money.md).
+  const events = routine.trigger === "events" ? (await eventsFn(routine)).events : null;
+  const run = await runFn(routine, { channel, events, dryRun: true, entries, lane: "review" });
   if (!run.ok) {
     await send(message, `\`${key}\` failed: ${run.error}`);
     return;
