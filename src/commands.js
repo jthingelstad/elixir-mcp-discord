@@ -119,16 +119,25 @@ export function budgetReply(status = budget.status()) {
   ].join("\n");
 }
 
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 export function routinesReply(routines = loadRoutines().routines) {
   if (routines.length === 0) return "No routines loaded.";
   return routines
     .map((r) => {
+      // What starts it, as the routine file says it (2026-09-26 review: a
+      // clock routine read "on message", a wake/carry editor "timeline:
+      // everything", and days were numbers).
       const when =
         r.trigger === "schedule"
-          ? `${String(r.at.hour).padStart(2, "0")}:${String(r.at.minute).padStart(2, "0")}${r.days ? ` on ${r.days.join(",")}` : " daily"}`
+          ? `${String(r.at.hour).padStart(2, "0")}:${String(r.at.minute).padStart(2, "0")}${r.days ? ` on ${r.days.map((d) => DAY_NAMES[d]).join(", ")}` : " daily"}`
           : r.trigger === "events"
-            ? `timeline: ${r.kinds?.join(", ") ?? r.sections?.join(", ") ?? "everything"}`
-            : "on message";
+            ? r.wake
+              ? `wakes on ${r.wake.join(", ")}${r.carry?.length ? `; carries ${r.carry.join(", ")}` : ""}`
+              : `timeline: ${r.kinds?.join(", ") ?? r.sections?.join(", ") ?? "everything"}`
+            : r.trigger === "clock"
+              ? `on the game clock (${r.arm})`
+              : "on message";
       return `${r.disabled ? "○" : "●"} \`${r.key}\` — ${r.trigger} → ${r.channel ? `#${r.channel}` : "model's choice"} · ${when} · ${r.model}${r.description ? `\n-# ${r.description}` : ""}`;
     })
     .join("\n");

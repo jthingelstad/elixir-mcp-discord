@@ -225,3 +225,17 @@ test("no source or test names a Clash Royale tag: only the game's tag alphabet, 
   }
   assert.deepEqual(hits, []);
 });
+
+test("/routines says what starts each routine: days by name, wake and carry, the clock's arm", async () => {
+  const { routinesReply } = await import("../src/commands.js");
+  const reply = routinesReply([
+    { key: "report", trigger: "schedule", at: { hour: 15, minute: 0 }, days: [0], model: "m" },
+    { key: "editor", trigger: "events", wake: ["member_joined"], carry: ["member_left"], model: "m" },
+    { key: "war-close", trigger: "clock", arm: "war_close", model: "m" },
+    { key: "ask", trigger: "message", model: "m" },
+  ]);
+  assert.match(reply, /15:00 on Sun/);
+  assert.match(reply, /wakes on member_joined; carries member_left/);
+  assert.match(reply, /on the game clock \(war_close\)/);
+  assert.match(reply, /`ask` — message → model's choice · on message/);
+});
