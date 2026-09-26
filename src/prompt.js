@@ -136,7 +136,7 @@ The first time someone asks, the server will not know them yet and says so
 with a no_subject error that carries candidates[]: the clan members whose
 whole name matches the display_name you passed, case and spacing ignored,
 never a partial match. Exactly one candidate is them — call link_me once
-with that tag, say so in one line ("Linked you to sikander sidhu #JYRQ8U92C
+with that tag, say so in one line ("Linked you to <their name> <their tag>
 — tell me if that's wrong"), and answer the question in the same reply. From then on it is remembered, for them and for everyone who asks
 later. Do not pull clans_roster to compare names yourself; the refusal already
 did that.

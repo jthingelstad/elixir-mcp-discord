@@ -179,21 +179,21 @@ test("an ask turn keeps the asker, the question, the thread history and the answ
     id: "q1",
     cleanContent: "how am I playing?",
     author: { id: "42", username: "tester", bot: false },
-    member: { displayName: "sikander sidhu" },
+    member: { displayName: "sam rivers" },
     reply,
     channel: { id: "2", send: (body) => reply(body), messages: { fetch: () => Promise.resolve(new Map()) } },
   };
   await handleAsk(message, routine, {
-    askFn: async () => result({ turnId: "ask00001", text: "Linked you to sikander sidhu #JYRQ8U92C. 9-2 today." }),
+    askFn: async () => result({ turnId: "ask00001", text: "Linked you to sam rivers #TESTTAG. 9-2 today." }),
   });
 
   const [turn] = ledger.readTurns({ since: today() });
   assert.equal(turn.lane, "ask");
   assert.equal(turn.input.kind, "message");
-  assert.deepEqual(turn.input.asker, { id: "42", name: "sikander sidhu" });
+  assert.deepEqual(turn.input.asker, { id: "42", name: "sam rivers" });
   assert.equal(turn.input.question, "how am I playing?");
   assert.deepEqual(turn.input.history, []);
-  assert.match(turn.output.text, /Linked you to sikander sidhu/);
+  assert.match(turn.output.text, /Linked you to sam rivers/);
   assert.ok(turn.output.messageIds.length >= 1);
   assert.equal(turn.output.ungrounded, false);
 });

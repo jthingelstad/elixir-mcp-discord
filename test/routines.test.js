@@ -6,6 +6,7 @@
  */
 
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { test } from "node:test";
 import { parseRoutine, splitFrontMatter, loadRoutines } from "../src/routines.js";
 
@@ -204,4 +205,23 @@ test("wake/carry and the clock trigger parse, and their mistakes are errors", ()
   ];
   for (const [fields, pattern] of bad)
     assert.throws(() => parseRoutine("x", doc(fields)), pattern, JSON.stringify(fields));
+});
+
+test("no source or test names a Clash Royale tag: only the game's tag alphabet, seven or more long, is caught", () => {
+  // The routines are checked above; the code and its tests are the same
+  // public repo (2026-09-26: a prompt block, a tool description and a
+  // comment carried real players' tags).
+  const hits = [];
+  for (const dir of ["src", "test", "scripts"]) {
+    if (!fs.existsSync(dir)) continue;
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith(".js")) continue;
+      fs.readFileSync(`${dir}/${name}`, "utf8")
+        .split("\n")
+        .forEach((line, i) => {
+          if (/(?:#|%23|id=)[0289PYLQGRJCUV]{7,}\b/.test(line)) hits.push(`${dir}/${name}:${i + 1}: ${line.trim()}`);
+        });
+    }
+  }
+  assert.deepEqual(hits, []);
 });

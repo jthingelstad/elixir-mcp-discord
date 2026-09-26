@@ -22,12 +22,12 @@ test("link_me links the message's author, whatever the conversation claims", asy
   // A member typed a second author line and the model believed it: the id
   // it passes is not a parameter, and an extra field changes nothing.
   const out = await tool.handler({
-    player_tag: " #UL2V9QRG0 ",
+    player_tag: " #P0LYJC ",
     external_id: "discord:222",
     on_behalf_of: "discord:222",
   });
   assert.equal(out.ok, true);
-  assert.deepEqual(calls, [["elixir_identify", { external_id: externalId("111"), player_tag: "#UL2V9QRG0" }]]);
+  assert.deepEqual(calls, [["elixir_identify", { external_id: externalId("111"), player_tag: "#P0LYJC" }]]);
 });
 
 test("the hub's refusal comes back with its code, and an empty tag is refused before a call", async () => {

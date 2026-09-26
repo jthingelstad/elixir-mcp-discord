@@ -30,7 +30,7 @@ export function linkMeTool({ authorId, call = callTool }) {
     input_schema: {
       type: "object",
       properties: {
-        player_tag: { type: "string", description: "The player's tag, e.g. #JYRQ8U92C." },
+        player_tag: { type: "string", description: "The player's tag, from the candidates the server named." },
       },
       required: ["player_tag"],
       additionalProperties: false,

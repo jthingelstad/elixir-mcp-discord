@@ -1,7 +1,7 @@
 /**
  * A Clash Royale deck link carries the deck IN THE URL:
  *
- *   https://link.clashroyale.com/deck/en?deck=26000007;28000015;...&slots=0;0;...&tt=159000000&id=20JJJ2CCRU
+ *   https://link.clashroyale.com/deck/en?deck=26000007;28000015;...&slots=0;0;...&tt=159000000&id=<sharer's tag>
  *   clashroyale://copyDeck?deck=26000007;28000015;...
  *
  * `deck` is eight card ids; `tt` is the tower troop's id; `slots` is always

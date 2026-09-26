@@ -25,10 +25,10 @@ const timeline = [
   {
     at: "2026-09-13T21:00:00Z",
     subject_tag: "#A",
-    subject_name: "sikander",
+    subject_name: "sam",
     kind: "battle_session",
     section: "activity",
-    text: "sikander played 12 battles",
+    text: "sam played 12 battles",
     facts: { battles: 12 },
   },
   {
