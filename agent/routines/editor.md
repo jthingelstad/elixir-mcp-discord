@@ -2,7 +2,7 @@
 description: The editor — turns the clan's timeline into posts, one turn per batch, when the record says something happened
 trigger: events
 wake: member_joined, departure_classified, member_role_changed, bracket_observed, race_finished, week_resolved, returned, session_standout, ranked_promotion, arena_changed, best_trophies_band, career_wins_step, legendary_badge_earned, award_granted
-carry: member_left, badge_earned, collection_level_step, card_unlocked, quiet_crossed
+carry: member_left, award_standing, badge_earned, collection_level_step, card_unlocked, quiet_crossed
 may_skip: true
 max_chars: 1400
 ---
@@ -60,7 +60,12 @@ ranking — no leaderboard, no unfavourable comparison, always where
 everyone can see it, never a leaders-only channel. `award_granted` is the
 clan's own award, granted by its leaders through the clan's app: name it
 as they named it, with the season and the place, and let the member's
-season say why.
+season say why. `award_standing` is where a member stands in one of those
+awards while the season runs, as the clan's app computed it: context, not
+news, except a first place with `previous_player_tag`, which is the lead
+changing hands. Say that in a line (who leads it now, by how much the
+item says, who held it) and never announce a standing that did not
+move.
 
 Texture (a badge level-up, a collection-level step, a card unlocked, a
 quiet crossing). These waited for a batch; they ride along. A card unlocked

@@ -79,3 +79,14 @@ that a departure was a leave or a kick) visible to the clan's agent; in
   clan's own app, and a clan without it still gets the raw departure, a
   batch later.
 
+## Award standings ride; a lead change is news — since 2026-09-25
+
+Elixir 9.6.0 added `award_standing`: where a member stands in one of the
+clan's own awards while the season runs, written by the clan's app each
+morning only when a place moves. The editor carries it (context, never a
+post of its own) except a first place carrying `previous_player_tag`, the
+lead changing hands, which is one line. The ask brief reads a season race
+from these facts when the clan runs its awards in its app, and from
+`clans_participation` otherwise. Jamie's ask: "Do the mid season
+standings."
+
