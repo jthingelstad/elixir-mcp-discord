@@ -370,11 +370,13 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
   if (blocked) {
     // Members are not the operator and cannot fix this, so the reply says what
     // happened and when it changes, and nothing about configuration.
-    await message.reply(
-      blocked.reason === "daily_cap"
-        ? "I've hit today's spend cap for this channel. It resets at midnight UTC."
-        : "I've used up this channel's budget for the month. It resets on the 1st — ask your clan leader if you need it raised.",
-    );
+    await message
+      .reply(
+        blocked.reason === "daily_cap"
+          ? "I've hit today's spend cap for this channel. It resets at midnight UTC."
+          : "I've used up this channel's budget for the month. It resets on the 1st — ask your clan leader if you need it raised.",
+      )
+      .catch((error) => log.warn("ask_over_budget_reply_failed", { error: error.message }));
     log.warn("ask_over_budget", {
       routine: routine.key,
       lane,

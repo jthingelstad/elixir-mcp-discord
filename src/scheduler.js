@@ -93,7 +93,10 @@ export async function tick(routines, resolveChannel, now = new Date(), { runFn =
       });
       return null;
     });
-    if (routine.once && run) {
+    // A one-shot refused for money or a shutdown did not run: it stays armed
+    // (2026-09-26 review: it was retired as if it had).
+    const refused = run && !run.ok && (run.error === "shutting_down" || String(run.error).startsWith("budget:"));
+    if (routine.once && run && !refused) {
       retireOnce(routine);
       await notify(
         "one-shot done",

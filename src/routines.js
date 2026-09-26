@@ -335,11 +335,11 @@ export function activeRoutines(options) {
     // the boot check's DM (src/index.js, same fingerprint) cannot see it.
     // notify never throws and is a log line when there is no client.
     if (errors.length) {
-      void notify(
+      notify(
         "routine files",
         `${errors.length} routine file${errors.length === 1 ? "" : "s"} failed to load and ${errors.length === 1 ? "is" : "are"} off the air${routines.length === 0 ? " — nothing will run, answer or post" : ""}: ${errors.map((e) => `${e.key} — ${e.error}`).join("; ")}`,
         { fingerprint: `routine_invalid:${errors.map((e) => e.key).join(",")}` },
-      );
+      ).catch((error) => log.warn("routine_files_notice_failed", { error: error.message }));
     }
     if (errors.length && routines.length === 0) {
       log.error("no_routines_load", {
