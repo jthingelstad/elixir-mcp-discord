@@ -386,10 +386,10 @@ export async function ask({
 }) {
   const history = [...messages];
   const started = Date.now();
-  // Ours, not the server's. It cannot join to Elixir MCP's mcp_call_audit row —
-  // that needs a request_id on the response envelope, a server change — but it
-  // does turn "the war numbers looked wrong on Tuesday" into one grep of this
-  // process's log.
+  // Ours, not the server's: it turns "the war numbers looked wrong on Tuesday"
+  // into one grep of this process's log. The server's own request_id rides
+  // each tool result's meta and is read beside it (the join to Elixir's call
+  // audit).
   const turnId = randomUUID().slice(0, 8);
 
   const activity = newActivity();

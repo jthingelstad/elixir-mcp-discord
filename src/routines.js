@@ -10,8 +10,9 @@
  * wanted to be an example had a roster of somebody's actual channels in it.
  *
  * Now the trigger is a field. `message` fires when a human speaks in the
- * routine's channel, `events` fires when Elixir MCP's feed carries something the
- * routine subscribes to, and `schedule` fires on a clock. Everything else —
+ * routine's channel, `events` fires when Elixir MCP's timeline carries
+ * something the routine wakes on, `schedule` fires on the wall clock, and
+ * `clock` fires on the game's own clock (an arm such as the war day's close). Everything else —
  * what to say, which channel, how often, which model — is front matter and
  * prose in `agent/routines/*.md`, which an operator owns and this repository
  * merely ships a default set of.

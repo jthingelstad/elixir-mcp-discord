@@ -7,7 +7,7 @@ gets a system block listing the channels it may post in (name, topic, who can
 see it — `visible to: Leader, Co-Leader` from the role overwrites — and which
 one is the ask channel) and a client-side `post_message(channel_id, content)`
 tool; the model chooses. `channel:` on a routine is now an optional DEFAULT
-hint (bound in `.env` or matched by channel name); no `post_message` call =
+hint (bound as `CHANNEL_<NAME>` in `config.json`, or matched by channel name); no `post_message` call =
 skip; prose with no call still goes to the default (legacy), or is
 `post_without_destination` if there is none.
 

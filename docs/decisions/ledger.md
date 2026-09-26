@@ -10,7 +10,7 @@ turns with the answer clipped at 1200 chars and no tool inputs, and the
 structured trace was rendered into the Discord footer and dropped. To ask "was
 that number right?" you need the tool's result body, and nothing kept it.
 
-- **Three record kinds, all keyed by `turnId`, all append-only:** `turn`
+- **Three record kinds at first, all keyed by `turnId`, all append-only** (more ride the same file since: `reaction`, `filed`, `finding`, `intervention`, `retraction`, `review`, `decision`, each named by its `kind` in `src/ledger.js`): `turn`
   (inputs — the question and thread history, or the brief and the timeline
   handed in; the system prompt's sha; the trace with every call's arguments
   AND result body, bounded at `LEDGER_BODY_CHARS`, 16 KB; the answer, where

@@ -513,7 +513,7 @@ one turn; at `effort: high` a routine that makes several large reads can
 reach it inside the thinking. When the DM says a routine ran out of room,
 raise its `max_tokens` or lower its effort.
 
-`max_chars` (default 1900) is the length of one post. The model is told the
+`max_chars` (default 1900 for a routine's post; an ask answer is split at Discord's 2,000 whatever it says) is the length of one post. The model is told the
 number, and `post_message` refuses anything longer with an error it can
 answer by shortening; a post is never cut or split to fit. Discord's own
 2,000 is the ceiling whatever you set.

@@ -358,7 +358,9 @@ export async function pollRoutine(routine, channel, { call = callTool, run: runT
   // Advance only after a successful turn, so a failure re-runs the window
   // rather than dropping it. A skip counts: the routine saw it and declined.
   if (run.ok) {
-    state.setCursor(routine.key, result.cursor);
+    // The same guard as the no-turn path above: a read with no cursor keeps
+    // the one we have rather than writing null over it.
+    if (result.cursor) state.setCursor(routine.key, result.cursor);
     state.clearCarry(routine.key);
     log.info("events_consumed", {
       routine: routine.key,

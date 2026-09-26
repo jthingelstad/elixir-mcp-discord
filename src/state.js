@@ -65,6 +65,20 @@ const DEFAULTS = {
   // a log line rather than a channel quietly reporting on strangers.
   principal: null,
   answeredFeedbackIds: [],
+  // { [channelId]: { at, name, routine, seeded } } — when the bot last posted
+  // in each channel (the silence clock), and when it first saw one it never
+  // posted in.
+  lastPostAt: {},
+  channelFirstSeen: {},
+  // { [fingerprint]: iso } — operator notices already sent, so one is not
+  // repeated within its hour.
+  notices: {},
+  // { date, byUser } — questions per member today, for the ask lane's
+  // per-member cap; { [userId]: [iso, ...] } — requests to the operator.
+  askCounts: {},
+  operatorRequests: {},
+  // The review's high-water mark: turns up to here have been read.
+  reviewedThrough: null,
   // Fingerprint of the channel problems last announced in Discord at boot, so
   // a crash loop with a bad channel id complains once, not every thirty
   // seconds. null once every channel checks out.
