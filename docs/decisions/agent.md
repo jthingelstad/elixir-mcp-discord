@@ -20,9 +20,10 @@ them as absent; it was stale for a week, and in that week any lane — a
 member's question included — could have tracked a clan on Jamie's slots.
 Since 2026-09-25 `src/tools.js` decides which writes each kind of turn
 keeps, from the server's own `readOnlyHint` annotations (`toolCatalog` in
-`src/mcp.js`): rehearsals none; routines and the review
-`elixir_send_feedback`; the ask lane and the DM that plus
-`elixir_identify`. Every other write — tracking, `collections_edit`,
+`src/mcp.js`): rehearsals none; routines, the review, the ask lane and
+the DM `elixir_send_feedback` (since D2, 2026-09-25, `elixir_identify` is
+off in every lane: `link_me`'s handler calls it; since 2026-09-26 it is
+switched off by name even when the server annotates nothing). Every other write — tracking, `collections_edit`,
 `elixir_nickname`, and any the hub adds later — is switched off through
 the connector's per-tool `configs`, and refused again (`not_available`) on
 the direct-client path the API sometimes hands back. The first dry-run

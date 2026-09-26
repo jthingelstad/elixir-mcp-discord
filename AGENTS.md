@@ -113,8 +113,9 @@ conclude MCP is ready when something else was quietly propping it up.
 Two things look like exceptions and are not. The turn ledger
 (`src/ledger.js`) is an audit record: no member-facing turn reads it, and
 none ever may — an answer the model could see again is the local memory this
-rule forbids. Its one reader is the review lane, whose audience is the
-operator and whose output is a proposal. And `agent/memory.md` is memory,
+rule forbids. Its readers are the operator's: the review lane, whose
+output is a proposal, and the DM console (`why`, `retract`, the review's
+turn lookups), whose audience is the operator alone. And `agent/memory.md` is memory,
 deliberately: not facts (Elixir has those), not people (never), but how to
 do this job here — written only by the review, only with the operator's
 click (or `REVIEW_AUTO_MEMORY`), in a text file anyone can read and edit.
@@ -131,8 +132,10 @@ not a mirror. Never hand-write a schema here.
 **It does not know who Discord users are.** Resolving a member to a player tag
 via anything but `on_behalf_of` + `elixir_identify` (or `players_search`) is the
 leak that would make this demo lie. Since 2026-09-13 the first-contact rule
-in `WHO_IS_ASKING` is: compare the author's Discord name against
-`clans_roster`, link on a whole-name single match, otherwise ask. A member
+in `WHO_IS_ASKING` is: link on a whole-name single match, otherwise ask; the
+match is the server's now (a `no_subject` refusal carries `candidates[]`,
+the clan members whose whole name matches the `display_name` passed), so
+the model never pulls `clans_roster` to compare names itself. A member
 whose Discord name was exactly their in-game name was told to type a tag the
 bot could have read off the roster; the server refuses `elixir_identify` for
 anyone outside the clan and a re-call replaces the mapping, so the exact

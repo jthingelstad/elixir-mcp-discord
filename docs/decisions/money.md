@@ -13,8 +13,8 @@ with silence as the only symptom.
 three.** Setup asked for two, so the third was unset — unlimited — on every
 install, and `budget.status()` hid the review lane while `REVIEW` was off,
 so the boot log's unlimited-budget warning, `/budget` and `status` never
-mentioned that the operator's DM turns (on `REVIEW_MODEL`, Opus at high
-effort by default) had no ceiling. The status line reads `review + DMs`.
+mentioned that the operator's DM turns (on `CLAUDE_MODEL`; the review
+itself runs on `REVIEW_MODEL`) had no ceiling. The status line reads `review + DMs`.
 
 **Since 2026-09-25 an unset budget is a cap, not unlimited** (Jamie's D4).
 Unset used to mean unlimited with a boot-log warning, and it failed open

@@ -5,7 +5,7 @@
 `src/review.js`. Evaluation as a FEATURE of the bot, on the operator's key
 and budget, not a job beside it — because other people run this for their
 own clans, and an eval that only Jamie's machine performs does not ship.
-`REVIEW=on` in `.env`; off by default. Read the header comment first; the
+`REVIEW=on` in the instance's `config.json` (a DM can set it); off by default. Read the header comment first; the
 design is there. The short version:
 
 - **Findings become diffs.** The review reads the ledger for the window,

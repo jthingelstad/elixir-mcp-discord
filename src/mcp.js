@@ -17,6 +17,10 @@
 
 import { config } from "./config.js";
 import { log } from "./log.js";
+import { createRequire } from "node:module";
+
+/** The version clientInfo reports is the package's (it said 0.2.0 at 0.3.0). */
+const PACKAGE_VERSION = createRequire(import.meta.url)("../package.json").version;
 
 const TIMEOUT_MS = 20_000;
 let nextId = 0;
@@ -88,7 +92,7 @@ export async function initialize(auth = null) {
     {
       protocolVersion: "2025-06-18",
       capabilities: {},
-      clientInfo: { name: "elixir-mcp-discord", version: "0.2.0" },
+      clientInfo: { name: "elixir-mcp-discord", version: PACKAGE_VERSION },
     },
     auth,
   );

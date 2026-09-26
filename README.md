@@ -70,8 +70,8 @@ A routine is one markdown file. The shipped editor:
 ---
 description: The editor — turns the clan's timeline into posts, one turn per batch
 trigger: events
-wake: member_joined, member_left, member_role_changed, race_finished, week_resolved, returned, session_standout, ranked_promotion, ...
-carry: badge_earned, collection_level_step, card_unlocked, quiet_crossed
+wake: member_joined, departure_classified, member_role_changed, race_finished, week_resolved, returned, session_standout, ranked_promotion, ...
+carry: member_left, badge_earned, collection_level_step, card_unlocked, quiet_crossed
 may_skip: true
 ---
 You have been handed a batch of timeline items ... You are the editor: decide
