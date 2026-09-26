@@ -570,7 +570,27 @@ async function runRoutineNow(
       );
       return { ok: false, error: "no_destination", text, result };
     }
-    const messages = await post(channel, textPost, routine.maxChars);
+    let messages;
+    try {
+      messages = await post(channel, textPost, routine.maxChars);
+    } catch (error) {
+      // Some parts went out before the send failed: the turn was said, if
+      // not whole. Failing it would leave the events cursor where it was and
+      // the next poll would post the same batch again (2026-09-26 review).
+      if (!error.sent?.length) throw error;
+      messages = error.sent;
+      log.error("post_cut_short", {
+        routine: routine.key,
+        turnId: result.turnId,
+        sent: error.sent.length,
+        error: error.message,
+      });
+      await notify(
+        "post cut short",
+        `${routine.key}: ${error.sent.length} part(s) went out to #${channel.name ?? channel.id}, then Discord refused the rest (${error.message}). Not retried, so nothing posts twice.`,
+        { fingerprint: `cut_short:${routine.key}` },
+      );
+    }
     posts.push({ channelId: channel.id, channelName: channel.name ?? channel.id, text: textPost, messages, channel });
   } else if (text && posts.length > 0) {
     log.info("prose_after_posts", { routine: routine.key, turnId: result.turnId, chars: text.length });

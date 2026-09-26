@@ -335,3 +335,9 @@ one could hold it. Live after each instance restarts on the new code.
 - **Real players' tags and a member's name** sat in a prompt block, a
   tool description, a comment and three tests. Gone; a test now scans
   `src/`, `test/` and `scripts/` for tag-shaped strings.
+- **A prose post cut short after some parts made the batch post twice.**
+  The `post_message` path already kept a partial send; the legacy prose
+  path threw, the events cursor held, and the next poll posted again. A
+  partial send is now the post, with a `post cut short` notice.
+- **`/routines` read a clock routine as "on message"** and a wake/carry
+  editor as "timeline: everything", days as numbers; it names them now.

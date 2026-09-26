@@ -140,6 +140,19 @@ test("a long post is split rather than truncated", async () => {
   assert.equal(channel.sent.map((m) => m.text).join("\n"), long);
 });
 
+test("a long post Discord cuts short after some parts is delivered, so the batch is never posted twice", async () => {
+  const channel = fakeChannel();
+  const send = channel.send;
+  channel.send = (text) => (channel.sent.length >= 1 ? Promise.reject(new Error("Missing Permissions")) : send(text));
+  const long = Array.from({ length: 60 }, (_, i) => `line ${i} ${"x".repeat(40)}`).join("\n");
+  const run = await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "01:00", max_chars: 900 }), {
+    channel,
+    askFn: async () => answer(long),
+  });
+  assert.equal(run.ok, true, "the part that went out is the post; a retry would repeat it");
+  assert.equal(channel.sent.length, 1);
+});
+
 test("a dry run composes without touching Discord, and asks for a rehearsal's toolset", async () => {
   let policy;
   const run = await runRoutine(routine({ trigger: "schedule", channel: "pulse", at: "01:00" }), {
