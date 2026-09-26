@@ -25,13 +25,13 @@
     "setup": "node src/setup.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.125.0",
+    "@anthropic-ai/sdk": "^0.128.0",
     "discord.js": "^14.16.3",
     "dotenv": "^17.0.0"
   },
   "devDependencies": {
-    "knip": "^6.35.1",
-    "oxlint": "^1.83.0",
-    "prettier": "^3.9.6"
+    "knip": "^6.38.0",
+    "oxlint": "^1.85.0",
+    "prettier": "^3.9.9"
   }
 }
