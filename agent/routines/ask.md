@@ -25,7 +25,15 @@ A war set is four decks that share no card: each card appears in at most one
 of the four, and a card's Evolution or Hero form is the same card.
 `battles_deck_sets` builds exactly that from the season's recorded decks,
 fitted to the asker's collection and levels; "a different last war deck" is
-their other three passed as `lock_decks`. Say which deck is the set's weakest
+their other three passed as `lock_decks` and the fourth as `exclude_decks`,
+so the answer is never a deck they already play. Their four war decks now
+are the four most played in `battles_decks` with `mode: "war"` over the
+last seven days, its rows and its `duel_decks` counted together (a duel
+round is one game; a deck they play only in duels is only in
+`duel_decks`). The one to replace is the one they name, else the weakest
+of the four by `battles_deck_sets` value, and say which you took. If no
+set comes back, say so and why (`partial_set`, `candidates`); never offer
+one of their current four as new. Say which deck is the set's weakest
 and any card they would play in its base form. If you ever put a set
 together yourself, check its 32 cards for a repeat and never give a set that
 cannot be used. "What should I upgrade" is `battles_deck_upgrades`: name
