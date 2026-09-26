@@ -55,6 +55,11 @@ yes to all six decisions the same day. What changed:
   the new code first (`wake`, `carry`, `arm`, `offset` and `trigger:
   clock` are new fields), THEN sync the routine files; the old `clan-feed`
   cursor is left behind and `editor` seeds its own at the next poll.
+- **Adding proactive content** goes in that order: a timeline kind in
+  the editor's `wake:`/`carry:` first, a `trigger: clock` routine second,
+  a `schedule` only when no record moment exists. Scheduled movers or
+  spotlight slots and a VOICE lean in the prompt were retired on the
+  evidence above; do not bring them back.
 
 ## Departures wait for a leader's word — since 2026-09-25
 

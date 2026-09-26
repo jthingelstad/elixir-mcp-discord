@@ -21,8 +21,9 @@ Discord server as three instances (docs/decisions/instances.md),
 and it is simultaneously a working preview for clan members and an example
 anyone can install.
 
-The preview exists to answer one question: **is Elixir MCP good enough to
-replace elixir-bot's native Clash Royale data?** The long-term direction is that
+The preview began with one question: **is Elixir MCP good enough to
+replace elixir-bot's native Clash Royale data?** It was: elixir-bot retired on
+2026-09-26 and this agent took its place. The long-term direction is that
 Ask Elixir goes away and members connect Elixir MCP to their own agent, on their
 own tokens. This repo is how we find out whether that lands.
 
@@ -236,7 +237,7 @@ vanishes without a trace.
 
 Plain. No persona, no lore, no nicknames. Members should be comparing whether
 the answers are *right*, not whether they are charming — Elixir's personality
-lives in elixir-bot and deliberately does not live here.
+was elixir-bot's (retired 2026-09-26) and deliberately does not live here.
 
 The voice is not in the source, though: it is `agent/identity.md`, which an
 operator is meant to rewrite. Keep code-level prompt blocks to mechanics
