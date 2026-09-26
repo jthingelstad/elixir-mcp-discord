@@ -1,24 +1,34 @@
 name: verify
 
+# The job named `validate` is the check the `main` ruleset requires. Rename
+# both together or merges stop. It passes only when every other job here
+# passed, so the matrix can change without touching the ruleset.
 on:
   push:
     branches: [main]
   pull_request:
 
-permissions:
-  contents: read
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
 
 jobs:
   verify:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         # The floor declared in package.json engines, and a current release.
         node: [22, 24]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -34,9 +44,13 @@ jobs:
 
   audit:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
@@ -44,3 +58,25 @@ jobs:
       # Runtime dependencies only, high and above: a dev-tool advisory is not
       # a reason to block a prompt fix.
       - run: npm run audit
+
+  # Pinned actions, no default token permissions, no persisted checkout
+  # token: scripts/test-workflows.sh keeps every workflow that way.
+  workflows:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: sh scripts/test-workflows.sh
+
+  validate:
+    name: validate
+    if: always()
+    needs: [verify, audit, workflows]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: every job passed
+        run: test "${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && !contains(needs.*.result, 'skipped') }}" = true

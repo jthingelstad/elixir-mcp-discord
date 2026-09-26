@@ -5,11 +5,18 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # One PR a week for every minor and patch bump, so routine updates land
+    # as one green check instead of a queue; majors still come one by one.
     groups:
-      dev-tooling:
-        dependency-type: development
-    open-pull-requests-limit: 5
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: deps
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    commit-message:
+      prefix: ci
