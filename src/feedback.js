@@ -86,8 +86,9 @@ unless elixir_send_feedback was actually called in this turn: a claim without th
 call is caught and corrected in public. If you decided not to file, say that.
 `.trim();
 
-function calledFeedback(called) {
-  return called.some((name) => name.includes("elixir_send_feedback"));
+/** Did this turn file feedback with Elixir (the one write every lane keeps)? */
+export function calledFeedback(called) {
+  return (called || []).some((name) => name.includes("elixir_send_feedback"));
 }
 
 /**

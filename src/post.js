@@ -18,6 +18,16 @@ export function chunk(text, limit = DISCORD_LIMIT) {
   return parts;
 }
 
+/** A footer (a trace, an error caveat) as a reply under a message the bot
+ *  sent, never pinging its author; a failure is a log line, not an error. */
+export async function replyUnder(message, content, what) {
+  if (!message || !content) return null;
+  return message.reply({ content, allowedMentions: { repliedUser: false } }).catch((error) => {
+    log.warn(`${what}_post_failed`, { error: error.message });
+    return null;
+  });
+}
+
 /** Posts a message, splitting it if it is long. Returns every message sent, in order.
  *  Discord's own 2,000 is the ceiling whatever the caller's limit says. A send
  *  that fails throws with `error.sent`: the parts already in the channel. */

@@ -16,7 +16,7 @@ import { ask, spendBlock, cacheShare } from "./claude.js";
 import { laneFor } from "./budget.js";
 import { detectFriction, sweepFriction, looksUngrounded } from "./feedback.js";
 import { systemFor, userMessageFor, isSkip, notDelivered, outOfRoom } from "./prompt.js";
-import { post, recentPosts } from "./post.js";
+import { post, recentPosts, replyUnder } from "./post.js";
 import { renderTrace, errorFooter, UNGROUNDED_FOOTER } from "./trace.js";
 import { directory, resolveById } from "./directory.js";
 import { config } from "./config.js";
@@ -301,13 +301,6 @@ export function roomTool({ entries, resolve = resolveById, now = () => Date.now(
 
 /** Reply under the last message of a post without pinging anyone; a failure
  *  to attach a footer must never undo the post. */
-async function footnote(last, content, what) {
-  if (!last || !content) return null;
-  return last.reply({ content, allowedMentions: { repliedUser: false } }).catch((error) => {
-    log.warn(`${what}_post_failed`, { error: error.message });
-    return null;
-  });
-}
 
 /** What a reaction sweep needs to know about a turn, kept small. */
 export function turnRecord({ routine, lane, question, text, result, channelId }) {
@@ -609,7 +602,7 @@ async function runRoutineNow(
   const footers = [];
   const attach = async (content, what) => {
     if (content) footers.push(content);
-    notes.push(await footnote(last, content, what));
+    notes.push(await replyUnder(last, content, what));
   };
   if (routine.trace) {
     await attach(renderTrace(result, { label: routine.key }), "trace");

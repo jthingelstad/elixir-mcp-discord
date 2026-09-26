@@ -22,7 +22,7 @@ import { laneFor } from "./budget.js";
 import { detectFriction, sweepFriction, looksUngrounded } from "./feedback.js";
 import { systemFor, nowLine } from "./prompt.js";
 import { config } from "./config.js";
-import { chunk } from "./post.js";
+import { chunk, replyUnder } from "./post.js";
 import { renderTrace, errorFooter, UNGROUNDED_FOOTER, UNFILED_FOOTER } from "./trace.js";
 import { turnRecord } from "./run.js";
 import { track, isStopping } from "./inflight.js";
@@ -539,11 +539,7 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
     const footnote = async (content, what) => {
       if (!sent || !content) return;
       footers.push(content);
-      const note = await sent.reply({ content, allowedMentions: { repliedUser: false } }).catch((error) => {
-        log.warn(`${what}_post_failed`, { error: error.message });
-        return null;
-      });
-      produced.push(note);
+      produced.push(await replyUnder(sent, content, what));
     };
     if (routine.trace) await footnote(renderTrace(result), "trace");
     else await footnote(errorFooter(result), "error_footer");

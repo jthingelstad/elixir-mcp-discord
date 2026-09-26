@@ -30,17 +30,20 @@ const SWEEP_LANE = "ask";
 
 import { ask, spendBlock } from "./claude.js";
 import { callTool } from "./mcp.js";
-import { FEEDBACK_PROMPT, CLASSIFY_RULES, parseVerdict, recordFinding, tallyCalls } from "./feedback.js";
+import {
+  FEEDBACK_PROMPT,
+  CLASSIFY_RULES,
+  parseVerdict,
+  recordFinding,
+  tallyCalls,
+  calledFeedback,
+} from "./feedback.js";
 import { config } from "./config.js";
 import { log } from "./log.js";
 import * as ledger from "./ledger.js";
 import * as state from "./state.js";
 
 export const REACTIONS = { "👍": "up", "👎": "down" };
-
-function calledFeedback(called) {
-  return (called || []).some((name) => name.includes("elixir_send_feedback"));
-}
 
 /** What the reader said about the message, if they replied to it. */
 async function readerNote(message, user) {
