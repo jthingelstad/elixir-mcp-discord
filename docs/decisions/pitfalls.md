@@ -262,6 +262,13 @@
   catch-up window live. `fire` returns `{ blocked }` and the lane holds that
   boundary `RETRY_MS`. A failed release turn also no longer carries the
   same items twice (`addCarry` keeps one of each).
+- **A named Anthropic workspace reset pauses its event routine — since
+  2026-09-28.** A failed turn keeps its event cursor by design, but an
+  explicit workspace usage-limit response also says exactly when access
+  returns. Persist that ISO instant per routine and do not re-read or retry
+  its unconsumed window before it; after the reset, clear the hold and make
+  the ordinary poll. This preserves the batch without turning one known
+  outage into a five-minute error loop.
 - **A post is a post once Discord has it, and only then — since
   2026-09-25.** Every client-side tool result is followed by another API
   round, and when that round failed (a 529, a dropped stream) `ask()`

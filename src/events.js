@@ -290,7 +290,18 @@ async function seedCursor() {
  *  response it read (or null when it read none), so the tick can act on the
  *  hints without a call of its own. `call` and `run` are the transport and
  *  the turn, for tests. */
-export async function pollRoutine(routine, channel, { call = callTool, run: runTurn = runRoutine } = {}) {
+export async function pollRoutine(
+  routine,
+  channel,
+  { call = callTool, run: runTurn = runRoutine, now = () => new Date() } = {},
+) {
+  const retryAt = state.retryAtFor(routine.key);
+  if (retryAt && Date.parse(retryAt) > now().getTime()) {
+    log.info("events_waiting_for_workspace_limit", { routine: routine.key, retryAt });
+    return null;
+  }
+  if (retryAt) state.clearRetryAt(routine.key);
+
   const cursor = isoCursor(state.cursorFor(routine.key));
   if (cursor === null) {
     const seeded = await seedCursor();
@@ -373,6 +384,9 @@ export async function pollRoutine(routine, channel, { call = callTool, run: runT
       cursor: result.cursor,
       posted: !run.skipped,
     });
+  } else if (run.retryAt && Date.parse(run.retryAt) > now().getTime()) {
+    state.setRetryAt(routine.key, run.retryAt);
+    log.warn("events_waiting_for_workspace_limit", { routine: routine.key, retryAt: run.retryAt });
   }
   return result.meta;
 }
