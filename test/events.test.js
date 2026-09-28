@@ -263,6 +263,35 @@ test("a busy window is read to its start: older pages by the same from, to at th
   assert.equal(state.cursorFor(key), "2026-09-25T12:00:00.000Z");
 });
 
+test("a known workspace reset holds an event window without polling it again", async () => {
+  const key = "workspace-limit-editor";
+  const cursor = "2026-09-25T10:55:00.000Z";
+  state.setCursor(key, cursor);
+  const editor = { key, trigger: "events", wake: ["member_joined"] };
+  const hub = fakeHub([moment("member_joined", "2026-09-25T11:00:00.000Z")]);
+  let runs = 0;
+  const run = async () => {
+    runs += 1;
+    return { ok: false, retryAt: "2026-10-01T00:00:00.000Z" };
+  };
+  const beforeReset = () => new Date("2026-09-28T10:00:00.000Z");
+
+  await pollRoutine(editor, null, { call: hub.call, run, now: beforeReset });
+  assert.equal(runs, 1);
+  assert.equal(hub.calls.length, 1);
+  assert.equal(state.cursorFor(key), cursor, "the unconsumed batch stays put");
+  assert.equal(state.retryAtFor(key), "2026-10-01T00:00:00.000Z");
+
+  await pollRoutine(editor, null, { call: hub.call, run, now: beforeReset });
+  assert.equal(runs, 1, "the known reset suppresses another model attempt");
+  assert.equal(hub.calls.length, 1, "the same window is not re-read while waiting");
+
+  await pollRoutine(editor, null, { call: hub.call, run, now: () => new Date("2026-10-02T00:00:00.000Z") });
+  assert.equal(runs, 2, "the retained batch is eligible after the reset");
+  assert.equal(hub.calls.length, 2);
+  assert.equal(state.retryAtFor(key), null, "an expired reset is removed");
+});
+
 test("the catch-up is bounded, and says what it left unread", async () => {
   const hub = fakeHub(busyHour, { pageSize: 2 });
   const result = await readWindow("2026-09-25T10:55:00.000Z", { reader: "x" }, { call: hub.call, maxPages: 1 });

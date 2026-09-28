@@ -35,6 +35,21 @@ function playing(responses) {
   return { stream, requests };
 }
 
+test("a known workspace usage limit exposes its reset time without guessing", async () => {
+  const out = await ask({
+    system: "s",
+    messages: [{ role: "user", content: "go" }],
+    catalogFn: CATALOG,
+    stream: () => {
+      throw new Error(
+        '400 {"type":"error","error":{"type":"invalid_request_error","message":"You have reached your specified workspace API usage limits. You will regain access on 2026-10-01 at 00:00 UTC."}}',
+      );
+    },
+  });
+  assert.equal(out.ok, false);
+  assert.equal(out.retryAt, "2026-10-01T00:00:00.000Z");
+});
+
 const read = {
   type: "mcp_tool_use",
   id: "mcptoolu_1",

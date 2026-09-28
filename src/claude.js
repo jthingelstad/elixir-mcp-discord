@@ -44,6 +44,15 @@ const MCP_BETA = "mcp-client-2025-11-20";
 const MAX_ROUNDS = 5;
 const client = new Anthropic();
 
+function workspaceLimitRetryAt(message) {
+  const match = String(message).match(
+    /workspace API usage limits[\s\S]*?regain access on\s+(\d{4}-\d{2}-\d{2})\s+at\s+(\d{2}:\d{2})\s+UTC/i,
+  );
+  if (!match) return null;
+  const retryAt = new Date(`${match[1]}T${match[2]}:00.000Z`);
+  return Number.isNaN(retryAt.getTime()) ? null : retryAt.toISOString();
+}
+
 const mcpServers = [
   {
     type: "url",
@@ -505,8 +514,9 @@ export async function ask({
 
       response = await call.finalMessage();
     } catch (error) {
-      log.error("claude_call_failed", { turnId, error: error.message });
-      return { ...summary(), ok: false, error: error.message };
+      const retryAt = workspaceLimitRetryAt(error.message);
+      log.error("claude_call_failed", { turnId, error: error.message, retryAt: retryAt ?? undefined });
+      return { ...summary(), ok: false, error: error.message, retryAt };
     }
 
     const usd = costOf(model, response.usage);

@@ -35,6 +35,10 @@ const DEFAULTS = {
   // `carry`: not worth a turn on their own, kept until a `wake` item starts
   // one or the carry release lets them go (src/events.js). Bounded.
   carry: {},
+  // { [routineKey]: iso }. A known upstream workspace limit named its reset
+  // time. Keep the event window and wait until then rather than spending an
+  // identical failed model call on every poll (src/events.js).
+  retryAt: {},
   // { [routineKey]: periodKey }. null = never seeded, which is distinct from
   // {} on purpose: an empty ledger on a fresh install would make every routine
   // whose window is still open fire at once, in the same minute.
@@ -184,6 +188,23 @@ export function cursorFor(routineKey) {
 export function setCursor(routineKey, cursor) {
   const state = read();
   write({ ...state, cursors: { ...state.cursors, [routineKey]: cursor } });
+}
+
+export function retryAtFor(routineKey) {
+  return read().retryAt?.[routineKey] ?? null;
+}
+
+export function setRetryAt(routineKey, retryAt) {
+  const state = read();
+  write({ ...state, retryAt: { ...state.retryAt, [routineKey]: retryAt } });
+}
+
+export function clearRetryAt(routineKey) {
+  const state = read();
+  if (!state.retryAt?.[routineKey]) return;
+  const retryAt = { ...state.retryAt };
+  delete retryAt[routineKey];
+  write({ ...state, retryAt });
 }
 
 /** How many carried items one routine keeps; the oldest fall off. A batch
