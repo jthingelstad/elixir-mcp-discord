@@ -35,7 +35,7 @@ test("the catalog is every shipped routine, each with a description, plus anythi
   );
   const entries = catalog({ exampleDir: EXAMPLE, instanceDir: agent });
   const shipped = entries.filter((e) => !e.custom);
-  assert.ok(shipped.length >= 4);
+  assert.ok(shipped.length >= 3);
   for (const entry of shipped) {
     assert.equal(entry.error, null, `${entry.key}: ${entry.error}`);
     assert.ok(entry.routine.description, `${entry.key} needs a description for the picker`);

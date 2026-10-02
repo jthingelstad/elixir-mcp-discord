@@ -6,10 +6,8 @@
  *
  * `deck` is eight card ids; `tt` is the tower troop's id; `slots` is always
  * zero (a link does not say which cards are evolved — the one thing people
- * assume it does); `id` is the sharer's player tag. So "is this deck any
- * good for me?" needs no web access: read the ids off the text, resolve
- * them through cards_catalog, and the record does the rest. The only member
- * use case anyone pastes a link for, and it stays inside the one source.
+ * assume it does); `id` is the sharer's player tag. Identifying the pasted deck needs no web access: read the ids off the text, resolve
+ * them through cards_catalog, and the record does the rest. The card names stay inside the one source.
  */
 
 import { callTool } from "./mcp.js";
@@ -34,7 +32,7 @@ export function deckLinkTool({ resolve = callTool } = {}) {
   return {
     name: "deck_link",
     description:
-      "Read a Clash Royale deck link (link.clashroyale.com/deck/... or clashroyale://copyDeck?deck=...) that someone pasted: the eight cards by name, the tower troop, and who shared it. A link never says which cards are evolved. Then cards_archetype with those cards names it, and the record (battles_decks, cards_synergy, players_collection) says anything else about it.",
+      "Read a Clash Royale deck link (link.clashroyale.com/deck/... or clashroyale://copyDeck?deck=...) that someone pasted: the eight cards by name, the tower troop, and who shared it. A link never says which cards are evolved. Use the descriptive archetype vocabulary to name it and the selected recorded history to describe actual play. A deck link does not establish performance or recommend changes.",
     input_schema: {
       type: "object",
       properties: { link: { type: "string", description: "the link, or the whole message containing it" } },

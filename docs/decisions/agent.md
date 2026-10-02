@@ -14,7 +14,7 @@ still absent from an agent door *and* refused on call. **So do not add it
 to a prompt.**
 
 **Since hub 7.1.0 an agent door publishes `elixir_track_clan` and
-`elixir_track_player`** (54 tools; an agent may watch a rival, and every
+`elixir_track_player`** (an agent may watch a rival, and every
 track spends the OWNER's recording slots). The line above used to name
 them as absent; it was stale for a week, and in that week any lane — a
 member's question included — could have tracked a clan on Jamie's slots.
@@ -23,7 +23,7 @@ keeps, from the server's own `readOnlyHint` annotations (`toolCatalog` in
 `src/mcp.js`): rehearsals none; routines, the review, the ask lane and
 the DM `elixir_send_feedback` (since D2, 2026-09-25, `elixir_identify` is
 off in every lane: `link_me`'s handler calls it; since 2026-09-26 it is
-switched off by name even when the server annotates nothing). Every other write — tracking, `collections_edit`,
+switched off by name even when the server annotates nothing). Every other write — tracking,
 `elixir_nickname`, and any the hub adds later — is switched off through
 the connector's per-tool `configs`, and refused again (`not_available`) on
 the direct-client path the API sometimes hands back. The first dry-run
@@ -32,7 +32,7 @@ fence until now. `npm run probe` prints the writes each kind of turn keeps;
 without annotations (`tool_annotations_missing`) live lanes keep
 everything and rehearsals lose the two prompted writes. Belt and braces
 for an operator: an agent key's capabilities can be narrowed on its page in
-Elixir (untick `recordings:write` and `collections:write`), which the hub
+Elixir (untick `recordings:write`), which the hub
 enforces on the next call.
 
 Since contract 0.37.0 the connection describes itself as data:
@@ -40,3 +40,13 @@ Since contract 0.37.0 the connection describes itself as data:
 `subject`. `src/mcp.js` reads it, `npm run probe` prints it, and the service
 warns at boot if the key is not an agent. Do not go back to regexing the English
 in `instructions` — the wording is tuned for the model and changes often.
+
+## 2026-10-02: Elixir is a recorder
+
+Jamie retired global leaderboards, game-wide meta statistics, named Collections
+and gameplay/upgrade recommendation tools. The runner still discovers the live
+tool registry; the shared prompt, deck-link description and reference ask prompt
+stop directing it toward those capabilities. The default meta-report routine
+is removed. Historical ledger evidence and the old shipped-memory-example
+filter remain; the latter prevents old installation text entering a new turn.
+No member-facing test post or early routine is an acceptance step.
