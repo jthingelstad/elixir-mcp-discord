@@ -5,7 +5,7 @@ This file is the bot's memory. The review and the operator write it. One
 line per entry, dated, with where it came from and, when it is only true for
 a while, an expiry:
 
-    - YYYY-MM-DD (turns a1b2c3d4, e5f6a7b8): pass the segment to battles_meta_cards or it answers for the whole corpus
+    - YYYY-MM-DD (turns a1b2c3d4, e5f6a7b8): name which recorded history the answer uses
     - YYYY-MM-DD (from owner): we call war days "boat days"
     - YYYY-MM-DD (from owner) until YYYY-MM-DD: the clan is pushing for top 10 in war this week
 

@@ -62,7 +62,7 @@ routine = trigger x prompt x destination
 | `message` | somebody speaks in the routine's channel | an ask-anything channel |
 | `events` | Elixir MCP's timeline carries an item of a kind it names | the editor: joins, departures, returns, a standout session, a promotion, a resolved war week |
 | `clock` | a boundary Elixir's `game_clock` names, plus an offset | a war-deck nudge four hours before this war day closes |
-| `schedule` | a wall clock, in your timezone | a meta report on Sundays |
+| `schedule` | a wall clock, in your timezone | a report of the clan's recorded week |
 
 A routine is one markdown file. The shipped editor:
 
@@ -192,7 +192,7 @@ This is the part that matters, because the prompts are the product:
 ```bash
 export INSTANCE_DIR=~/.elixir-mcp-discord/myclan  # once per shell
 npm run try editor                          # run it now, print it, post nothing
-npm run try meta-report -- --show-prompt    # also print the assembled prompt
+npm run try ask -- --show-prompt    # also print the assembled prompt
 npm run try editor -- --post                # actually post it
 npm run probe                               # the key, the surface, the feed
 npm run routines                            # what will run, where, and this month's spend
@@ -491,7 +491,7 @@ budget to $15" in the DM changes it, live. `ASK_DAILY_TURNS_PER_MEMBER`
 ## Choosing a model
 
 `CLAUDE_MODEL` is yours, and any routine can override it in its own front
-matter — a war-deck nudge that reads one field does not need what a weekly meta
+matter — a war-deck nudge that reads one field does not need what a detailed weekly clan
 report needs:
 
 ```markdown
@@ -717,3 +717,9 @@ MIT.
 
 This material is unofficial and is not endorsed by Supercell. For more
 information see [Supercell's Fan Content Policy](https://www.supercell.com/fan-content-policy).
+
+Since 2026-10-02 the reference prompts follow Elixir's recorder scope: the clan's
+and members' recorded history, notifications and factual exploration. The default
+meta report and deck/upgrade recommendation guidance are retired. Existing
+instance prompts are owned by their operators and need the same retirement;
+changing these reference files alone does not change a live instance.

@@ -163,10 +163,13 @@ record to say anything about it. A link never says which cards are evolved.
 Call decks by their archetype label the way players do - "Royal Hogs bridge
 spam", "Hog Rider cycle" - never by reciting eight cards: every deck the
 record serves carries archetype, and a name a member uses ("LavaLoon",
-"log bait", "bridge spam") is the archetype argument on battles_meta_decks,
-battles_decks and cards_card, or cards_archetype on its own. "What decks do
-we play" is battles_meta_decks with group_by "archetype". A label is a
-noun, never a verdict: there are no matchups here and you do not invent one.
+"log bait", "bridge spam") can resolve through the descriptive archetype
+vocabulary. Read the person's or clan's recorded decks when explaining what
+they played. A label is a noun, never a verdict: there are no matchups here
+and you do not invent one. Elixir records the history people ask it to keep;
+global leaderboards, game-wide meta statistics, curated Collections and
+recommendation tools have retired. Do not promise those capabilities or
+recreate them from a different population.
 
 A picture they attached is theirs to show you — a deck, a battle result, a
 chest. Read it, say what you see, and answer from the record: what is in
@@ -203,7 +206,7 @@ export const MEMORY_MAX_CHARS = 6000;
 /**
  * One memory entry is one line:
  *
- *   - 2026-09-14 (turns a1b2c3d4, e5f6a7b8): pass the segment to battles_meta_cards
+ *   - 2026-10-02 (turns a1b2c3d4, e5f6a7b8): name which recorded history the answer uses
  *   - 2026-09-14 (from owner): we call war days "boat days"
  *   - 2026-09-14 (from owner) until 2026-09-21: the clan is pushing for top 10 this war week
  *

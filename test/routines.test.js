@@ -84,7 +84,7 @@ test("front matter is separated from the prompt, comments and all", () => {
 test("the shipped bundle loads, is uniquely keyed, and names no clan", () => {
   const { routines, errors } = loadRoutines({ disabled: new Set() });
   assert.deepEqual(errors, [], "every shipped routine must parse");
-  assert.ok(routines.length >= 4);
+  assert.ok(routines.length >= 3);
 
   const keys = new Set();
   for (const routine of routines) {
@@ -106,8 +106,8 @@ test("the shipped bundle loads, is uniquely keyed, and names no clan", () => {
   assert.ok(editor.wake.includes("member_joined") && editor.carry.includes("badge_earned"));
   assert.equal(
     routines.filter((routine) => routine.trigger === "schedule").length,
-    1,
-    "meta-report is the one schedule",
+    0,
+    "the global meta report has retired",
   );
   const clock = routines.find((routine) => routine.trigger === "clock");
   assert.equal(clock.arm, "war_day_closes_at");
@@ -115,9 +115,9 @@ test("the shipped bundle loads, is uniquely keyed, and names no clan", () => {
 });
 
 test("a routine can be turned off by key without editing it", () => {
-  const { routines } = loadRoutines({ disabled: new Set(["meta-report"]) });
-  assert.equal(routines.find((routine) => routine.key === "meta-report").disabled, true);
-  assert.equal(routines.find((routine) => routine.key === "ask").disabled, false);
+  const { routines } = loadRoutines({ disabled: new Set(["ask"]) });
+  assert.equal(routines.find((routine) => routine.key === "ask").disabled, true);
+  assert.equal(routines.find((routine) => routine.key === "editor").disabled, false);
 });
 
 test("a routine file the runner cannot parse is logged, once, and loudly when nothing loads", async () => {
