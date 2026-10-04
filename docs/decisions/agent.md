@@ -50,3 +50,19 @@ stop directing it toward those capabilities. The default meta-report routine
 is removed. Historical ledger evidence and the old shipped-memory-example
 filter remain; the latter prevents old installation text entering a new turn.
 No member-facing test post or early routine is an acceptance step.
+
+## Ask keeps factual records separate from recommendations — since 2026-10-04
+
+Jamie explicitly excluded deck construction, card substitutions/upgrades,
+counters and meta advice from Ask, including advice disguised as personal
+battle analysis. The brief gives a friendly scope explanation, answers only
+the factual part of mixed requests, and permits descriptions of the decks,
+cards and results actually recorded without recommending what to play.
+Tool availability or a disclaimer does not relax the boundary.
+
+The retired elixir-bot is historical evidence, not a fallback: its July 11
+tool review documented counter advice without opponent-deck capture and
+upgrade advice obscured by incomplete card coverage. That is an example of
+the failure Jamie wants to avoid, not a reason to restore those tools.
+This decision is in the task prompt, and live Ask channels remain whichever
+ones the operator has enabled; syncing the brief never re-enables a routine.

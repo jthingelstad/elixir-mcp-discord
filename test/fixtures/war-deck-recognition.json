@@ -1,0 +1,30 @@
+{
+  "day_kind": "war",
+  "war_day": 3,
+  "race_finished_at": null,
+  "decks_today": {
+    "day_kind": "war",
+    "war_day": 3,
+    "finished": [
+      { "name": "Aster", "decks_used": 4 },
+      { "name": "Basil", "decks_used": 4 }
+    ],
+    "partial": [
+      { "name": "Petra", "decks_used": 1 },
+      { "name": "Rene", "decks_used": 3 }
+    ],
+    "untouched": [
+      { "name": "UntouchedSentinelOne", "decks_used": 0 },
+      { "name": "UntouchedSentinelTwo", "decks_used": 0 }
+    ],
+    "counts": { "finished": 2, "partial": 2, "untouched": 2, "participants": 6 }
+  },
+  "participants": [
+    { "name": "Aster", "decks_used": 12, "points": 1600 },
+    { "name": "Basil", "decks_used": 10, "points": 1100 }
+  ],
+  "notes": [
+    "This synthetic fixture has no battle results or daily points.",
+    "participants contains weekly counters, not today's attendance."
+  ]
+}
