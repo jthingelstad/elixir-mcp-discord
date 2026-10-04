@@ -1,0 +1,67 @@
+[
+  {
+    "case": "no_policy",
+    "context": {
+      "schema_version": 1,
+      "clan_tag": "#028",
+      "status": "unknown",
+      "reason": "no_policy",
+      "war_intent": "unknown",
+      "policy_version": null,
+      "policy_saved_at": null,
+      "read_at": "2026-10-04T17:05:00.000Z"
+    }
+  },
+  {
+    "case": "legacy_or_unspecified",
+    "context": {
+      "schema_version": 1,
+      "clan_tag": "#028",
+      "status": "unknown",
+      "reason": "war_intent_unspecified",
+      "war_intent": "unknown",
+      "policy_version": 1,
+      "policy_saved_at": "2026-10-04T17:00:00.000Z",
+      "read_at": "2026-10-04T17:05:00.000Z"
+    }
+  },
+  {
+    "case": "participating",
+    "context": {
+      "schema_version": 1,
+      "clan_tag": "#028",
+      "status": "known",
+      "reason": null,
+      "war_intent": "participating",
+      "policy_version": 2,
+      "policy_saved_at": "2026-10-04T17:00:00.000Z",
+      "read_at": "2026-10-04T17:05:00.000Z"
+    }
+  },
+  {
+    "case": "not_participating",
+    "context": {
+      "schema_version": 1,
+      "clan_tag": "#028",
+      "status": "known",
+      "reason": null,
+      "war_intent": "not_participating",
+      "policy_version": 2,
+      "policy_saved_at": "2026-10-04T17:00:00.000Z",
+      "read_at": "2026-10-04T17:05:00.000Z"
+    }
+  },
+  {
+    "case": "old_policy_fresh_read",
+    "context": {
+      "schema_version": 1,
+      "clan_tag": "#028",
+      "status": "known",
+      "reason": null,
+      "war_intent": "participating",
+      "policy_version": 2,
+      "policy_saved_at": "2026-01-01T00:00:00.000Z",
+      "read_at": "2026-10-04T17:05:00.000Z"
+    }
+  }
+]

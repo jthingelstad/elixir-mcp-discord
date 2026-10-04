@@ -20,8 +20,38 @@ recorded evidence and coverage; it is not inferred by this participation
 routine. The existing finished-race skip remains, and training days skip.
 
 These are task instructions in the routine, not game rules in the runner.
-Live instances own copies: syncing only these two routine files after
-approval is sufficient; no code restart or backdated posting test is needed.
+Live instances own copies. Deployment exposed an older clock-timer bug:
+already armed timers kept the parsed brief until restart. The Policy-context
+consumer below fixes that by reading the current routine at firing. No
+backdated posting test is an acceptance step.
+
+## Private context gates dependent clock turns — since 2026-10-04
+
+For issue [283](https://github.com/jthingelstad/elixir-mcp/issues/283), Jamie
+approved a narrow assigned-agent read of war intent, independent of Policy's
+war scoring. The shipped war check requires `war_intent=participating`.
+The generic runner compares the routine's literal requirement before arming
+it, refreshes before firing and checks again after prompt/channel preparation,
+immediately before consuming the boundary and calling the model. Startup is
+the first plan. A current successful read may be at most 60 seconds old;
+five seconds of future clock skew is tolerated. An old policy save date does
+not make a fresh read stale.
+
+Explicit nonparticipation suppresses the dependent turn. Unknown intent,
+missing tools, denied access and unavailable/invalid/stale context defer it
+with a bounded operator reason. Deferred boundaries retry every ten minutes
+inside the routine's catch-up window; expiration is reported without a model
+call, spend or run mark. A cold installation cannot consume even its history
+seed until eligibility is known, and recovery still seeds rather than drains.
+Other factual routines and their cursors continue independently. Revocation
+or a version change invalidates planned permission; failed reads never reuse
+a cached allow. The context remains in memory and never enters model input.
+
+Timers re-read the brief and enabled state at firing. A removed, disabled or
+rescheduled routine cannot fire from an old timer. New `requires` front matter
+must reach instances only after the updated code has deployed and restarted.
+Hold that deployment until the core transport is live, its grants are verified
+and the coordinated rollout is approved. Acceptance is the next natural turn.
 
 Jamie, 2026-09-16: "make the record the trigger, not the calendar." The
 proposal and its evidence are `docs/PROACTIVE-2026-09-16.md` (65 routine
@@ -52,7 +82,8 @@ yes to all six decisions the same day. What changed:
   nothing; first sight of a routine seeds a boundary already behind it
   (seed, never drain). `war-deck-check` is the one shipped clock routine.
   An edited `arm`/`offset` takes effect at the next plan — the day roll or
-  a restart; the brief hot-loads as ever. The hub's 09-13 line holds: war
+  a restart; since 2026-10-04 timers re-read the brief before firing and refuse
+  an old schedule if its fields changed. The hub's 09-13 line holds: war
   day open/close stay clock facts and the routine schedules itself.
 - **`schedule` is the exception.** `meta-report` is the one shipped
   calendar routine; the DM still creates them ("remind the clan Friday").

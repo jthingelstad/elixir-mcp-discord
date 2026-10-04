@@ -33,6 +33,7 @@ import { spendBlock } from "./claude.js";
 import { log } from "./log.js";
 import { notify } from "./notify.js";
 import * as state from "./state.js";
+import { policyGate, eligibilityRefusal } from "./eligibility.js";
 
 const MIN_MS = 60_000;
 const HOUR_MS = 3_600_000;
@@ -67,7 +68,11 @@ export function nextPlanAt(clock, now = new Date()) {
   return new Date(now.getTime() + RETRY_MS);
 }
 
-export async function fire(routine, resolveChannel, { key, runFn = runRoutine } = {}) {
+export async function fire(
+  routine,
+  resolveChannel,
+  { key, runFn = runRoutine, gate = policyGate, now = () => new Date(), expiresAt = null } = {},
+) {
   const blocked = spendBlock("routines");
   if (blocked) {
     // Same rule as the scheduler: not marked, so it runs at the next boundary
@@ -84,7 +89,13 @@ export async function fire(routine, resolveChannel, { key, runFn = runRoutine } 
   // leave the boundary eligible again — and a boundary already marked (two
   // timers racing after a re-plan) fires nothing.
   if ((state.get("runs") || {})[routine.key] === key) return null;
-  state.markRun(routine.key, key);
+  if (routine.requires) {
+    const decision = await gate.check(routine);
+    await gate.report(routine, decision, "fire");
+    if (decision.disposition !== "allow") return eligibilityRefusal(decision);
+  }
+  // Dependent routines commit only immediately before their model call.
+  if (!routine.requires) state.markRun(routine.key, key);
   const channel = routine.channel ? await resolveChannel(routine.channel) : null;
   if (routine.channel && !channel) {
     log.error("clock_channel_missing", { routine: routine.key, channel: routine.channel });
@@ -95,14 +106,40 @@ export async function fire(routine, resolveChannel, { key, runFn = runRoutine } 
     );
     return null;
   }
-  const run = await runFn(routine, { channel }).catch(async (error) => {
+  const beforeInvoke = async () => {
+    if ((state.get("runs") || {})[routine.key] === key) return { ok: false, error: "already_run", skipped: true };
+    const decision = await gate.check(routine);
+    if (expiresAt && now() > expiresAt) {
+      log.info("clock_deferred_expired", { routine: routine.key, key });
+      await notify(
+        "policy context",
+        `${routine.key}'s catch-up window expired; no model call or scheduled run consumed.`,
+        {
+          fingerprint: `policy_expired:${routine.key}:${key}`,
+        },
+      );
+      return { ok: false, error: "eligibility:window_expired", expired: true };
+    }
+    await gate.report(routine, decision, "fire");
+    if (decision.disposition !== "allow") return eligibilityRefusal(decision);
+    if ((state.get("runs") || {})[routine.key] === key) return { ok: false, error: "already_run", skipped: true };
+    state.markRun(routine.key, key);
+    return null;
+  };
+  const run = await runFn(routine, { channel, ...(routine.requires ? { beforeInvoke } : {}) }).catch(async (error) => {
     log.error("clock_crashed", { routine: routine.key, error: error.message });
     await notify("routine crashed", `${routine.key}: ${error.message.slice(0, 300)}`, {
       fingerprint: `crashed:${routine.key}`,
     });
     return null;
   });
-  log.info("clock_fired", { routine: routine.key, key, ok: run?.ok ?? false, posted: run ? !run.skipped : false });
+  if (run?.deferred || run?.suppressed || run?.expired) return run;
+  log.info("clock_fired", {
+    routine: routine.key,
+    key,
+    ok: run?.ok ?? false,
+    posted: Boolean(run?.ok && !run.skipped),
+  });
   return run;
 }
 
@@ -115,7 +152,14 @@ export async function fire(routine, resolveChannel, { key, runFn = runRoutine } 
 export function startClockLane(
   routinesFn,
   resolveChannel,
-  { readClock = null, runFn = runRoutine, now = () => new Date() } = {},
+  {
+    readClock = null,
+    runFn = runRoutine,
+    now = () => new Date(),
+    gate = policyGate,
+    setTimer = setTimeout,
+    clearTimer = clearTimeout,
+  } = {},
 ) {
   const read =
     readClock ??
@@ -131,11 +175,13 @@ export function startClockLane(
   const held = new Map();
   let planTimer = null;
   let stopped = false;
+  let firstPlan = true;
+  const deferred = new Set();
 
   const clear = () => {
-    for (const t of timers.values()) clearTimeout(t);
+    for (const t of timers.values()) clearTimer(t);
     timers.clear();
-    if (planTimer) clearTimeout(planTimer);
+    if (planTimer) clearTimer(planTimer);
     planTimer = null;
   };
 
@@ -149,8 +195,18 @@ export function startClockLane(
   const planNow = async () => {
     if (stopped) return;
     clear();
-    const routines = routinesFn();
-    const at = now();
+    const routines = routinesFn().filter((routine) => !routine.disabled);
+    // One authenticated read shared only within this plan. Startup is the
+    // first plan; firing always refreshes again, never trusts a planned allow.
+    let contextRead = false;
+    const decisions = new Map();
+    for (const routine of routines.filter((r) => r.requires)) {
+      const decision = await gate.check(routine, { fresh: !contextRead });
+      contextRead = true;
+      decisions.set(routine.key, decision);
+      await gate.report(routine, decision, firstPlan ? "startup" : "plan");
+    }
+    firstPlan = false;
     let clock = null;
     if (routines.length) {
       clock = await read().catch((error) => {
@@ -160,12 +216,24 @@ export function startClockLane(
       if (!clock) log.warn("clock_unreadable", { retry_minutes: RETRY_MS / MIN_MS });
     }
     if (stopped) return;
+    // Reads can take seconds; schedule against completion, not the instant
+    // before the reads began (especially around a boundary).
+    const at = now();
     const ledger = state.get("runs") || {};
+    let seedRetryAt = null;
     for (const routine of routines) {
       if (!clock) continue;
       const armed = armFrom(routine, clock, at);
       if (armed.skip) {
         log.info("clock_idle", { routine: routine.key, reason: armed.skip });
+        if (armed.key && deferred.delete(`${routine.key}:${armed.key}`)) {
+          log.info("clock_deferred_expired", { routine: routine.key, key: armed.key });
+          await notify(
+            "policy context",
+            `${routine.key}'s catch-up window expired while ineligible; no model call or scheduled run consumed.`,
+            { fingerprint: `policy_expired:${routine.key}:${armed.key}` },
+          );
+        }
         continue;
       }
       if (ledger[routine.key] === armed.key) continue;
@@ -173,10 +241,31 @@ export function startClockLane(
         // First sight of this routine: a boundary already behind it is
         // history, not a missed run. Future ones fire.
         if (armed.late) {
+          if (routine.requires) {
+            const decision = await gate.check(routine, { fresh: false });
+            if (decision.disposition !== "allow") {
+              deferred.add(`${routine.key}:${armed.key}`);
+              seedRetryAt = new Date(now().getTime() + RETRY_MS);
+              continue;
+            }
+          }
           state.markRun(routine.key, armed.key);
           log.info("clock_seeded", { routine: routine.key, key: armed.key });
           continue;
         }
+      }
+      const decision = decisions.get(routine.key);
+      if (decision && decision.disposition !== "allow") {
+        deferred.add(`${routine.key}:${armed.key}`);
+        const retryAt = armed.late ? new Date(now().getTime() + RETRY_MS) : armed.at;
+        if (!seedRetryAt || retryAt < seedRetryAt) seedRetryAt = retryAt;
+        log.info("clock_waiting_for_eligibility", {
+          routine: routine.key,
+          key: armed.key,
+          reason: decision.reason,
+          recheck_at: retryAt.toISOString(),
+        });
+        continue;
       }
       const hold = held.get(routine.key);
       const fireAt = hold?.key === armed.key && hold.until > at ? new Date(hold.until) : armed.at;
@@ -188,22 +277,36 @@ export function startClockLane(
         key: armed.key,
         late: armed.late ?? false,
         held: fireAt === armed.at ? undefined : true,
+        eligibility: decisions.get(routine.key)?.disposition,
       });
-      const timer = setTimeout(() => {
+      const expiresAt = new Date(
+        Date.parse(clock[routine.arm]) + routine.offsetMinutes * MIN_MS + routine.catchUpHours * HOUR_MS,
+      );
+      const timer = setTimer(async () => {
         timers.delete(routine.key);
-        void fire(routine, resolveChannel, { key: armed.key, runFn })
-          .then((run) => {
-            if (run?.blocked) held.set(routine.key, { key: armed.key, until: new Date(now().getTime() + RETRY_MS) });
-          })
-          .catch((error) => log.error("clock_fire_failed", { routine: routine.key, error: error.message }))
-          .finally(() => void plan());
+        // A timer stores a boundary, not the brief/permission that existed
+        // hours ago. Removal, disabling and edits take effect before firing.
+        const current = routinesFn().find((r) => r.key === routine.key && !r.disabled);
+        if (current && current.arm === routine.arm && current.offsetMinutes === routine.offsetMinutes) {
+          try {
+            const run = await fire(current, resolveChannel, { key: armed.key, runFn, gate, now, expiresAt });
+            if (run?.deferred || run?.suppressed) deferred.add(`${routine.key}:${armed.key}`);
+            else deferred.delete(`${routine.key}:${armed.key}`);
+            if (run?.blocked || run?.deferred || run?.suppressed)
+              held.set(current.key, { key: armed.key, until: new Date(now().getTime() + RETRY_MS) });
+          } catch (error) {
+            log.error("clock_fire_failed", { routine: routine.key, error: error.message });
+          }
+        }
+        await plan();
       }, delay);
       // Never the reason the process stays up: the Discord client is.
       timer.unref?.();
       timers.set(routine.key, timer);
     }
-    const again = nextPlanAt(clock, at);
-    planTimer = setTimeout(() => void plan(), Math.min(MAX_TIMER_MS, Math.max(MIN_MS, again - at)));
+    const roll = nextPlanAt(clock, at);
+    const again = seedRetryAt && seedRetryAt < roll ? seedRetryAt : roll;
+    planTimer = setTimer(() => plan(), Math.min(MAX_TIMER_MS, Math.max(MIN_MS, again - at)));
     planTimer.unref?.();
     if (routines.length) log.info("clock_planned", { routines: routines.length, next_plan: again.toISOString() });
   };

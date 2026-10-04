@@ -19,6 +19,7 @@
  */
 
 import { log } from "./log.js";
+import { POLICY_CONTEXT_TOOL } from "./eligibility.js";
 
 /** The writes each kind of turn keeps. Both names are already in the prompts. */
 export const POLICIES = {
@@ -49,7 +50,12 @@ let warnedUnannotated = false;
 export function disabledTools(policy, catalog) {
   const keep = new Set(POLICIES[policy] ?? POLICIES.rehearsal);
   if (!catalog?.ok) return [];
-  if (catalog.annotated) return catalog.tools.filter((t) => !t.readOnly && !keep.has(t.name)).map((t) => t.name);
+  // Private eligibility is runner plumbing, never a model-facing read.
+  const privateReads = catalog.tools.filter((t) => t.name === POLICY_CONTEXT_TOOL).map((t) => t.name);
+  if (catalog.annotated)
+    return catalog.tools
+      .filter((t) => t.name === POLICY_CONTEXT_TOOL || (!t.readOnly && !keep.has(t.name)))
+      .map((t) => t.name);
   if (!warnedUnannotated) {
     warnedUnannotated = true;
     log.warn("tool_annotations_missing", {
@@ -62,6 +68,9 @@ export function disabledTools(policy, catalog) {
   // it can be switched off by name (2026-09-26 review: unannotated, a live
   // lane kept it).
   if (policy !== "rehearsal")
-    return published.has("elixir_identify") && !keep.has("elixir_identify") ? ["elixir_identify"] : [];
-  return PROMPTED_WRITES.filter((name) => published.has(name) && !keep.has(name));
+    return [
+      ...privateReads,
+      ...(published.has("elixir_identify") && !keep.has("elixir_identify") ? ["elixir_identify"] : []),
+    ];
+  return [...privateReads, ...PROMPTED_WRITES.filter((name) => published.has(name) && !keep.has(name))];
 }

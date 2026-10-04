@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { disabledTools, POLICIES } from "../src/tools.js";
 import { toolCatalog } from "../src/mcp.js";
+import { POLICY_CONTEXT_TOOL } from "../src/eligibility.js";
 
 const annotated = {
   ok: true,
@@ -72,4 +73,20 @@ test("the catalog reads readOnlyHint from tools/list, and knows when the server 
   );
   const plain = await toolCatalog({ list: async () => ({ ok: true, tools: [{ name: "x" }] }), fresh: true });
   assert.equal(plain.annotated, false);
+});
+
+test("private eligibility stays disabled in every model lane regardless of read annotations", () => {
+  for (const policy of Object.keys(POLICIES)) {
+    for (const annotated of [true, false]) {
+      const off = disabledTools(policy, {
+        ok: true,
+        annotated,
+        tools: [
+          { name: POLICY_CONTEXT_TOOL, readOnly: true },
+          { name: "public_history", readOnly: true },
+        ],
+      });
+      assert.deepEqual(off, [POLICY_CONTEXT_TOOL]);
+    }
+  }
 });

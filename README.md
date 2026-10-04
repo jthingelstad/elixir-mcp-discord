@@ -89,6 +89,17 @@ it stops. `once: true` on a scheduled routine fires at its next occurrence and
 then turns itself off — "remind the clan Friday at 8" is a routine, not a
 special case. A `clock` routine names `arm: war_day_closes_at` and
 `offset: -4h` and never fires on a training day, where that field is null.
+A clock routine can also require a literal private-context value, such as
+`requires: war_intent=participating`. The runner checks its assigned agent's
+current Policy context at startup, planning and immediately before the model
+call. Explicit nonparticipation suppresses that dependent routine; unknown
+intent, denied access, a missing tool or an unavailable read defers it and
+tells the operator why. Other factual routines continue. A successful read
+must be at most 60 seconds old (with at most five seconds of future clock
+skew); the policy's save date is provenance, not freshness. Deferred work is
+rechecked every ten minutes inside its existing catch-up window, without
+consuming a run or model budget. New installs still seed history rather than
+posting it. Deploy code that understands `requires` before syncing such files.
 Notice none of them names a channel: the bot posts **where it decides the post
 belongs**, choosing among the channels you have let it into (see
 [Channels](#channels-where-it-posts)). The code is a runner: it holds the Discord connection, the model call, the run ledger,

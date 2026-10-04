@@ -3,6 +3,7 @@ description: Thank today's four-deck participants and acknowledge partial partic
 trigger: clock
 arm: war_day_closes_at
 offset: -4h
+requires: war_intent=participating
 catch_up_hours: 2
 may_skip: true
 max_chars: 1900
