@@ -66,3 +66,28 @@ upgrade advice obscured by incomplete card coverage. That is an example of
 the failure Jamie wants to avoid, not a reason to restore those tools.
 This decision is in the task prompt, and live Ask channels remain whichever
 ones the operator has enabled; syncing the brief never re-enables a routine.
+
+## Assigned-agent Policy context — since 2026-10-04
+
+Jamie approved only a narrow private intent read for the existing assigned
+bots in [core issue 283](https://github.com/jthingelstad/elixir-mcp/issues/283).
+The core owns authorization: explicit agent/owner/clan grants and current
+ownership, assignment and verified membership checks on every request.
+This consumer selects no clan, creates no grants and changes no credentials.
+It requires the initialize principal to be an assigned clan agent and the
+response to match that subject.
+The runner calls `clans_context` with empty arguments and reads only its
+`context` projection. That private tool is disabled in every model lane on
+both the connector and direct-client paths, regardless of read annotations.
+
+The core's versioned eight-field context is the complete allowed response:
+schema version, clan, known/unknown status and reason, explicit war intent,
+policy version, save provenance and read time. Extra private fields or an
+incoherent response fail closed. A newer version replaces permission; a
+regressing version or different intent at the same version is refused.
+Missing/legacy intent stays unknown: scoring, minimums, awards and clan size
+never substitute for intent. No local database, browser-session read or
+public-fact fallback supplies private context. The tiny cache is confined to
+the current plan/process; no context is persisted, shown to the model or
+included in a member-facing turn. Fixture data is the core's public synthetic
+contract evidence, not an instance's policy.

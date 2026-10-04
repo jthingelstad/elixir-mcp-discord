@@ -27,6 +27,7 @@ test("the shipped war clock brief recognizes contributors without exposing nonpa
   assert.equal(war.trigger, "clock");
   assert.equal(war.arm, "war_day_closes_at");
   assert.equal(war.offsetMinutes, -240);
+  assert.deepEqual(war.requires, { field: "war_intent", value: "participating" });
   assert.equal(war.catchUpHours, 2);
   assert.ok(war.maxChars <= 1900, "recognition fits a Discord post");
   assert.match(brief, /thanks to every member in decks_today\.finished by name/);

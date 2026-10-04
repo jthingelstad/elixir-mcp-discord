@@ -1,0 +1,142 @@
+[
+  {
+    "case": "no_policy",
+    "isError": false,
+    "response": {
+      "context": {
+        "schema_version": 1,
+        "clan_tag": "#028",
+        "status": "unknown",
+        "reason": "no_policy",
+        "war_intent": "unknown",
+        "policy_version": null,
+        "policy_saved_at": null,
+        "read_at": "2026-10-04T17:05:00.000Z"
+      },
+      "applied": {},
+      "notes": [
+        "policy_saved_at is save provenance; read_at times this current read. Unknown or failed context must defer the affected routine."
+      ],
+      "docs": "clan-policy#agent-context",
+      "meta": {
+        "as_of": "2026-10-04T17:05:00.000Z",
+        "contract_version": "11.2.0",
+        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell’s Fan Content Policy: www.supercell.com/fan-content-policy."
+      }
+    }
+  },
+  {
+    "case": "legacy_or_unspecified",
+    "isError": false,
+    "response": {
+      "context": {
+        "schema_version": 1,
+        "clan_tag": "#028",
+        "status": "unknown",
+        "reason": "war_intent_unspecified",
+        "war_intent": "unknown",
+        "policy_version": 1,
+        "policy_saved_at": "2026-10-04T17:00:00.000Z",
+        "read_at": "2026-10-04T17:05:00.000Z"
+      },
+      "applied": {},
+      "notes": [
+        "policy_saved_at is save provenance; read_at times this current read. Unknown or failed context must defer the affected routine."
+      ],
+      "docs": "clan-policy#agent-context",
+      "meta": {
+        "as_of": "2026-10-04T17:05:00.000Z",
+        "contract_version": "11.2.0",
+        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell’s Fan Content Policy: www.supercell.com/fan-content-policy."
+      }
+    }
+  },
+  {
+    "case": "participating",
+    "isError": false,
+    "response": {
+      "context": {
+        "schema_version": 1,
+        "clan_tag": "#028",
+        "status": "known",
+        "reason": null,
+        "war_intent": "participating",
+        "policy_version": 2,
+        "policy_saved_at": "2026-10-04T17:00:00.000Z",
+        "read_at": "2026-10-04T17:05:00.000Z"
+      },
+      "applied": {},
+      "notes": [
+        "policy_saved_at is save provenance; read_at times this current read. Unknown or failed context must defer the affected routine."
+      ],
+      "docs": "clan-policy#agent-context",
+      "meta": {
+        "as_of": "2026-10-04T17:05:00.000Z",
+        "contract_version": "11.2.0",
+        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell’s Fan Content Policy: www.supercell.com/fan-content-policy."
+      }
+    }
+  },
+  {
+    "case": "not_participating",
+    "isError": false,
+    "response": {
+      "context": {
+        "schema_version": 1,
+        "clan_tag": "#028",
+        "status": "known",
+        "reason": null,
+        "war_intent": "not_participating",
+        "policy_version": 2,
+        "policy_saved_at": "2026-10-04T17:00:00.000Z",
+        "read_at": "2026-10-04T17:05:00.000Z"
+      },
+      "applied": {},
+      "notes": [
+        "policy_saved_at is save provenance; read_at times this current read. Unknown or failed context must defer the affected routine."
+      ],
+      "docs": "clan-policy#agent-context",
+      "meta": {
+        "as_of": "2026-10-04T17:05:00.000Z",
+        "contract_version": "11.2.0",
+        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell’s Fan Content Policy: www.supercell.com/fan-content-policy."
+      }
+    }
+  },
+  {
+    "case": "old_policy_fresh_read",
+    "isError": false,
+    "response": {
+      "context": {
+        "schema_version": 1,
+        "clan_tag": "#028",
+        "status": "known",
+        "reason": null,
+        "war_intent": "participating",
+        "policy_version": 2,
+        "policy_saved_at": "2026-01-01T00:00:00.000Z",
+        "read_at": "2026-10-04T17:05:00.000Z"
+      },
+      "applied": {},
+      "notes": [
+        "policy_saved_at is save provenance; read_at times this current read. Unknown or failed context must defer the affected routine."
+      ],
+      "docs": "clan-policy#agent-context",
+      "meta": {
+        "as_of": "2026-10-04T17:05:00.000Z",
+        "contract_version": "11.2.0",
+        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell’s Fan Content Policy: www.supercell.com/fan-content-policy."
+      }
+    }
+  },
+  {
+    "case": "ungranted_or_revoked",
+    "isError": true,
+    "response": {
+      "error": {
+        "code": "not_entitled",
+        "message": "Private clan context is not authorized."
+      }
+    }
+  }
+]

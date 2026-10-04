@@ -67,6 +67,8 @@ export const FIELDS = new Set([
   // training day (src/clock.js).
   "arm",
   "offset",
+  // A dependent clock routine asks for one explicit policy-context value.
+  "requires",
   "may_skip",
   // A one-shot: fires at its next occurrence, then is written back with
   // enabled: false. "Remind the clan Friday at 8" is a routine, not a
@@ -212,6 +214,12 @@ export function parseRoutine(key, text) {
       fields.catch_up_hours === undefined ? 4 : asInt(key, "catch_up_hours", fields.catch_up_hours, { min: 1 });
   } else if (fields.arm || fields.offset) {
     fail(key, "arm and offset only mean something for trigger: clock");
+  }
+  if (fields.requires !== undefined) {
+    if (trigger !== "clock") fail(key, "requires currently applies only to trigger: clock");
+    const requirement = /^([a-z][a-z0-9_]*)=([a-z][a-z0-9_]*)$/.exec(fields.requires);
+    if (!requirement) fail(key, "requires must be a policy-context field=value, e.g. war_intent=participating");
+    routine.requires = { field: requirement[1], value: requirement[2] };
   }
 
   if (trigger === "schedule") {

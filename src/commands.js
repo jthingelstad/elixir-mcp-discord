@@ -138,7 +138,7 @@ export function routinesReply(routines = loadRoutines().routines) {
             : r.trigger === "clock"
               ? `on the game clock (${r.arm})`
               : "on message";
-      return `${r.disabled ? "○" : "●"} \`${r.key}\` — ${r.trigger} → ${r.channel ? `#${r.channel}` : "model's choice"} · ${when} · ${r.model}${r.description ? `\n-# ${r.description}` : ""}`;
+      return `${r.disabled ? "○" : "●"} \`${r.key}\` — ${r.trigger} → ${r.channel ? `#${r.channel}` : "model's choice"} · ${when}${r.requires ? ` · requires ${r.requires.field}=${r.requires.value}` : ""} · ${r.model}${r.description ? `\n-# ${r.description}` : ""}`;
     })
     .join("\n");
 }

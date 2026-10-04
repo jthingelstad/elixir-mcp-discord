@@ -120,6 +120,27 @@ test("a routine can be turned off by key without editing it", () => {
   assert.equal(routines.find((routine) => routine.key === "editor").disabled, false);
 });
 
+test("only clock routines declare a literal policy-context eligibility requirement", () => {
+  const r = parseRoutine(
+    "dependent",
+    doc({ trigger: "clock", arm: "war_day_closes_at", requires: "war_intent=participating" }),
+  );
+  assert.deepEqual(r.requires, { field: "war_intent", value: "participating" });
+  assert.throws(
+    () => parseRoutine("bad", doc({ trigger: "clock", arm: "week_ends_at", requires: "war_intent" })),
+    /field=value/,
+  );
+  assert.throws(
+    () =>
+      parseRoutine("bad", doc({ trigger: "clock", arm: "week_ends_at", requires: "war_intent=participating OR true" })),
+    /field=value/,
+  );
+  assert.throws(
+    () => parseRoutine("bad", doc({ trigger: "events", requires: "war_intent=participating" })),
+    /only to trigger: clock/,
+  );
+});
+
 test("a routine file the runner cannot parse is logged, once, and loudly when nothing loads", async () => {
   const fs = await import("node:fs");
   const os = await import("node:os");

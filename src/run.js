@@ -25,6 +25,7 @@ import { log } from "./log.js";
 import * as state from "./state.js";
 import * as ledger from "./ledger.js";
 import { notify } from "./notify.js";
+import { policyGate, eligibilityRefusal } from "./eligibility.js";
 
 /**
  * THE POST TOOL. A scheduled or event turn posts by calling `post_message`
@@ -374,6 +375,10 @@ async function runRoutineNow(
     lane = laneFor(routine),
     // The post-turn friction sweep is a model call of its own; a test injects it.
     sweepFn = sweepFriction,
+    // The clock commits its run only here, after preparation and a current
+    // policy read. A direct rehearsal checks the same gate without a ledger.
+    beforeInvoke = null,
+    gate = policyGate,
   } = {},
 ) {
   const blocked = spendBlock(lane);
@@ -434,6 +439,16 @@ async function runRoutineNow(
       }),
     );
   };
+  if (routine.requires) {
+    if (beforeInvoke) {
+      const refusal = await beforeInvoke();
+      if (refusal) return refusal;
+    } else {
+      const decision = await gate.check(routine);
+      await gate.report(routine, decision, "invoke");
+      if (decision.disposition !== "allow") return eligibilityRefusal(decision);
+    }
+  }
   let result = await askFn({
     system,
     messages: [{ role: "user", content: userMessageFor(routine, { events, recent, withTool }) }],
