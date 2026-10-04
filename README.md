@@ -576,6 +576,15 @@ changed to an unpriced one later fails before the call, not after it.
   against your budgets and per-routine spend today.
 - **A missed run fires late only inside its own catch-up window.** A war-deck
   nudge at 4am because the host was asleep is worse than one that never fires.
+- **War participation is positive recognition.** Since 2026-10-04 the
+  war-deck routine names and thanks four-deck participants, then appreciates
+  partial contributions. It omits nonparticipants entirely, including counts.
+  Today's decks come from `war_current.decks_today`, not weekly points or
+  inferred battle wins.
+- **Ask describes records, not deck advice.** Since 2026-10-04 deck building,
+  card substitutions/upgrades, counters and meta recommendations are outside
+  the Ask routine's scope, even when framed as personal battle analysis.
+  Factual played-deck history and recorded results remain supported.
 - **Every channel is checked at boot.** For each channel a routine uses, the
   bot confirms it is in `DISCORD_GUILD_ID` and that its role can see it, post
   in it and read its history — plus create and post in threads for an ask

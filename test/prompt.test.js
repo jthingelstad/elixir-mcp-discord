@@ -5,6 +5,7 @@
  */
 
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { test } from "node:test";
 import { systemFor, userMessageFor, isSkip, readIdentity } from "../src/prompt.js";
 import { parseRoutine } from "../src/routines.js";
@@ -16,6 +17,45 @@ const routine = (fields, body = "Do the thing.") =>
       .map(([k, v]) => `${k}: ${v}`)
       .join("\n")}\n---\n${body}`,
   );
+
+const shipped = (key) =>
+  parseRoutine(key, fs.readFileSync(new URL(`../agent/routines/${key}.md`, import.meta.url), "utf8"));
+
+test("the shipped war clock brief recognizes contributors without exposing nonparticipants", () => {
+  const war = shipped("war-deck-check");
+  const brief = userMessageFor(war);
+  assert.equal(war.trigger, "clock");
+  assert.equal(war.arm, "war_day_closes_at");
+  assert.equal(war.offsetMinutes, -240);
+  assert.equal(war.catchUpHours, 2);
+  assert.ok(war.maxChars <= 1900, "recognition fits a Discord post");
+  assert.match(brief, /thanks to every member in decks_today\.finished by name/);
+  assert.match(brief, /acknowledge every member in decks_today\.partial/);
+  assert.match(brief, /Never mention nonparticipants: no names, counts, percentages, roster totals/);
+  assert.match(brief, /do not\s+derive a nonparticipant count by subtraction/);
+  assert.match(brief, /If both are empty, reply with\s+exactly SKIP/);
+  assert.match(brief, /day_kind is not war/);
+  assert.match(brief, /race_finished_at is set/);
+  assert.match(brief, /observed so far/);
+  assert.match(brief, /never the race week's\s+participants\[\]\.decks_used or points/);
+  assert.match(brief, /Four decks does not mean four battles\s+or four wins/);
+  assert.doesNotMatch(brief, /nudge naming who is untouched/);
+});
+
+test("the shipped Ask boundary reaches the cached prompt while factual history stays supported", () => {
+  const ask = shipped("ask");
+  const system = systemFor(ask, { identity: null, includePrompt: true });
+  assert.match(system, /Deck and card advice is outside this Ask channel's scope/);
+  assert.match(system, /Do not construct,\s+optimize or recommend decks/);
+  assert.match(system, /card substitutions, upgrades or cards\s+to use/);
+  assert.match(system, /recommend counters/);
+  assert.match(system, /give meta advice/);
+  assert.match(system, /disguised as personal battle\s+analysis/);
+  assert.match(system, /Do not call tools to work around this boundary/);
+  assert.match(system, /offer the recommendation indirectly after declining it/);
+  assert.match(system, /For a mixed request, decline the advice and answer only its factual part/);
+  assert.match(system, /fine to describe the decks and cards actually played, their recorded\s+results and coverage/);
+});
 
 test("every prompt carries the rules a routine is not allowed to get wrong", () => {
   const system = systemFor(routine({ trigger: "schedule", channel: "pulse", at: "01:00" }), {

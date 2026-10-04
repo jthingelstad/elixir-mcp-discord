@@ -2,6 +2,27 @@
 
 *Part of the decision ledger — dated, with the reason. [AGENTS.md](../../AGENTS.md) has the map and the rules. Read this before changing src/events.js, src/clock.js, agent/routines/editor.md.*
 
+## War participation recognizes contributions — since 2026-10-04
+
+Jamie corrected a `war-deck-check` post that named nonplayers and partial
+players while reducing the four-deck participants to a count. The routine
+now thanks every named four-deck participant first and appreciates partial
+participation with the recorded decks out of four. Nonparticipants are
+absent entirely: no names, counts, inferred counts, percentages or roster
+totals. Empty positive lists mean silence. The length allowance is 1,900
+characters so a full roster of contributors can be named.
+
+This remains a clock turn four hours before `war_day_closes_at`, reading
+`war_current.decks_today`, not a Timeline event. It reports the game's daily
+deck counter as observed so far, never weekly points as daily earnings or
+four decks as four battles/wins. Battle-result enrichment needs its own
+recorded evidence and coverage; it is not inferred by this participation
+routine. The existing finished-race skip remains, and training days skip.
+
+These are task instructions in the routine, not game rules in the runner.
+Live instances own copies: syncing only these two routine files after
+approval is sufficient; no code restart or backdated posting test is needed.
+
 Jamie, 2026-09-16: "make the record the trigger, not the calendar." The
 proposal and its evidence are `docs/PROACTIVE-2026-09-16.md` (65 routine
 turns across three instances: 29% produced nothing, every one the calendar
@@ -94,4 +115,3 @@ lead changing hands, which is one line. The ask brief reads a season race
 from these facts when the clan runs its awards in its app, and from
 `clans_participation` otherwise. Jamie's ask: "Do the mid season
 standings."
-
