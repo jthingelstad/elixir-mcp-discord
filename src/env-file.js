@@ -25,8 +25,11 @@ import path from "node:path";
 export const SECRET_KEYS = ["ELIXIR_MCP_TOKEN", "DISCORD_BOT_TOKEN", "ANTHROPIC_API_KEY"];
 /** The three wiring ids: not secret, not the bot's to change, so .env. */
 export const WIRING_KEYS = ["ELIXIR_MCP_URL", "DISCORD_APP_ID", "DISCORD_GUILD_ID"];
+/** Secrets a feature needs only if the operator wants it: written when set.
+ *  GITHUB_ISSUES_TOKEN lets the review DM file mechanics reports (src/github.js). */
+export const OPTIONAL_SECRET_KEYS = ["GITHUB_ISSUES_TOKEN"];
 /** Everything .env holds, in the order it is written. */
-export const ENV_FILE_KEYS = [...SECRET_KEYS, ...WIRING_KEYS];
+export const ENV_FILE_KEYS = [...SECRET_KEYS, ...WIRING_KEYS, ...OPTIONAL_SECRET_KEYS];
 
 /** Environment-only: where an instance is, and test switches. Never in config.json. */
 export const ENV_ONLY_KEYS = [
@@ -52,6 +55,7 @@ export function renderSecrets({ values, instanceDir }) {
     ...SECRET_KEYS.map((k) => `${k}=${values[k] ?? ""}`),
     ``,
     ...WIRING_KEYS.map((k) => `${k}=${values[k] ?? ""}`),
+    ...OPTIONAL_SECRET_KEYS.filter((k) => String(values[k] ?? "") !== "").map((k) => `${k}=${values[k]}`),
     ...Object.entries(values)
       .filter(([k, v]) => isEnvOnly(k) && k !== "PATH" && k !== "INSTANCE_DIR" && String(v ?? "") !== "")
       .map(([k, v]) => `${k}=${v}`),

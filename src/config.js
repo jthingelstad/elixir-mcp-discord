@@ -442,6 +442,15 @@ export const config = {
       return num("REVIEW_MAX_PROPOSALS", "3");
     },
   },
+  // Mechanics reports filed from the review DM (src/github.js). The token is
+  // .env's; the repository is this one's, wherever the bot runs, because a
+  // mechanics report is a defect in this code.
+  github: {
+    get issuesToken() {
+      return optional("GITHUB_ISSUES_TOKEN", "");
+    },
+    issuesRepo: "jthingelstad/elixir-mcp-discord",
+  },
 };
 
 /**
