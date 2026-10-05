@@ -63,6 +63,17 @@ skip; prose with no call still goes to the default (legacy), or is
   is handed, so a `max_chars` above it cannot produce a rejected send.
   The legacy prose path (no directory) and the DM's `post it` still chunk
   at `max_chars`: there is no tool there for the model to react to.
+- **The cap is in POSTING, with a target under it (2026-10-05, issue
+  #19).** The 2026-09-27 meta-reports drafted at the cap and paid for it in
+  retries: 1,451 then 1,420 characters against 1,400 (elixirkings, turn
+  b57d8254), four refusals in one turn on poapkings, each retry the whole
+  post again as output. A review reading the MECHANICS concluded the cap
+  only appeared as a refusal — the number was in the tool and the turn's
+  last line, which the review never saw. `postingFor(routine)` now puts
+  the cap in the system block's POSTING (fixed per routine, so the cache
+  is untouched) and both it and `deliverLine` name `draftTarget`, 85% of
+  the cap to the ten. A refusal says how far over the draft is. The
+  review's MECHANICS show POSTING and DELIVER as a 1,400 routine gets them.
 - **The silence clock and VOICE (2026-09-16; the prompt half retired
   2026-09-17, see timeline.md).** The SKIP rule points one
   way, and a bot judging "worth saying?" against the same bar an hour after

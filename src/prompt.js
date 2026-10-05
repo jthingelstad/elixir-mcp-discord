@@ -340,7 +340,7 @@ export function systemFor(
   const withTool = entries.length > 0;
   // The posting rule frames the whole task, so it comes first when it applies.
   const blocks = withTool
-    ? [POSTING, renderDirectory(entries, { defaultId: defaultChannelId }), GROUNDING, DISCORD_FORMAT]
+    ? [postingFor(routine), renderDirectory(entries, { defaultId: defaultChannelId }), GROUNDING, DISCORD_FORMAT]
     : [GROUNDING, DISCORD_FORMAT, REPLY_IS_POST];
   if (subject) blocks.push(subject);
   if (routine.trigger === "message") blocks.push(WHO_IS_ASKING);
@@ -356,26 +356,54 @@ export function systemFor(
   return blocks.join("\n\n");
 }
 
-/** The code-level rules, by name, for the review lane to show the model as
- *  the part of the rubric it cannot edit. */
-export const MECHANICS = {
-  GROUNDING,
-  DISCORD_FORMAT,
-  POSTING,
-  WHO_IS_ASKING,
-  QUOTA,
-  SKIP,
-  FEEDBACK_PROMPT,
-};
-
 export const DELIVER = `Deliver your post by calling post_message. If there is nothing to post, make no
 call and reply SKIP.`;
 
 /** DELIVER with the routine's length limit in it: the number the tool will
  *  hold the post to, said where the model reads last. */
 export function deliverLine(routine) {
-  return `${DELIVER} The limit is ${routine.maxChars} characters per post; post_message refuses more.`;
+  return `${DELIVER} The limit is ${routine.maxChars} characters per post; post_message refuses more, so aim for about ${draftTarget(routine)}.`;
 }
+
+/**
+ * Where a draft should land: 85% of the cap, to the ten. A model's sense of
+ * its own length is loose, and drafting AT the cap is what cost the
+ * 2026-09-27 meta-reports their retries — 1,451 then 1,420 characters
+ * against 1,400 (elixirkings, turn b57d8254), four refusals in one turn on
+ * poapkings. Each retry re-sends the whole post as output.
+ */
+export function draftTarget(routine) {
+  return Math.floor((routine.maxChars * 0.85) / 10) * 10;
+}
+
+/**
+ * POSTING with this routine's cap in it. Since 2026-09-21 the number was in
+ * post_message's description and the turn's last line, but not in the block
+ * that frames the task, so a review reading POSTING concluded the bot only
+ * learned its cap from a refusal (issue #19). The routine is fixed for the
+ * system block, so this costs the prompt cache nothing.
+ */
+export function postingFor(routine) {
+  return `${POSTING}
+
+Every post must fit in ${routine.maxChars} characters; draft to about ${draftTarget(routine)} so it goes
+out on the first call. post_message refuses anything longer.`;
+}
+
+/** The code-level rules, by name, for the review lane to show the model as
+ *  the part of the rubric it cannot edit. The two that carry a routine's own
+ *  number are shown for an example cap of 1,400, as the editor ships. */
+const EXAMPLE = { maxChars: 1400 };
+export const MECHANICS = {
+  GROUNDING,
+  DISCORD_FORMAT,
+  POSTING: postingFor(EXAMPLE),
+  WHO_IS_ASKING,
+  QUOTA,
+  SKIP,
+  DELIVER: `${deliverLine(EXAMPLE)}\n(The last line of every routine turn that has post_message, whose description names the cap too. 1,400 is the routine's max_chars.)`,
+  FEEDBACK_PROMPT,
+};
 
 /**
  * The second chance. Sent as the user turn when a routine turn ended in prose

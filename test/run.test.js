@@ -372,7 +372,10 @@ test("a turn posts through post_message to the channel it chose, and the rules h
   // 1,400 routine went out as two messages, unflagged), and the limit is
   // named where the model reads the tool.
   assert.equal(seen.long.code, "too_long");
-  assert.match(seen.long.error, /901 characters; this routine's limit is 900/);
+  assert.match(
+    seen.long.error,
+    /901 characters, 1 over this routine's limit of 900. Cut well past that — aim for about 760/,
+  );
   assert.match(seen.description, /limit is 900 characters/);
   assert.match(seen.schema, /at most 900 characters/);
   assert.equal(seen.third.ok, true, "a refusal does not count against the cap");
