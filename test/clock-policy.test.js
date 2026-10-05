@@ -4,6 +4,8 @@ import { test, beforeEach } from "node:test";
 import { createPolicyGate } from "../src/eligibility.js";
 import { fire, startClockLane } from "../src/clock.js";
 import { runRoutine } from "../src/run.js";
+import { config } from "../src/config.js";
+import * as notify from "../src/notify.js";
 import { parseRoutine } from "../src/routines.js";
 import * as state from "../src/state.js";
 
@@ -367,5 +369,54 @@ test("a timer re-reads the prompt and disabled state instead of keeping the old 
     assert.equal(state.get("runs")["war-deck-check"], previous);
   } finally {
     lane2.stop();
+  }
+});
+
+test("an explicitly suppressed boundary lapses quietly; one deferred for want of an answer still DMs", async () => {
+  const dms = [];
+  const admins = config.adminUserIds;
+  config.adminUserIds = new Set(["123456789012345678"]);
+  notify.configure({ client: { users: { fetch: async () => ({ send: async (m) => dms.push(m.content) }) } } });
+  try {
+    for (const [intent, expected] of [
+      ["not_participating", 0],
+      [null, 1],
+    ]) {
+      state.set({ runs: { "war-deck-check": previous }, notices: {} });
+      dms.length = 0;
+      const timers = timerHarness();
+      const models = [];
+      const gate = createPolicyGate({
+        read: async () =>
+          intent
+            ? { ok: true, body: { ...base, war_intent: intent, read_at: timers.now().toISOString() } }
+            : { ok: false },
+        principal: () => ({ kind: "agent", subject: { type: "clan", tag: base.clan_tag } }),
+        now: () => Number(timers.now()),
+        notice: async () => {},
+      });
+      const lane = startClockLane(
+        () => [dependent()],
+        async () => null,
+        { ...timers, gate, readClock: async () => clock, runFn: runner(models) },
+      );
+      try {
+        await lane.plan();
+        await timers.advance("2026-10-05T06:00:00Z");
+        await timers.advance("2026-10-05T08:01:00Z");
+        assert.deepEqual(models, []);
+        assert.equal(state.get("runs")["war-deck-check"], previous);
+        assert.equal(
+          dms.filter((m) => m.includes("catch-up window expired")).length,
+          expected,
+          intent ? "nonparticipation is the policy working" : "an unanswered read is the operator's news",
+        );
+      } finally {
+        lane.stop();
+      }
+    }
+  } finally {
+    notify.configure({ client: null });
+    config.adminUserIds = admins;
   }
 });
