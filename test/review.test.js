@@ -27,7 +27,10 @@ import {
   buttonId,
   handleButton,
   reviewRoutine,
+  reportMessage,
+  mechanicsIssue,
 } from "../src/review.js";
+import { fileIssue } from "../src/github.js";
 import { parseVerdict } from "../src/feedback.js";
 import { looksLikeCorrection } from "../src/ask.js";
 import { readMemory, systemFor, parseMemoryEntry } from "../src/prompt.js";
@@ -519,6 +522,100 @@ test("a button applies for an admin and refuses everyone else", async (t) => {
   const show = fake("9", "show");
   await handleButton(show.interaction, { isAdmin: (id) => id === "9" });
   assert.match(show.replies[0].content, /turn `aaaa0001`/);
+});
+
+test("a mechanics report is filed once, by an admin's click, and says where it went (issue #24)", async (t) => {
+  fresh();
+  const dir = agentDir(t, { "memory.md": "# Memory\n" });
+  ledger.append(turn({ turnId: "bbbb0001" }));
+  const outcome = await runReview({
+    trigger: "command",
+    agentDir: dir,
+    askFn: fakeAsk([
+      [
+        "report_mechanics",
+        { rule: "SKIP handling", turn_ids: ["bbbb0001"], summary: "a truncated turn read as a skip" },
+      ],
+    ]),
+  });
+  const review = findReview(outcome.reviewId);
+  assert.equal(review.reports.length, 1);
+  assert.match(mechanicsIssue(review), /Bot build \S+/, "the build is named, not just Elixir's");
+
+  const unfiled = reportMessage(review, 0);
+  assert.match(unfiled.content, /\*\*SKIP handling\*\* — a truncated turn read as a skip/);
+  assert.deepEqual(
+    unfiled.buttons.map((b) => b.label),
+    ["File issue"],
+  );
+
+  const filed = [];
+  const file = async (issue) => {
+    filed.push(issue);
+    return { ok: true, number: 42, url: "https://github.com/x/y/issues/42", existing: false };
+  };
+  const press = async (userId) => {
+    const replies = [];
+    const updates = [];
+    await handleButton(
+      {
+        customId: buttonId(outcome.reviewId, "m1", "issue"),
+        user: { id: userId },
+        reply: async (m) => replies.push(m),
+        update: async (m) => updates.push(m),
+      },
+      { isAdmin: (id) => id === "9", file },
+    );
+    return { replies, updates };
+  };
+
+  const stranger = await press("1");
+  assert.match(stranger.replies[0].content, /whoever runs this bot/);
+  assert.equal(filed.length, 0, "only an admin files");
+
+  const first = await press("9");
+  assert.equal(filed.length, 1);
+  assert.equal(filed[0].title, "SKIP handling");
+  assert.match(filed[0].body, /Turns bbbb0001/);
+  assert.match(first.updates[0].content, /Filed as \[#42\]/);
+  assert.equal(first.updates[0].components.length, 0, "no second button");
+  assert.equal(lastDecision(findReview(outcome.reviewId), "m1").decision, "filed");
+
+  const again = await press("9");
+  assert.equal(filed.length, 1, "a second click files nothing");
+  assert.match(again.updates[0].content, /Filed as \[#42\]/);
+});
+
+test("fileIssue points at an open issue with the same title instead of filing a duplicate", async () => {
+  const calls = [];
+  const fetchFn = async (url, init = {}) => {
+    calls.push([init.method ?? "GET", url, init.headers?.Authorization]);
+    if (!init.method)
+      return { ok: true, json: async () => [{ number: 7, title: "SKIP Handling ", html_url: "https://g/7" }] };
+    return { ok: true, json: async () => ({ number: 8, html_url: "https://g/8" }) };
+  };
+  const same = await fileIssue({ title: "skip handling", body: "b" }, { token: "t", repo: "o/r", fetchFn });
+  assert.deepEqual(same, { ok: true, number: 7, url: "https://g/7", existing: true });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][2], "Bearer t");
+
+  const made = await fileIssue({ title: "another", body: "b" }, { token: "t", repo: "o/r", fetchFn });
+  assert.deepEqual(made, { ok: true, number: 8, url: "https://g/8", existing: false });
+  assert.equal(calls.at(-1)[0], "POST");
+  assert.equal(calls.at(-1)[1], "https://api.github.com/repos/o/r/issues");
+
+  assert.equal((await fileIssue({ title: "x", body: "b" }, { token: "", fetchFn })).ok, false, "no token, no call");
+  const refused = await fileIssue(
+    { title: "x", body: "b" },
+    {
+      token: "t",
+      repo: "o/r",
+      fetchFn: async (u, init = {}) =>
+        init.method ? { ok: false, status: 403, text: async () => "nope" } : { ok: true, json: async () => [] },
+    },
+  );
+  assert.equal(refused.ok, false);
+  assert.match(refused.error, /403/);
 });
 
 // ------------------------------------------------ signals and lessons

@@ -269,6 +269,14 @@ It runs on its own model and its own budget (`REVIEW_MODEL`,
 `/review` runs it now; `npm run review` shows what it would propose without
 writing or sending anything.
 
+A finding that is a defect in this repository's code rather than your files
+comes as a **mechanics report**. By default the DM carries it as text to
+paste into this repository's issues. Put a fine-grained GitHub token with
+Issues: write on `jthingelstad/elixir-mcp-discord` in `.env` as
+`GITHUB_ISSUES_TOKEN` and each report gets a **File issue** button instead
+(an open issue with the same title is linked, not duplicated). Read it
+before you press: the repository is public.
+
 ## Talking to it directly
 
 DM the bot from the account in `ADMIN_USER_IDS` and it is your console —

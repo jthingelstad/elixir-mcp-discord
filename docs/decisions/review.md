@@ -15,7 +15,8 @@ design is there. The short version:
   files under `agent/` — `memory.md` (append one dated line), `identity.md`
   or a routine's brief (replace/remove, never the front matter). Each cites
   turns and is shown as a diff. A finding that is not an edit is a
-  `report_mechanics` (code — the DM carries a pasteable issue) or an
+  `report_mechanics` (code — the DM carries a pasteable issue, or since
+  2026-10-05 a File issue button; see below) or an
   `elixir_send_feedback` filing (the hub).
 - **Humans outrank the rubric.** The signals that flag a turn: 👎/👍 with
   notes, an `intervention` (another member speaking in the answer thread,
@@ -82,3 +83,28 @@ design is there. The short version:
   review writes (with `REVIEW_AUTO_MEMORY`, that line is applied unseen).
   `planEdit` also fences `replace` of an operator's memory line, not only
   `remove`, and refuses a non-owner line that claims `(from owner)`.
+
+## Mechanics reports are filed by a click — since 2026-10-05
+
+Issue #24 (Jamie): "allow bots to file an issue directly during their
+review process. Will need some token in settings." Issues #19-#23 were
+review reports pasted by hand, one still in the code fence it was copied
+out of. With `GITHUB_ISSUES_TOKEN` in `.env` (an optional secret,
+`OPTIONAL_SECRET_KEYS` in `src/env-file.js`: never config.json, never
+settable from the DM) each report arrives as its own DM with a **File
+issue** button; without it the DM is the paste text as before.
+
+- **The click is the gate.** The repository is public and the report is the
+  review model's prose about turns that carry members' words; the tool asks
+  for no names, ids or tags, and a person reads it before it is published.
+  Unattended filing would be a product change; it is not built.
+- **One report, one issue**, titled with the report's rule, the body naming
+  the review, the turns and the build. An open issue with the same title
+  (case-insensitive) is linked rather than duplicated (`fileIssue` in
+  `src/github.js`). The click records a `filed` decision under `m<n>` beside
+  the proposals' `p<n>`, so a second click, or a second admin, files nothing.
+- **The repository is a constant** (`config.github.issuesRepo`): a mechanics
+  report is a defect in this code wherever the bot runs.
+- The report summary is now clipped at 600 characters (still asked for under
+  400): #20 and #22 were filed ending mid-sentence. The build line names the
+  bot's build; it read "Bot build against Elixir …".

@@ -51,6 +51,8 @@ import * as budget from "./budget.js";
 import * as ledger from "./ledger.js";
 import { log } from "./log.js";
 import { notify } from "./notify.js";
+import { buildId } from "./build.js";
+import { canFileIssues, fileIssue } from "./github.js";
 import * as state from "./state.js";
 import {
   readAgentFiles,
@@ -391,7 +393,10 @@ function reportTool({ reports }) {
       reports.push({
         rule: String(rule ?? "").slice(0, 80),
         turnIds: (turn_ids || []).map(String).slice(0, 12),
-        summary: String(summary ?? "").slice(0, 400),
+        // Asked for under 400; kept to 600 so a model that runs over loses
+        // its last words rather than the middle of its fix (issues #20 and
+        // #22 were filed ending "for  (turns" and "on the (turns").
+        summary: String(summary ?? "").slice(0, 600),
       });
       return { ok: true, body: { reported: true } };
     },
@@ -552,17 +557,71 @@ export async function runReview({
 
 // ------------------------------------------------------------- delivery
 
+/** "Bot build 0.3.1+abc1234 against Elixir 11.2.0+tools…." — the line
+ *  read "Bot build against Elixir …" until 2026-10-05: the build was never in it. */
+function buildLine() {
+  const server = state.get("serverVersion");
+  return `Bot build ${buildId()}${server ? ` against Elixir ${server}` : ""}.`;
+}
+
+function reviewLine(review, what) {
+  return `Review ${review.reviewId} of ${review.instance ?? "an instance"} (${review.window?.since?.slice(0, 10)} to ${review.window?.until?.slice(0, 10)}, ${review.turnsRead} turns) found ${what}:`;
+}
+
 /** The pasteable issue body for mechanics reports. No member data by rule. */
 export function mechanicsIssue(review) {
   if (!review.reports?.length) return null;
   const lines = [
-    `Review ${review.reviewId} of ${review.instance ?? "an instance"} (${review.window?.since?.slice(0, 10)} to ${review.window?.until?.slice(0, 10)}, ${review.turnsRead} turns) found mechanics-level defects:`,
+    reviewLine(review, "mechanics-level defects"),
     "",
     ...review.reports.map((r, i) => `${i + 1}. **${r.rule}** — ${r.summary} (turns ${r.turnIds.join(", ")})`),
     "",
-    `Bot build ${state.get("serverVersion") ? `against Elixir ${state.get("serverVersion")}` : ""}.`,
+    buildLine(),
   ];
   return lines.join("\n");
+}
+
+/** One mechanics report as a GitHub issue: the rule is the title. */
+export function reportIssue(review, report) {
+  return {
+    title: report.rule || "Mechanics report",
+    body: [
+      reviewLine(review, "a mechanics-level defect"),
+      "",
+      `**${report.rule}** — ${report.summary}`,
+      "",
+      `Turns ${report.turnIds.join(", ")} (in that instance's ledger: \`npm run turns -- --turn <id>\`).`,
+      "",
+      buildLine(),
+      "",
+      "-# Filed from the review DM by the bot's operator.",
+    ].join("\n"),
+  };
+}
+
+/** The ledger id of a mechanics report: `m1`, `m2`… beside proposals' `p1`. */
+const reportId = (i) => `m${i + 1}`;
+
+/** One mechanics report as a DM with a File issue button (or where it went). */
+export function reportMessage(review, index, { decision = null } = {}) {
+  const report = review.reports[index];
+  const { title, body } = reportIssue(review, report);
+  const filed = decision?.decision === "filed" ? decision.detail : null;
+  const content = [
+    `**Mechanics ${index + 1} of ${review.reports.length}** · ${title}`,
+    "```",
+    body.slice(0, 1700),
+    "```",
+    filed
+      ? `${filed.existing ? "Already open as" : "Filed as"} [#${filed.number}](<${filed.url}>)${decision.by ? ` by <@${decision.by}>` : ""}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const buttons = filed
+    ? []
+    : [{ id: buttonId(review.reviewId, reportId(index), "issue"), label: "File issue", style: "primary" }];
+  return { content: content.slice(0, 2000), buttons };
 }
 
 export const BUTTON_PREFIX = "rv";
@@ -663,7 +722,16 @@ export async function deliver({ client, review, outcome }) {
         await user.send({ content, components: toComponents(buttons), allowedMentions: { parse: [] } });
       }
       const issue = mechanicsIssue(review);
-      if (issue) {
+      if (issue && canFileIssues()) {
+        await user.send({
+          content: `**Mechanics** — this is the bot's code, not your files. Read each one before you file it: the repository is public.`,
+          allowedMentions: { parse: [] },
+        });
+        for (const i of review.reports.keys()) {
+          const { content, buttons } = reportMessage(review, i, { decision: lastDecision(review, reportId(i)) });
+          await user.send({ content, components: toComponents(buttons), allowedMentions: { parse: [] } });
+        }
+      } else if (issue) {
         await user.send({
           content: `**Mechanics** — this is the bot's code, not your files. Paste into ${REPO_ISSUES}:`,
           allowedMentions: { parse: [] },
@@ -685,7 +753,7 @@ export async function deliver({ client, review, outcome }) {
 }
 
 /** A button pressed on a proposal DM. Returns what happened, for the log. */
-export async function handleButton(interaction, { isAdmin }) {
+export async function handleButton(interaction, { isAdmin, file = fileIssue }) {
   const parsed = parseButtonId(interaction.customId);
   if (!parsed) return null;
   if (!isAdmin(interaction.user.id)) {
@@ -693,6 +761,7 @@ export async function handleButton(interaction, { isAdmin }) {
     return { refused: true };
   }
   const review = findReview(parsed.reviewId);
+  if (parsed.action === "issue") return fileReport(interaction, review, parsed.proposalId, { file });
   const proposal = review?.proposals?.find((p) => p.id === parsed.proposalId);
   if (!review || !proposal) {
     await interaction.reply({ content: "I no longer have that review in the ledger.", flags: 64 });
@@ -774,6 +843,38 @@ export async function handleButton(interaction, { isAdmin }) {
   }
   return null;
 }
+
+/** The File issue button: once per report, whoever presses it first. */
+async function fileReport(interaction, review, id, { file }) {
+  const index = Number(/^m(\d+)$/.exec(id)?.[1]) - 1;
+  const report = review?.reports?.[index];
+  if (!report) {
+    await interaction.reply({ content: "I no longer have that report in the ledger.", flags: 64 });
+    return { missing: true };
+  }
+  const before = lastDecision(review, id);
+  if (before?.decision === "filed") {
+    await interaction.update(withComponents(reportMessage(review, index, { decision: before })));
+    return { action: "issue", already: true };
+  }
+  const outcome = await file(reportIssue(review, report));
+  if (!outcome.ok) {
+    await interaction.reply({ content: `Could not file it: ${outcome.error}`, flags: 64 });
+    return { action: "issue", ok: false, error: outcome.error };
+  }
+  const decision = ledger.decisionEntry({
+    reviewId: review.reviewId,
+    proposalId: id,
+    decision: "filed",
+    by: interaction.user.id,
+    detail: { number: outcome.number, url: outcome.url, existing: outcome.existing },
+  });
+  ledger.append(decision);
+  await interaction.update(withComponents(reportMessage(review, index, { decision })));
+  return { action: "issue", ok: true, number: outcome.number, existing: outcome.existing };
+}
+
+const withComponents = ({ content, buttons }) => ({ content, components: toComponents(buttons) });
 
 // -------------------------------------------------------------- the clock
 
