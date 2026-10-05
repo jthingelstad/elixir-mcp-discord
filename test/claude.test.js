@@ -48,6 +48,28 @@ test("a known workspace usage limit exposes its reset time without guessing", as
   });
   assert.equal(out.ok, false);
   assert.equal(out.retryAt, "2026-10-01T00:00:00.000Z");
+  assert.equal(out.hard, true, "a usage limit is not fixed by the next poll");
+});
+
+test("an auth, permission or missing-model error is hard; an overload is not", async () => {
+  const fail = (status, message) => {
+    const error = new Error(message);
+    if (status) error.status = status;
+    return ask({
+      system: "s",
+      messages: [{ role: "user", content: "go" }],
+      catalogFn: CATALOG,
+      stream: () => {
+        throw error;
+      },
+    });
+  };
+  assert.equal((await fail(401, "401 authentication_error")).hard, true);
+  assert.equal((await fail(null, "403 permission_error")).hard, true, "the status is read off the message");
+  assert.equal((await fail(404, "404 model not found")).hard, true);
+  assert.equal((await fail(400, "400 Your credit balance is too low")).hard, true);
+  assert.equal((await fail(529, "529 overloaded_error")).hard, false);
+  assert.equal((await fail(400, "400 messages: text content blocks must be non-empty")).hard, false);
 });
 
 const read = {

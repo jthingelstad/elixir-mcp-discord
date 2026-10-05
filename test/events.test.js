@@ -7,6 +7,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  FAILURE_HOLD_CAP_MS,
+  failureHoldMs,
   relevant,
   noteworthy,
   shouldReadFeedback,
@@ -272,7 +274,8 @@ test("a known workspace reset holds an event window without polling it again", a
   let runs = 0;
   const run = async () => {
     runs += 1;
-    return { ok: false, retryAt: "2026-10-01T00:00:00.000Z" };
+    // Access is back after the reset; a second failure would back off instead.
+    return runs === 1 ? { ok: false, retryAt: "2026-10-01T00:00:00.000Z" } : { ok: true, skipped: true };
   };
   const beforeReset = () => new Date("2026-09-28T10:00:00.000Z");
 
@@ -290,6 +293,66 @@ test("a known workspace reset holds an event window without polling it again", a
   assert.equal(runs, 2, "the retained batch is eligible after the reset");
   assert.equal(hub.calls.length, 2);
   assert.equal(state.retryAtFor(key), null, "an expired reset is removed");
+});
+
+test("failed turns on one window back off, and a hard provider error waits the cap at once", async () => {
+  const key = "backoff-editor";
+  const cursor = "2026-09-25T10:55:00.000Z";
+  state.setCursor(key, cursor);
+  const editor = { key, trigger: "events", wake: ["member_joined"] };
+  const hub = fakeHub([moment("member_joined", "2026-09-25T11:00:00.000Z")]);
+  const pollMs = 5 * 60 * 1000;
+  let clock = Date.parse("2026-09-28T00:00:00.000Z");
+  const now = () => new Date(clock);
+  let answer = { ok: false, error: "529 overloaded" };
+  let runs = 0;
+  const run = async () => {
+    runs += 1;
+    return answer;
+  };
+  const poll = () => pollRoutine(editor, null, { call: hub.call, run, now, pollMs });
+
+  await poll();
+  assert.equal(runs, 1);
+  assert.equal(state.retryAtFor(key), null, "one failure retries at the next poll");
+  clock += pollMs;
+  await poll();
+  assert.equal(runs, 2);
+  assert.equal(Date.parse(state.retryAtFor(key)) - clock, 2 * pollMs, "the second waits two intervals");
+  clock += pollMs;
+  await poll();
+  assert.equal(runs, 2, "held: the same batch is not handed to the model again");
+  clock += pollMs;
+  await poll();
+  assert.equal(runs, 3);
+  assert.equal(Date.parse(state.retryAtFor(key)) - clock, 4 * pollMs, "then four");
+  assert.equal(state.cursorFor(key), cursor, "the window is never dropped");
+
+  answer = { ok: true, skipped: true };
+  clock += 4 * pollMs;
+  await poll();
+  assert.equal(runs, 4);
+  assert.notEqual(state.cursorFor(key), cursor);
+  assert.equal(state.get("failures")?.[key], undefined, "a success clears the count");
+
+  const hardKey = "hard-editor";
+  state.setCursor(hardKey, cursor);
+  answer = { ok: false, error: "401 authentication_error", hard: true };
+  await pollRoutine({ ...editor, key: hardKey }, null, { call: hub.call, run, now, pollMs });
+  assert.equal(
+    Date.parse(state.retryAtFor(hardKey)) - clock,
+    FAILURE_HOLD_CAP_MS,
+    "the first hard error waits the cap",
+  );
+});
+
+test("the failure hold doubles from the poll interval to the cap", () => {
+  const poll = 300_000;
+  assert.deepEqual(
+    [1, 2, 3, 4, 5, 6].map((n) => failureHoldMs(n, { pollMs: poll }) / 60_000),
+    [0, 10, 20, 40, 60, 60],
+  );
+  assert.equal(failureHoldMs(1, { hard: true, pollMs: poll }), FAILURE_HOLD_CAP_MS);
 });
 
 test("the catch-up is bounded, and says what it left unread", async () => {

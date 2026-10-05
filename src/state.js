@@ -35,10 +35,15 @@ const DEFAULTS = {
   // `carry`: not worth a turn on their own, kept until a `wake` item starts
   // one or the carry release lets them go (src/events.js). Bounded.
   carry: {},
-  // { [routineKey]: iso }. A known upstream workspace limit named its reset
-  // time. Keep the event window and wait until then rather than spending an
-  // identical failed model call on every poll (src/events.js).
+  // { [routineKey]: iso }. An event routine holds its window until then: a
+  // known upstream workspace limit named its reset time, or its turns have
+  // failed enough times in a row to back off (src/events.js `failureHoldMs`).
+  // Keep the window rather than spending an identical failed model call on
+  // every poll.
   retryAt: {},
+  // { [routineKey]: n }. Consecutive failed turns of an event routine on the
+  // same unconsumed window; cleared by a turn that succeeds.
+  failures: {},
   // { [routineKey]: periodKey }. null = never seeded, which is distinct from
   // {} on purpose: an empty ledger on a fresh install would make every routine
   // whose window is still open fire at once, in the same minute.
@@ -197,6 +202,22 @@ export function retryAtFor(routineKey) {
 export function setRetryAt(routineKey, retryAt) {
   const state = read();
   write({ ...state, retryAt: { ...state.retryAt, [routineKey]: retryAt } });
+}
+
+/** One more failed turn for an event routine; returns how many in a row. */
+export function noteFailure(routineKey) {
+  const state = read();
+  const n = (Number(state.failures?.[routineKey]) || 0) + 1;
+  write({ ...state, failures: { ...state.failures, [routineKey]: n } });
+  return n;
+}
+
+export function clearFailures(routineKey) {
+  const state = read();
+  if (!state.failures?.[routineKey]) return;
+  const failures = { ...state.failures };
+  delete failures[routineKey];
+  write({ ...state, failures });
 }
 
 export function clearRetryAt(routineKey) {

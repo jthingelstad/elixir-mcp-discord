@@ -548,7 +548,10 @@ changed to an unpriced one later fails before the call, not after it.
   failed turn reads its window again. On first run each seeds from now
   rather than draining the backlog into your channel. When Anthropic names a
   workspace usage-limit reset, the unconsumed window is held locally until
-  that time instead of being retried on every poll.
+  that time instead of being retried on every poll. Otherwise the first
+  failed turn retries at the next poll and each one after waits twice as
+  long, up to an hour; an error the next poll cannot fix (authentication,
+  permission, a missing model, billing) waits the hour at once.
 - **`state/state.json` is replaced, never rewritten in place.** A crash or
   a full disk mid-write leaves the previous state. If the file is ever
   unreadable (a hand edit gone wrong), it is moved to
