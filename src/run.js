@@ -15,7 +15,7 @@
 import { ask, spendBlock, cacheShare } from "./claude.js";
 import { laneFor } from "./budget.js";
 import { detectFriction, sweepFriction, looksUngrounded } from "./feedback.js";
-import { systemFor, userMessageFor, isSkip, notDelivered, outOfRoom } from "./prompt.js";
+import { systemFor, userMessageFor, isSkip, notDelivered, outOfRoom, draftTarget } from "./prompt.js";
 import { post, recentPosts, replyUnder } from "./post.js";
 import { renderTrace, errorFooter, UNGROUNDED_FOOTER } from "./trace.js";
 import { directory, resolveById } from "./directory.js";
@@ -119,7 +119,7 @@ function postTool({ routine, entries, dryRun, posts, resolve = resolveById }) {
         return {
           ok: false,
           code: "too_long",
-          error: `content is ${text.length} characters; this routine's limit is ${routine.maxChars}. Shorten it and call post_message again.`,
+          error: `content is ${text.length} characters, ${text.length - routine.maxChars} over this routine's limit of ${routine.maxChars}. Cut well past that — aim for about ${draftTarget(routine)} — and call post_message again.`,
         };
       }
       const record = { channelId: entry.id, channelName: entry.name, text, messages: [] };

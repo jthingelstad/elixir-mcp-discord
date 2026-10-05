@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { test } from "node:test";
-import { systemFor, userMessageFor, isSkip, readIdentity } from "../src/prompt.js";
+import { systemFor, userMessageFor, isSkip, readIdentity, MECHANICS } from "../src/prompt.js";
 import { parseRoutine } from "../src/routines.js";
 
 const routine = (fields, body = "Do the thing.") =>
@@ -159,5 +159,18 @@ test("no lean and no silence line reach a turn; the timeline framing explains a 
   assert.match(user, /since your last turn[^\n]*waited for this batch/);
   // The routine's length limit rides DELIVER, so the model has the number in
   // the turn and not only in the tool's description (2026-09-21).
-  assert.match(user, /post_message[\s\S]*The limit is 1900 characters per post; post_message refuses more/);
+  assert.match(
+    user,
+    /post_message[\s\S]*The limit is 1900 characters per post; post_message refuses more, so aim for about 1610/,
+  );
+});
+
+test("POSTING names the routine's own cap and a target under it (issue #19)", () => {
+  const entries = [{ id: "11", name: "news", topic: "", visibility: "everyone", threads: false, role: null }];
+  const editor = routine({ trigger: "events", wake: "member_joined", max_chars: 1400, may_skip: true });
+  const system = systemFor(editor, { entries });
+  assert.match(system, /YOU POST BY CALLING post_message[\s\S]*must fit in 1400 characters; draft to about 1190/);
+  assert.doesNotMatch(systemFor(editor, { entries: [] }), /must fit in/, "no tool, no posting block");
+  assert.match(MECHANICS.POSTING, /must fit in 1400/, "the review sees the number is stated");
+  assert.match(MECHANICS.DELIVER, /The limit is 1400 characters per post/);
 });
