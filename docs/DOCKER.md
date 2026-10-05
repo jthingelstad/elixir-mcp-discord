@@ -14,7 +14,11 @@ assumes you know what Docker is but have not run anything with it.
   hand it. Here that is one: the instance directory (`.env`,
   `config.json`, `agent/`, `state/`), mounted at `/instance`. Stopping or
   deleting a container loses nothing, because everything the bot keeps is
-  in that folder on your disk.
+  in that folder on your disk. Because every bot's folder is `/instance`
+  inside, compose also tells each one its name (`INSTANCE_NAME`), which
+  its ledger, reviews and issues carry; a compose file written before
+  2026-10-05 lacks it and every bot calls itself "instance" until the
+  script is re-run.
 - **Compose** — a small YAML file, `compose.yml`, that says "run these
   containers, with these folders, and bring each back if it stops". It
   replaces the launchd plist or systemd unit. One file can run several

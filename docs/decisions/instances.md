@@ -75,3 +75,15 @@ labels is the maintainer's own `../AGENTS.md`, outside this repository.
   so a crash loop does not repeat it. The bot keeps running — the lanes that
   work should — but a pasted id from the wrong clan's channel is now a loud
   boot, not a stranger's clan report.
+
+## INSTANCE_NAME — since 2026-10-05
+
+Docker mounts every instance at `/instance`, so from the move on
+2026-09-26 the ledger's `instance` field, the review header and every
+issue filed from a review said "instance" for all three bots (#20, #22
+read "Review … of instance"). `ledger.instanceName()` now prefers the
+environment-only `INSTANCE_NAME`, and `scripts/install-docker.sh` writes
+it per service. The hub reader name (`readerName` in `src/events.js`)
+still uses the directory, on purpose: a new reader name is a new pointer
+on the hub, and the local cursor already decides `from`.
+

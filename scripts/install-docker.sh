@@ -125,6 +125,9 @@ YAML
     echo "  $name:"
     echo "    <<: *bot"
     echo "    container_name: elixir-mcp-discord-$name"
+    echo "    # Mounted at /instance, so the directory's name has to be said."
+    echo "    environment:"
+    echo "      INSTANCE_NAME: \"$name\""
     echo "    volumes:"
     echo "      - \"$dir:/instance\""
   done
