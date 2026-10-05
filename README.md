@@ -92,9 +92,9 @@ special case. A `clock` routine names `arm: war_day_closes_at` and
 A clock routine can also require a literal private-context value, such as
 `requires: war_intent=participating`. The runner checks its assigned agent's
 current Policy context at startup, planning and immediately before the model
-call. Explicit nonparticipation suppresses that dependent routine; unknown
+call. Explicit nonparticipation suppresses that dependent routine quietly; unknown
 intent, denied access, a missing tool or an unavailable read defers it and
-tells the operator why. Other factual routines continue. A successful read
+tells the operator why, and again if the window lapses that way. Other factual routines continue. A successful read
 must be at most 60 seconds old (with at most five seconds of future clock
 skew); the policy's save date is provenance, not freshness. Deferred work is
 rechecked every ten minutes inside its existing catch-up window, without

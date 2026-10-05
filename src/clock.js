@@ -110,14 +110,18 @@ export async function fire(
     if ((state.get("runs") || {})[routine.key] === key) return { ok: false, error: "already_run", skipped: true };
     const decision = await gate.check(routine);
     if (expiresAt && now() > expiresAt) {
-      log.info("clock_deferred_expired", { routine: routine.key, key });
-      await notify(
-        "policy context",
-        `${routine.key}'s catch-up window expired; no model call or scheduled run consumed.`,
-        {
-          fingerprint: `policy_expired:${routine.key}:${key}`,
-        },
-      );
+      log.info("clock_deferred_expired", { routine: routine.key, key, disposition: decision.disposition });
+      // An explicit "not participating" is the policy working, not something
+      // for the operator to chase; only a boundary that lapsed for want of an
+      // answer is news.
+      if (decision.disposition !== "suppress")
+        await notify(
+          "policy context",
+          `${routine.key}'s catch-up window expired; no model call or scheduled run consumed.`,
+          {
+            fingerprint: `policy_expired:${routine.key}:${key}`,
+          },
+        );
       return { ok: false, error: "eligibility:window_expired", expired: true };
     }
     await gate.report(routine, decision, "fire");
@@ -176,7 +180,15 @@ export function startClockLane(
   let planTimer = null;
   let stopped = false;
   let firstPlan = true;
-  const deferred = new Set();
+  // { "<routine>:<boundary>": disposition } — boundaries refused at plan or
+  // fire, kept so the window's expiry can be told apart from an idle day.
+  // Only a `defer` (no answer: unknown intent, a failed read) DMs the
+  // operator when it lapses. A `suppress` is the clan's own explicit
+  // nonparticipation; it is still rechecked every RETRY_MS so a change of
+  // heart inside the window posts, but its expiry is the expected outcome.
+  // Before 2026-10-05 both DMed, so a clan that does not race sent the
+  // operator "catch-up window expired" on every war day (issue #20).
+  const deferred = new Map();
 
   const clear = () => {
     for (const t of timers.values()) clearTimer(t);
@@ -226,13 +238,16 @@ export function startClockLane(
       const armed = armFrom(routine, clock, at);
       if (armed.skip) {
         log.info("clock_idle", { routine: routine.key, reason: armed.skip });
-        if (armed.key && deferred.delete(`${routine.key}:${armed.key}`)) {
-          log.info("clock_deferred_expired", { routine: routine.key, key: armed.key });
-          await notify(
-            "policy context",
-            `${routine.key}'s catch-up window expired while ineligible; no model call or scheduled run consumed.`,
-            { fingerprint: `policy_expired:${routine.key}:${armed.key}` },
-          );
+        const refused = armed.key ? deferred.get(`${routine.key}:${armed.key}`) : undefined;
+        if (refused) {
+          deferred.delete(`${routine.key}:${armed.key}`);
+          log.info("clock_deferred_expired", { routine: routine.key, key: armed.key, disposition: refused });
+          if (refused === "defer")
+            await notify(
+              "policy context",
+              `${routine.key}'s catch-up window expired while ineligible; no model call or scheduled run consumed.`,
+              { fingerprint: `policy_expired:${routine.key}:${armed.key}` },
+            );
         }
         continue;
       }
@@ -244,7 +259,7 @@ export function startClockLane(
           if (routine.requires) {
             const decision = await gate.check(routine, { fresh: false });
             if (decision.disposition !== "allow") {
-              deferred.add(`${routine.key}:${armed.key}`);
+              deferred.set(`${routine.key}:${armed.key}`, decision.disposition);
               seedRetryAt = new Date(now().getTime() + RETRY_MS);
               continue;
             }
@@ -256,7 +271,7 @@ export function startClockLane(
       }
       const decision = decisions.get(routine.key);
       if (decision && decision.disposition !== "allow") {
-        deferred.add(`${routine.key}:${armed.key}`);
+        deferred.set(`${routine.key}:${armed.key}`, decision.disposition);
         const retryAt = armed.late ? new Date(now().getTime() + RETRY_MS) : armed.at;
         if (!seedRetryAt || retryAt < seedRetryAt) seedRetryAt = retryAt;
         log.info("clock_waiting_for_eligibility", {
@@ -290,7 +305,8 @@ export function startClockLane(
         if (current && current.arm === routine.arm && current.offsetMinutes === routine.offsetMinutes) {
           try {
             const run = await fire(current, resolveChannel, { key: armed.key, runFn, gate, now, expiresAt });
-            if (run?.deferred || run?.suppressed) deferred.add(`${routine.key}:${armed.key}`);
+            if (run?.deferred || run?.suppressed)
+              deferred.set(`${routine.key}:${armed.key}`, run.suppressed ? "suppress" : "defer");
             else deferred.delete(`${routine.key}:${armed.key}`);
             if (run?.blocked || run?.deferred || run?.suppressed)
               held.set(current.key, { key: armed.key, until: new Date(now().getTime() + RETRY_MS) });

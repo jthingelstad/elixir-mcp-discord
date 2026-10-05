@@ -47,6 +47,13 @@ Other factual routines and their cursors continue independently. Revocation
 or a version change invalidates planned permission; failed reads never reuse
 a cached allow. The context remains in memory and never enters model input.
 
+**Since 2026-10-05 only a deferred boundary DMs when it lapses** (issue
+#20). A suppressed one — the clan's explicit nonparticipation — is still
+rechecked every ten minutes so a change of heart inside the window posts,
+but its expiry is the policy working: the two clans that do not race were
+DMing "catch-up window expired" on every war day. The log line stays, with
+its disposition.
+
 Timers re-read the brief and enabled state at firing. A removed, disabled or
 rescheduled routine cannot fire from an old timer. New `requires` front matter
 must reach instances only after the updated code has deployed and restarted.
