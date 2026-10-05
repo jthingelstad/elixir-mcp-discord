@@ -53,6 +53,21 @@ function workspaceLimitRetryAt(message) {
   return Number.isNaN(retryAt.getTime()) ? null : retryAt.toISOString();
 }
 
+/**
+ * A provider error that the next poll cannot fix: authentication or
+ * permission refused, a model that does not exist, or a billing or usage
+ * limit. A 529 or a dropped stream is worth the next poll; these are worth
+ * a long wait and the operator's attention (2026-09-28: 137 identical failed
+ * turns in eleven hours, issue #22). The status is the SDK's, or the leading
+ * code of the message the SDK builds from it.
+ */
+function hardError(error) {
+  const message = String(error?.message ?? "");
+  const status = Number(error?.status ?? message.match(/^(\d{3})\b/)?.[1]);
+  if ([401, 403, 404].includes(status)) return true;
+  return status === 400 && /usage limits|credit balance|billing/i.test(message);
+}
+
 const mcpServers = [
   {
     type: "url",
@@ -515,8 +530,14 @@ export async function ask({
       response = await call.finalMessage();
     } catch (error) {
       const retryAt = workspaceLimitRetryAt(error.message);
-      log.error("claude_call_failed", { turnId, error: error.message, retryAt: retryAt ?? undefined });
-      return { ...summary(), ok: false, error: error.message, retryAt };
+      const hard = hardError(error);
+      log.error("claude_call_failed", {
+        turnId,
+        error: error.message,
+        retryAt: retryAt ?? undefined,
+        hard: hard || undefined,
+      });
+      return { ...summary(), ok: false, error: error.message, retryAt, hard };
     }
 
     const usd = costOf(model, response.usage);

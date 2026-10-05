@@ -286,6 +286,26 @@ async function seedCursor() {
   return result.ok ? { cursor: result.cursor ?? now, meta: result.meta } : null;
 }
 
+/** The longest an event routine waits between failed turns. */
+export const FAILURE_HOLD_CAP_MS = 60 * 60 * 1000;
+
+/**
+ * How long an event routine holds its unconsumed window after its `n`th
+ * failed turn in a row. A failed turn keeps the cursor by design, so the
+ * next poll hands the model the same batch — right for one blip, and a loop
+ * when the failure is not a blip: from 2026-09-27 22:45Z to 09-28 10:03Z the
+ * POAP KINGS editor woke every five minutes on the same seven items and died
+ * on the same provider 400 each time (issue #22). The first failure retries
+ * at the next poll; each one after doubles the wait from the poll interval
+ * to the cap. An error the next poll cannot fix (`hard`, src/claude.js) goes
+ * to the cap at once. A named reset time (`retryAt`) wins over both.
+ */
+export function failureHoldMs(n, { hard = false, pollMs = config.eventPollSeconds * 1000 } = {}) {
+  if (hard) return FAILURE_HOLD_CAP_MS;
+  if (n <= 1) return 0;
+  return Math.min(FAILURE_HOLD_CAP_MS, pollMs * 2 ** (n - 1));
+}
+
 /** Polls one routine. Returns the envelope of the first `elixir_timeline`
  *  response it read (or null when it read none), so the tick can act on the
  *  hints without a call of its own. `call` and `run` are the transport and
@@ -293,11 +313,11 @@ async function seedCursor() {
 export async function pollRoutine(
   routine,
   channel,
-  { call = callTool, run: runTurn = runRoutine, now = () => new Date() } = {},
+  { call = callTool, run: runTurn = runRoutine, now = () => new Date(), pollMs = config.eventPollSeconds * 1000 } = {},
 ) {
   const retryAt = state.retryAtFor(routine.key);
   if (retryAt && Date.parse(retryAt) > now().getTime()) {
-    log.info("events_waiting_for_workspace_limit", { routine: routine.key, retryAt });
+    log.info("events_held", { routine: routine.key, retryAt });
     return null;
   }
   if (retryAt) state.clearRetryAt(routine.key);
@@ -373,6 +393,7 @@ export async function pollRoutine(
     // the one we have rather than writing null over it.
     if (result.cursor) state.setCursor(routine.key, result.cursor);
     state.clearCarry(routine.key);
+    state.clearFailures(routine.key);
     log.info("events_consumed", {
       routine: routine.key,
       items: items.length,
@@ -384,9 +405,21 @@ export async function pollRoutine(
       cursor: result.cursor,
       posted: !run.skipped,
     });
-  } else if (run.retryAt && Date.parse(run.retryAt) > now().getTime()) {
-    state.setRetryAt(routine.key, run.retryAt);
-    log.warn("events_waiting_for_workspace_limit", { routine: routine.key, retryAt: run.retryAt });
+  } else {
+    const failures = state.noteFailure(routine.key);
+    const named = run.retryAt && Date.parse(run.retryAt) > now().getTime() ? run.retryAt : null;
+    const holdMs = failureHoldMs(failures, { hard: run.hard, pollMs });
+    const until = named ?? (holdMs > 0 ? new Date(now().getTime() + holdMs).toISOString() : null);
+    if (until) {
+      state.setRetryAt(routine.key, until);
+      log.warn("events_backing_off", {
+        routine: routine.key,
+        failures,
+        hard: run.hard || undefined,
+        retryAt: until,
+        reason: named ? "named_reset" : run.hard ? "hard_error" : "repeated_failure",
+      });
+    }
   }
   return result.meta;
 }

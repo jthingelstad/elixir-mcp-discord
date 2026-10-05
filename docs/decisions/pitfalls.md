@@ -269,6 +269,18 @@
   its unconsumed window before it; after the reset, clear the hold and make
   the ordinary poll. This preserves the batch without turning one known
   outage into a five-minute error loop.
+- **Any run of failed event turns backs off — since 2026-10-05** (issue
+  #22). The named reset above covered one message; every other failure
+  still re-fired the same unconsumed batch on every poll, so an expired
+  key or a missing model would loop exactly as the usage limit did (137
+  identical turns, 09-27 22:45Z to 09-28 10:03Z). `state.failures` counts
+  consecutive failed turns per routine; `failureHoldMs` retries the first
+  at the next poll and doubles from the poll interval to an hour after
+  that, and a `hard` error (`hardError` in src/claude.js: 401, 403, 404,
+  or a 400 naming a usage limit, credit balance or billing) waits the hour
+  at once. The hold is the same `retryAt` the named reset uses, the window
+  is never dropped, and a successful turn clears the count. A named reset
+  still wins.
 - **A post is a post once Discord has it, and only then — since
   2026-09-25.** Every client-side tool result is followed by another API
   round, and when that round failed (a 529, a dropped stream) `ask()`

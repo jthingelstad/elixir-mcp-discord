@@ -491,7 +491,7 @@ async function runRoutineNow(
       await notify("routine failed", `${routine.key}: ${String(result.error).slice(0, 300)}`, {
         fingerprint: `routine_failed:${routine.key}`,
       });
-    return { ok: false, error: result.error, retryAt: result.retryAt ?? null };
+    return { ok: false, error: result.error, retryAt: result.retryAt ?? null, hard: result.hard ?? false };
   }
 
   const text = (result.text || "").trim();
