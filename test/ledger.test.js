@@ -270,3 +270,19 @@ test("a ledger that cannot be written is a warning, not a failed turn", () => {
   const ok = ledger.append(entry, { dir: "/dev/null/not-a-directory" });
   assert.equal(ok, false);
 });
+
+test("INSTANCE_NAME names the bot when the directory cannot (Docker mounts every one at /instance)", () => {
+  const before = process.env.INSTANCE_NAME;
+  try {
+    delete process.env.INSTANCE_NAME;
+    const fromDir = ledger.instanceName();
+    assert.ok(fromDir.length > 0);
+    process.env.INSTANCE_NAME = " shipit ";
+    assert.equal(ledger.instanceName(), "shipit");
+    process.env.INSTANCE_NAME = "";
+    assert.equal(ledger.instanceName(), fromDir, "empty falls back to the directory");
+  } finally {
+    if (before === undefined) delete process.env.INSTANCE_NAME;
+    else process.env.INSTANCE_NAME = before;
+  }
+});

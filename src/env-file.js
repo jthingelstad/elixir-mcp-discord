@@ -34,6 +34,7 @@ export const ENV_FILE_KEYS = [...SECRET_KEYS, ...WIRING_KEYS, ...OPTIONAL_SECRET
 /** Environment-only: where an instance is, and test switches. Never in config.json. */
 export const ENV_ONLY_KEYS = [
   "INSTANCE_DIR",
+  "INSTANCE_NAME",
   "STATE_PATH",
   "AGENT_DIR",
   "LEDGER_DIR",

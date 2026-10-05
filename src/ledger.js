@@ -85,7 +85,16 @@ export const sha = (text) =>
     .digest("hex")
     .slice(0, 12);
 
-export const instanceName = () => path.basename(instanceDir);
+/**
+ * Which bot wrote a record. The instance directory's name, unless
+ * INSTANCE_NAME says otherwise: in Docker every instance is mounted at
+ * /instance, so from 2026-09-26 every record of all three bots said
+ * "instance", and so did their reviews and the issues filed from them
+ * (#20, #22). scripts/install-docker.sh sets it per service. The hub
+ * reader name (src/events.js `readerName`) deliberately still uses the
+ * directory: renaming a reader starts a new pointer on the hub.
+ */
+export const instanceName = () => process.env.INSTANCE_NAME?.trim() || path.basename(instanceDir);
 
 function clipBody(text) {
   if (text === undefined || text === null) return null;
