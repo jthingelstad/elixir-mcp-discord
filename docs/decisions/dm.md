@@ -108,7 +108,7 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
   `propose_change` with `file: "config.json"`, `op: set_config`, `fields:
   {KEY: value}` on an ALLOWLIST (`SETTINGS`: budgets, `CLAUDE_*`,
   `REVIEW_*`, `TIMEZONE`, `EVENT_POLL_SECONDS`, `STARTUP_MESSAGE`,
-  `MAX_POSTS_PER_TURN`, `VOICE`, `COMMAND_PREFIX`, `FEEDBACK_CHANNEL`,
+  `MAX_POSTS_PER_TURN`, `TOOL_SEARCH_LANES`, `VOICE`, `COMMAND_PREFIX`, `FEEDBACK_CHANNEL`,
   `ADMIN_USER_IDS`, plus `CHANNEL_*` resolved against the directory) —
   which is every key `config.json` holds; secrets and wiring are in
   `.env`, which the DM cannot reach. Each value is checked the way setup checks it

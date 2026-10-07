@@ -126,6 +126,17 @@ export const SETTINGS = {
   },
   STARTUP_MESSAGE: { about: "the one-line hello to the admins' DM on boot: on or off", check: onOff },
   MAX_POSTS_PER_TURN: { about: "how many posts one routine turn may make", check: intAtLeast(1, "MAX_POSTS_PER_TURN") },
+  TOOL_SEARCH_LANES: {
+    about:
+      "lanes whose Elixir tools load on demand through tool search instead of riding every prompt: comma-separated routines, ask, review; empty = none",
+    check: (v) => {
+      const bad = v
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter((s) => s && !["routines", "ask", "review"].includes(s));
+      return bad.length ? `not a lane: ${bad.join(", ")} (routines, ask, review)` : null;
+    },
+  },
   VOICE: {
     about:
       "how long the channels must be quiet before carried timeline items (badge level-ups, collection steps, quiet crossings) may start an editor turn on their own: quiet (never), normal (12h), chatty (4h)",

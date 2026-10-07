@@ -395,6 +395,11 @@ export const config = {
   get maxPostsPerTurn() {
     return num("MAX_POSTS_PER_TURN", "3");
   },
+  // Lanes whose Elixir tools load on demand through tool search instead of
+  // riding every prompt (src/claude.js). Empty, the default, is none.
+  get toolSearchLanes() {
+    return new Set([...list("TOOL_SEARCH_LANES")].map((lane) => lane.toLowerCase()));
+  },
   // The carry release for the editor (src/events.js CARRY_RELEASE_HOURS):
   // how long the channels must be quiet before carried timeline items may
   // start a turn on their own. quiet never, normal 12h, chatty 4h.

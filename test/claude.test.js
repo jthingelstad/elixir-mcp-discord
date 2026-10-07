@@ -267,3 +267,95 @@ test("three cache breakpoints: the toolset, the system block, and the automatic 
   const marks = 1 + [...request.tools, ...request.system].filter((b) => b.cache_control).length;
   assert.ok(marks <= 4, "the API allows four");
 });
+
+/** Runs one turn with TOOL_SEARCH_LANES set, and puts it back. */
+async function withToolSearch(lanes, fn) {
+  const before = process.env.TOOL_SEARCH_LANES;
+  process.env.TOOL_SEARCH_LANES = lanes;
+  try {
+    return await fn();
+  } finally {
+    if (before === undefined) delete process.env.TOOL_SEARCH_LANES;
+    else process.env.TOOL_SEARCH_LANES = before;
+  }
+}
+
+test("tool search is off unless the lane is named: the toolset is loaded whole and holds its breakpoint", async () => {
+  const done = { content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage };
+  const { stream, requests } = playing([done]);
+  await withToolSearch("ask", () =>
+    ask({ system: "s", messages: [{ role: "user", content: "go" }], lane: "routines", stream, catalogFn: CATALOG }),
+  );
+  const toolset = requests[0].tools.find((t) => t.type === "mcp_toolset");
+  assert.equal(toolset.default_config, undefined);
+  assert.ok(toolset.cache_control);
+  assert.equal(requests[0].tools.filter((t) => String(t.type).startsWith("tool_search")).length, 0);
+  assert.equal(requests[0].system[0].text, "s", "and the prompt is untouched");
+});
+
+test("a lane with tool search defers the toolset, keeps its switched-off writes, and moves the breakpoint to the search tool", async () => {
+  const done = { content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage };
+  const { stream, requests } = playing([done]);
+  await withToolSearch("Routines, ask", () =>
+    ask({ system: "s", messages: [{ role: "user", content: "go" }], lane: "routines", stream, catalogFn: CATALOG }),
+  );
+  const { tools, system } = requests[0];
+  const toolset = tools.find((t) => t.type === "mcp_toolset");
+  assert.deepEqual(toolset.default_config, { defer_loading: true });
+  assert.equal(toolset.cache_control, undefined, "the API refuses cache_control on a deferred tool");
+  assert.deepEqual(Object.keys(toolset.configs).sort(), ["elixir_identify", "elixir_track_clan"]);
+  const search = tools.find((t) => t.type === "tool_search_tool_bm25_20251119");
+  assert.equal(search.name, "tool_search_tool_bm25");
+  assert.ok(search.cache_control, "the search tool holds the tools breakpoint instead");
+  assert.match(system[0].text, /^s\n\n.*load on demand/s, "the note rides the cached system block");
+  assert.doesNotMatch(system[0].text, /players_|battles_|clans_/, "and names no tool");
+});
+
+test("a tool search is traced as a search, never counted as a call, and echoed back untouched", async () => {
+  const search = {
+    type: "server_tool_use",
+    id: "srvtoolu_1",
+    name: "tool_search_tool_bm25",
+    input: { query: "war deck usage" },
+  };
+  const found = {
+    type: "tool_search_tool_result",
+    tool_use_id: "srvtoolu_1",
+    content: {
+      type: "tool_search_tool_search_result",
+      tool_references: [{ type: "tool_reference", tool_name: "war_current" }],
+    },
+  };
+  const post = { type: "tool_use", id: "toolu_1", name: "post_message", input: { text: "hi" } };
+  const { stream, requests } = playing([
+    { content: [search, found, read, result, post], stop_reason: "tool_use", usage },
+    { content: [{ type: "text", text: "Posted." }], stop_reason: "end_turn", usage },
+  ]);
+  const out = await withToolSearch("routines", () =>
+    ask({
+      system: "s",
+      messages: [{ role: "user", content: "go" }],
+      stream,
+      catalogFn: CATALOG,
+      localTools: [
+        {
+          name: "post_message",
+          description: "post",
+          input_schema: { type: "object" },
+          handler: async () => ({ ok: true, body: { ok: true } }),
+        },
+      ],
+    }),
+  );
+  assert.deepEqual(out.called, ["battles_meta_decks", "post_message"], "the search is not a call");
+  const step = out.trace.find((s) => s.kind === "search");
+  assert.equal(step.query, "war deck usage");
+  assert.deepEqual(step.found, ["war_current"]);
+  assert.deepEqual(requests[1].messages[1].content.slice(0, 2), [search, found], "echoed as the API sent it");
+  const results = requests[1].messages[2].content;
+  assert.deepEqual(
+    results.map((r) => r.tool_use_id),
+    ["toolu_1"],
+    "a server tool's id is never answered with a tool_result",
+  );
+});

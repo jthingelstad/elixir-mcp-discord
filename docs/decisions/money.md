@@ -62,3 +62,17 @@ review lane's ~180K-token transcript was billed uncached on every
 propose_change round; the automatic breakpoint makes round two onward a cache
 read. The review's ledger entry now carries `usage` and `rounds` as well, so
 the next cost question about it is answered from the ledger, not estimated.
+
+**Since 2026-10-07 tool search is a knob, off by default:
+`TOOL_SEARCH_LANES`.** The server's ~fifty schemas are ~30K of the ~35K-token
+prefix every turn sends, and an editor turn called one Elixir tool or none
+(221 of 328 turns made no call at all). Naming a lane defers the toolset
+(`default_config: { defer_loading: true }`, the lane's switched-off writes
+still apply) behind a BM25 tool search, and adds one sentence to the system
+block saying tools load on demand — no tool names. The ceiling is roughly
+the editor's $24 a month falling toward $7, but it changes how the model
+finds tools and there is no eval to clear that in advance, so it is the
+operator's call per lane, judged from the ledger: the `search` steps in a
+turn's trace (query and what loaded), cost per post, and the review. A
+search is never counted as a tool call, so the friction sweep's
+`many_calls` reads the same as before.
