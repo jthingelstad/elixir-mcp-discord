@@ -98,14 +98,41 @@ const mcpServers = [
  */
 /** The server's tools, with the writes this kind of turn may not use
  *  switched off (src/tools.js). Stable per kind of turn, so the cache
- *  breakpoint holds: a lane's disabled set changes only with the catalog. */
-function mcpToolset(disabled = []) {
+ *  breakpoint holds: a lane's disabled set changes only with the catalog.
+ *  Deferred (TOOL_SEARCH_LANES), the toolset carries no breakpoint: the API
+ *  refuses cache_control on deferred tools, so the search tool holds it. */
+function mcpToolset(disabled = [], defer = false) {
   return {
     type: "mcp_toolset",
     mcp_server_name: config.mcp.serverName,
+    ...(defer ? { default_config: { defer_loading: true } } : {}),
     ...(disabled.length ? { configs: Object.fromEntries(disabled.map((name) => [name, { enabled: false }])) } : {}),
-    cache_control: { type: "ephemeral" },
+    ...(defer ? {} : { cache_control: { type: "ephemeral" } }),
   };
+}
+
+/**
+ * TOOL SEARCH, per lane, off unless TOOL_SEARCH_LANES names the lane (since
+ * 2026-10-07). The server's ~fifty schemas are ~30K of a turn's ~35K-token
+ * prefix, and most turns are far enough apart that the cache is cold: an
+ * editor turn paid to WRITE all of them and then called one tool, or none
+ * (221 of 328 turns, 14 Sep to 6 Oct). Deferred, the schemas stay out of the
+ * prompt until the model searches for what it needs; what a search loads is
+ * billed as input on that turn. It changes how the model finds tools, so it
+ * goes lane by lane and is judged from the ledger (`search` steps, cost per
+ * post) — there is no eval that could clear it in advance.
+ */
+const SEARCH = "tool_search_tool";
+const searchTool = {
+  type: "tool_search_tool_bm25_20251119",
+  name: "tool_search_tool_bm25",
+  cache_control: { type: "ephemeral" },
+};
+const SEARCH_NOTE =
+  "Elixir's tools load on demand. Search for what you need in plain words (what it reads, about whom), then call one of the tools the search loads. A search loads only a few tools; search again with other words if none of them fits.";
+
+function isSearch(block) {
+  return block.type.startsWith(SEARCH) || (block.type === "server_tool_use" && String(block.name).startsWith(SEARCH));
 }
 
 /**
@@ -114,16 +141,18 @@ function mcpToolset(disabled = []) {
  * breakpoint on it covers them; a lane without local tools (the ask lane)
  * has a different, equally stable prefix.
  */
-function toolsFor(localTools, disabled) {
+function toolsFor(localTools, disabled, defer = false) {
   return [
     ...localTools.map(({ name, description, input_schema }) => ({ name, description, input_schema })),
-    mcpToolset(disabled),
+    ...(defer ? [searchTool] : []),
+    mcpToolset(disabled, defer),
   ];
 }
 
-function systemBlocks(system) {
-  if (Array.isArray(system)) return system;
-  return [{ type: "text", text: system, cache_control: { type: "ephemeral" } }];
+function systemBlocks(system, defer = false) {
+  if (Array.isArray(system)) return defer ? [...system, { type: "text", text: SEARCH_NOTE }] : system;
+  const text = defer ? `${system}\n\n${SEARCH_NOTE}` : system;
+  return [{ type: "text", text, cache_control: { type: "ephemeral" } }];
 }
 
 /** What a turn sent and where it came from, summed across rounds. */
@@ -305,6 +334,20 @@ function readResponse(activity, content, timings) {
     if (block.type === "thinking") {
       const text = (block.thinking || "").trim();
       if (text) activity.trace.push({ kind: "thought", text });
+    } else if (isSearch(block)) {
+      // A tool search is the API finding tools, not a tool call: it is
+      // never in `called` (the friction sweep counts those), and its
+      // result is echoed back untouched, never answered with a tool_result.
+      if (block.type === "server_tool_use") {
+        const step = { kind: "search", query: String(block.input?.query ?? ""), id: block.id };
+        if (block.id) activity.byId.set(block.id, step);
+        activity.trace.push(step);
+      } else {
+        const step = activity.byId.get(block.tool_use_id);
+        const refs = block.content?.tool_references;
+        if (step && Array.isArray(refs)) step.found = refs.map((r) => r.tool_name);
+        else if (step) step.error = block.content?.error_code ?? "unknown";
+      }
     } else if (block.type.endsWith("tool_use")) {
       use(activity, block);
     } else if (block.type.endsWith("tool_result")) {
@@ -473,6 +516,7 @@ export async function ask({
   const disabled = disabledTools(policy, catalog);
   // A tool handed back to run is named against the same catalog.
   const published = catalog?.ok ? catalog.tools.map((t) => t.name) : null;
+  const defer = config.toolSearchLanes.has(lane);
 
   // Thinking and effort only where the model takes them: on Haiku 4.5 either
   // is a 400, so `model: claude-haiku-4-5` failed every turn.
@@ -495,10 +539,10 @@ export async function ask({
         model,
         max_tokens: maxTokens,
         betas: [MCP_BETA],
-        system: systemBlocks(system),
+        system: systemBlocks(system, defer),
         messages: history,
         mcp_servers: mcpServers,
-        tools: toolsFor(localTools, disabled),
+        tools: toolsFor(localTools, disabled, defer),
         cache_control: { type: "ephemeral" },
         ...depth,
       });
@@ -516,7 +560,7 @@ export async function ask({
           if (event.type === "content_block_start") {
             const block = event.content_block;
             const type = block?.type;
-            if (typeof type !== "string") return;
+            if (typeof type !== "string" || isSearch(block)) return;
             if (type.endsWith("tool_use")) {
               if (block.id) idByIndex.set(event.index, block.id);
               onEvent?.({ kind: "tool_start", name: block.name || "unknown" });

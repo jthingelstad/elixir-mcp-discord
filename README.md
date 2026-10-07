@@ -594,7 +594,9 @@ changed to an unpriced one later fails before the call, not after it.
   cache window pays the cache-read rate for most of what it sends, and a
   third, automatic breakpoint follows the conversation so a turn's later
   rounds read its earlier ones from cache (the review's transcript above
-  all); the footer
+  all). `TOOL_SEARCH_LANES` (off by default) keeps the server's tool schemas
+  out of a lane's prompt until the model searches for the ones it needs;
+  the footer
   shows the share (`cache 89%`), because a cache that quietly stops hitting
   is a cost regression nobody would otherwise see. Every ask carries a footer
   with the tools called and what the turn cost; `npm run routines` shows this month
