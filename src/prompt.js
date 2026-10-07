@@ -105,15 +105,19 @@ shape. live_fetch is the raw catch-all for an endpoint none of them cover and
 should be rare; it refuses /players/{tag}/battlelog (use battles_query with
 live: true instead).`;
 
+const SKIP_WHY = `Then one short line saying why: the room already has it, too minor for the
+clan, a record too thin to say anything true. The line goes to your
+operator's record and never to a channel.`;
+
 const SKIP = `SILENCE IS A VALID OUTPUT. If there is genuinely nothing worth posting, reply
-with SKIP on a line by itself and nothing else. A quiet day is allowed to be
-quiet, and a channel that manufactures content on one teaches people to mute
-it. Do not pad.`;
+with SKIP on a line by itself. ${SKIP_WHY} A quiet day is allowed to be quiet,
+and a channel that manufactures content on one teaches people to mute it. Do
+not pad.`;
 
 const SKIP_WITH_TOOL = `SILENCE IS A VALID OUTPUT. If there is genuinely nothing worth posting, make
-no post_message call and reply with SKIP on a line by itself. A quiet day is
-allowed to be quiet, and a channel that manufactures content on one teaches
-people to mute it. Do not pad.`;
+no post_message call and reply with SKIP on a line by itself. ${SKIP_WHY} A
+quiet day is allowed to be quiet, and a channel that manufactures content on
+one teaches people to mute it. Do not pad.`;
 
 /**
  * HOW MUCH TO SAY used to be a prompt lean here (VOICES, a silence line in
@@ -469,21 +473,4 @@ export function userMessageFor(routine, { events, recent, withTool = false, now 
   }
   if (withTool) parts.push(deliverLine(routine));
   return parts.join("\n\n");
-}
-
-/**
- * Did the model decline to post?
- *
- * Anchoring on the start of the response was wrong: told to "reply with
- * exactly SKIP", the model sometimes explains its reasoning first and puts
- * SKIP on its own line at the end. That parses as a normal answer, and the
- * channel gets "period.kind is training, not a war day" as though it were the
- * post. Accept SKIP as any line of its own.
- */
-export function isSkip(text) {
-  const lines = (text || "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  return lines.length === 0 || lines.some((line) => /^SKIP[.!]?$/i.test(line));
 }

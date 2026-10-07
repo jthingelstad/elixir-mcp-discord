@@ -95,6 +95,12 @@ yes to all six decisions the same day. What changed:
 - **`schedule` is the exception.** `meta-report` is the one shipped
   calendar routine; the DM still creates them ("remind the clan Friday").
 - **The regulators.** SKIP stays, narrower ("the room already knows").
+  **Since 2026-10-07 a SKIP says why, in one line** (Jamie's yes). The
+  rule said "SKIP and nothing else", so a return after eight quiet days
+  skipped without a word looked the same as one the model never weighed,
+  and the turn renderer dropped the reasons some turns gave anyway. The
+  reason is ledger-only (`skipReason`, src/skip.js; the review and `why`
+  show it), and an upper-case `SKIP: reason` on one line counts as a skip.
   `recall` is dropped from every shipped file (a ledger moment is emitted
   once; the field stays for operators). The nudge stays (a model
   mechanic). **The silence line and the VOICE block are gone from the
