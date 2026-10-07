@@ -330,6 +330,12 @@ test("a review reads the window, records proposals with diffs, and moves the cur
   assert.equal(review.turnsRead, 2);
   assert.equal(review.proposals.length, 2);
   assert.equal(review.proposals[0].next, undefined, "the planned file is not persisted");
+  assert.deepEqual(
+    review.usage,
+    { input: 1000, cacheRead: 0, cacheWrite: 0, output: 200 },
+    "what the review cost, in tokens",
+  );
+  assert.equal(review.rounds, 2);
   assert.equal(state.get("reviewedThrough"), outcome.window.until);
 
   // The next review starts after this one's window.

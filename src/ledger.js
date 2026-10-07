@@ -262,7 +262,18 @@ export function retractionEntry({ turnId, by, deleted, reason = null }) {
   };
 }
 
-export function reviewEntry({ reviewId, trigger, window, turnsRead, proposals, report, usd, model }) {
+export function reviewEntry({
+  reviewId,
+  trigger,
+  window,
+  turnsRead,
+  proposals,
+  report,
+  usd,
+  model,
+  usage = null,
+  rounds = null,
+}) {
   return {
     kind: "review",
     v: RECORD_VERSION,
@@ -276,6 +287,11 @@ export function reviewEntry({ reviewId, trigger, window, turnsRead, proposals, r
     report: String(report ?? "").slice(0, 8000),
     usd,
     model,
+    // The tokens behind `usd`, and how many rounds the loop took: the review
+    // is the most expensive turn this bot makes, and until 2026-10-07 what a
+    // round cost had to be estimated.
+    usage,
+    rounds,
   };
 }
 
