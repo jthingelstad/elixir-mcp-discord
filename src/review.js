@@ -503,6 +503,8 @@ export async function runReview({
     report,
     usd: result.usd,
     model: result.model,
+    usage: result.usage,
+    rounds: result.rounds,
   });
   record.flagged = rendered.flagged;
   record.omitted = rendered.omitted;

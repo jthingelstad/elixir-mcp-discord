@@ -60,4 +60,5 @@ simulated and rejected: it saves $0.60 a month on POAP KINGS and costs Ship It!
 and Elixir Kings about $2 each, because their turns are hours apart. The
 review lane's ~180K-token transcript was billed uncached on every
 propose_change round; the automatic breakpoint makes round two onward a cache
-read.
+read. The review's ledger entry now carries `usage` and `rounds` as well, so
+the next cost question about it is answered from the ledger, not estimated.
