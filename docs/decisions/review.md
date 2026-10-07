@@ -18,6 +18,15 @@ design is there. The short version:
   `report_mechanics` (code — the DM carries a pasteable issue, or since
   2026-10-05 a File issue button; see below) or an
   `elixir_send_feedback` filing (the hub).
+- **Since 2026-10-07 each brief is in the window once.** `renderWindow`
+  prints every distinct brief at the top and each turn names the one it
+  ran with (`brief B2, quoted once above`). Every editor turn used to quote
+  the same ~5,400-character brief: POAP KINGS's 10-05 review read 227
+  turns and left 174 out for length, so it graded about a quarter of its
+  week. A normal week there (42 turns, 09-28..10-05) goes from 356K to
+  160K characters with none omitted. The two-week 10-05 window still omits
+  150, because 139 of its turns were the provider-400 loop shown in full;
+  the backoff of 2026-10-05 keeps that loop from recurring.
 - **Humans outrank the rubric.** The signals that flag a turn: 👎/👍 with
   notes, an `intervention` (another member speaking in the answer thread,
   or the asker pushing back — `looksLikeCorrection` in `src/ask.js`), a
