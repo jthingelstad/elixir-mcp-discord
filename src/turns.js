@@ -59,7 +59,12 @@ function quote(text) {
     .join("\n");
 }
 
-export function renderTurn(turn, { full = false } = {}) {
+/**
+ * `briefRef` names a brief printed once elsewhere (the review's window,
+ * src/review.js renderWindow): the turn says which one it ran with instead
+ * of quoting the same five thousand characters again.
+ */
+export function renderTurn(turn, { full = false, briefRef = null } = {}) {
   const out = [];
   const when = turn.at.replace("T", " ").slice(0, 16) + "Z";
   const lane = turn.lane === "ask" ? "ask" : turn.trigger;
@@ -81,9 +86,13 @@ export function renderTurn(turn, { full = false } = {}) {
     out.push("");
     out.push(quote(input.question));
   } else {
-    out.push(`**Brief** (${turn.routine}):`);
-    out.push("");
-    out.push(quote(input.brief));
+    if (briefRef) {
+      out.push(`**Brief** (${turn.routine}): ${briefRef}, quoted once above.`);
+    } else {
+      out.push(`**Brief** (${turn.routine}):`);
+      out.push("");
+      out.push(quote(input.brief));
+    }
     if (input.events) {
       const text = typeof input.events === "string" ? input.events : JSON.stringify(input.events, null, 1);
       out.push("");

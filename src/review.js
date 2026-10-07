@@ -122,28 +122,68 @@ function afterwards(t) {
   return lines.length ? `\nHUMAN AND SWEEP SIGNALS:\n${lines.map((l) => `- ${l}`).join("\n")}\n` : "";
 }
 
-/** Transcripts for the model: flagged turns first and in full, the rest compact, inside a char budget. */
+const briefOf = (t) => (t.input?.kind !== "message" && t.input?.brief) || null;
+
+function briefBlock({ label, routine }, brief) {
+  const quoted = String(brief)
+    .split("\n")
+    .map((line) => `> ${line}`)
+    .join("\n");
+  return `### ${label} (${routine})\n\n${quoted}`;
+}
+
+/**
+ * Transcripts for the model: flagged turns first and in full, the rest
+ * compact, inside a char budget.
+ *
+ * Each distinct brief is printed ONCE, at the top, and every turn names the
+ * one it ran with (since 2026-10-07). Every editor turn used to quote the
+ * same ~5,400-character brief: over POAP KINGS's 09-21..10-05 window that
+ * was 1.14M of 2.56M characters across six distinct briefs, and the
+ * 10-05 review left out 174 of its 227 turns for length.
+ */
 export function renderWindow(turns, { budgetChars = WINDOW_CHARS } = {}) {
+  // Labelled oldest first, so B1 is the brief the window started on.
+  const briefs = new Map();
+  for (const t of [...turns].sort((a, b) => (a.at > b.at ? 1 : -1))) {
+    const brief = briefOf(t);
+    if (brief && !briefs.has(brief)) briefs.set(brief, { label: `brief B${briefs.size + 1}`, routine: t.routine });
+  }
   const ordered = [...turns].sort((a, b) => (b.at > a.at ? 1 : -1));
   const flagged = ordered.filter(isFlagged);
   const plain = ordered.filter((t) => !isFlagged(t));
   const parts = [];
+  const shownBriefs = new Set();
   let used = 0;
   let omitted = 0;
   const push = (t, full) => {
-    let text = renderTurn(t, { full });
-    if (full && text.length > FULL_TURN_CHARS) text = renderTurn(t, { full: false });
+    const brief = briefOf(t);
+    const ref = brief ? briefs.get(brief) : null;
+    let text = renderTurn(t, { full, briefRef: ref?.label });
+    if (full && text.length > FULL_TURN_CHARS) text = renderTurn(t, { full: false, briefRef: ref?.label });
     text += afterwards(t);
-    if (used + text.length > budgetChars) {
+    const extra = ref && !shownBriefs.has(brief) ? briefBlock(ref, brief).length : 0;
+    if (used + text.length + extra > budgetChars) {
       omitted += 1;
       return;
     }
+    if (extra) shownBriefs.add(brief);
     parts.push(text);
-    used += text.length;
+    used += text.length + extra;
   };
   for (const t of flagged) push(t, true);
   for (const t of plain) push(t, false);
-  return { text: parts.join("\n\n---\n\n"), shown: parts.length, flagged: flagged.length, omitted };
+  const head = [...briefs].filter(([brief]) => shownBriefs.has(brief)).map(([brief, ref]) => briefBlock(ref, brief));
+  const preamble = head.length
+    ? [`### The briefs\n\nEach turn below names the brief it ran with; the text is here once.`, ...head]
+    : [];
+  return {
+    text: [...preamble, ...parts].join("\n\n---\n\n"),
+    shown: parts.length,
+    flagged: flagged.length,
+    omitted,
+    briefs: head.length,
+  };
 }
 
 function describePrevious(previous) {

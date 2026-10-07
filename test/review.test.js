@@ -237,6 +237,33 @@ test("flagged turns come first and in full; plain turns are compact", () => {
   assert.match(rendered.text, /👎 — "wrong week"/);
 });
 
+test("each brief is printed once and every turn names the one it ran with", () => {
+  const ran = (turnId, at, brief) => ({
+    ...turn({ turnId }),
+    routine: "editor",
+    at,
+    input: { kind: "events", brief, events: { timeline: [] } },
+    reactions: [],
+    filed: [],
+    findings: [],
+    interventions: [],
+  });
+  const old = "Decide what is worth a post.\nOne post is the usual outcome.";
+  const edited = "Decide what is worth a post.\nSay why when you skip.";
+  const rendered = renderWindow([
+    ran("aaaa0001", "2026-10-01T00:00:00Z", old),
+    ran("bbbb0002", "2026-10-02T00:00:00Z", old),
+    ran("cccc0003", "2026-10-03T00:00:00Z", edited),
+  ]);
+  assert.equal(rendered.shown, 3);
+  assert.equal(rendered.briefs, 2, "two distinct briefs, each once");
+  assert.equal(rendered.text.split("> One post is the usual outcome.").length - 1, 1);
+  assert.match(rendered.text, /### brief B1 \(editor\)/, "the oldest is B1");
+  assert.match(rendered.text, /turn `aaaa0001`[\s\S]*?\*\*Brief\*\* \(editor\): brief B1, quoted once above\./);
+  assert.match(rendered.text, /turn `cccc0003`[\s\S]*?\*\*Brief\*\* \(editor\): brief B2/);
+  assert.ok(rendered.text.indexOf("### The briefs") < rendered.text.indexOf("turn `cccc0003`"), "briefs come first");
+});
+
 // --------------------------------------------------------- runReview
 
 /** A fake model that calls the local tools the way the API would, then reports. */

@@ -253,7 +253,8 @@ saying "no" — and DMs you at most three **proposed edits** to the files
 under `agent/`, each a diff with Apply / Skip buttons. Apply writes the file
 (a copy is kept under `agent/.history/`) and the change is live, because
 prompts hot-load. The next review opens by checking whether the last one's
-edits actually helped.
+edits actually helped. A routine's brief is shown to it once, not once per
+turn, so a busy week fits whole.
 
 Accepted edits are the bot's memory. `agent/memory.md` collects how to do
 this job here — which tool answers what, what your clan calls things; the
