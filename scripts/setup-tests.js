@@ -30,7 +30,12 @@ process.env.CHANNEL_PULSE ||= "3";
 process.env.ANTHROPIC_API_KEY ||= "sk-ant-test";
 process.env.STATE_PATH ||= path.join(os.tmpdir(), `elixir-mcp-discord-test-${process.pid}.json`);
 // The turn ledger too: a test turn must not land in a live instance's record.
-process.env.LEDGER_DIR ||= path.join(os.tmpdir(), `elixir-mcp-discord-test-${process.pid}-turns`);
+// One directory per process, with the ledger INSIDE it: the prompt store is
+// the ledger's sibling (src/ledger.js PROMPTS_DIR), and a ledger at the top
+// of the temp directory put every test file's prompts in one shared
+// $TMPDIR/prompts, which parallel files deleted under each other (ENOTEMPTY,
+// 2026-10-07).
+process.env.LEDGER_DIR ||= path.join(os.tmpdir(), `elixir-mcp-discord-test-${process.pid}`, "turns");
 
 // NO NETWORK, enforced (since 2026-09-25). A test that reached a real
 // service used to pass anyway — the friction sweep in the runner called
