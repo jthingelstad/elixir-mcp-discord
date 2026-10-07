@@ -68,7 +68,7 @@ test("Administrator and ownership short-circuit to everything", () => {
 });
 
 test("a REST channel can be judged by the same rule as the boot check", () => {
-  const needs = requirementsFor([{ trigger: "message", channel: "ask" }], { feedbackChannel: null })[0].needs;
+  const needs = requirementsFor([{ trigger: "message", channel: "ask" }])[0].needs;
   const raw = { id: "c", name: "ask", guild_id: "g", type: 0, permission_overwrites: [] };
   const perms = computePermissions({ guild, roles, member, channel: raw, botId: "b" });
   const problem = inspectChannel({ name: "ask", needs, channel: channelLike(raw, perms), botId: "b", guildId: "g" });

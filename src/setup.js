@@ -494,14 +494,12 @@ note("later, from the DM: reschedule, edit, add or remove any of them — no res
 // --- 7. Channels ------------------------------------------------------------------
 
 heading("Channels");
-const requirements = requirementsFor(routines, { feedbackChannel: values.FEEDBACK_CHANNEL || null });
+const requirements = requirementsFor(routines);
 // The ask channel is the one binding that stays explicit, whether or not a
 // message routine exists yet: it is where members will speak, and the DM
 // introduction offers the ask routine first.
 if (!requirements.some((r) => r.name === "ask"))
-  requirements.unshift(
-    requirementsFor([{ trigger: "message", channel: "ask", disabled: false }], { feedbackChannel: null })[0],
-  );
+  requirements.unshift(requirementsFor([{ trigger: "message", channel: "ask", disabled: false }])[0]);
 if (!inspected?.guild) {
   note("skipped: the bot is not in the server yet, so nothing can be checked.");
   if (values.DISCORD_APP_ID && values.DISCORD_GUILD_ID)

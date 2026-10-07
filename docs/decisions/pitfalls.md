@@ -368,7 +368,8 @@ one could hold it. Live after each instance restarts on the new code.
   KINGS, 2026-10-06), under "Elixir MCP answered feedback this agent
   filed", quoting "Asked: You have been handed a batch of timeline
   items…": praise for a routine quoted the routine's brief as the
-  question, and every reply was posted to `FEEDBACK_CHANNEL`. Since
-  2026-10-07 a routine's praise quotes the post (`praiseMessage`), and a
-  reply to `category: "praise"` goes to the operator's DM only
-  (`answerBelongsInChannel`). Replies to friction still post publicly.
+  question, and every reply was posted to the feedback channel. Since
+  2026-10-07 a routine's praise quotes the post (`praiseMessage`), and
+  every reply goes to the operator's DM only (Jamie, the same day:
+  `deliverFeedbackResponses`); `FEEDBACK_CHANNEL` is gone, and an
+  instance that still sets it is ignored.

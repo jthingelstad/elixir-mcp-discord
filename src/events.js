@@ -30,7 +30,7 @@ import { callTool } from "./mcp.js";
 import { config, instanceDir } from "./config.js";
 import { runRoutine } from "./run.js";
 import { markFeedbackShown, newFeedbackResponses } from "./feedback.js";
-import { directory, postable, resolveById } from "./directory.js";
+import { directory, postable } from "./directory.js";
 import { log } from "./log.js";
 import { notify } from "./notify.js";
 import * as state from "./state.js";
@@ -455,25 +455,18 @@ export function shouldReadFeedback({ seeded, pending }) {
 }
 
 /**
- * Whether an answer goes to the channel as well as the operator's DM.
+ * Elixir's replies to feedback this agent filed go to the operator's DM, and
+ * only there (Jamie, 2026-10-07).
  *
- * Praise is filed from a 👍, and Elixir's reply to it is a thank-you: news to
- * the operator, noise to the clan. Two of them landed in POAP KINGS' updates
- * channel on 2026-10-06, between member news, and read as nonsense there.
+ * They used to be posted into a member channel too, on the theory that a
+ * member watching a complaint get answered sells the product. In practice
+ * the agent files almost everything itself, and on 2026-10-06 two
+ * thank-yous for 👍 praise landed in POAP KINGS' updates channel between
+ * member news, quoting the editor's brief. The operator is the one who can
+ * act on an answer ("pass the segment", "that ships next week"), and
+ * `feedback` in the DM lists them all.
  */
-export function answerBelongsInChannel(item) {
-  return item.category !== "praise";
-}
-
-/**
- * Maintainer replies to feedback this agent filed, posted back into a channel.
- *
- * Closing this loop in public is half the point of running the channels at
- * all: a member watching their complaint get answered is the strongest
- * argument for the product there is. Replies to praise are the exception
- * (answerBelongsInChannel): they go to the operator only.
- */
-export async function postFeedbackResponses(channel, { seedOnly = false } = {}) {
+export async function deliverFeedbackResponses({ seedOnly = false } = {}) {
   for (const item of await newFeedbackResponses({ seedOnly })) {
     const shipped = item.shippedIn ? ` (shipped in ${item.shippedIn})` : "";
     const text = [
@@ -482,14 +475,9 @@ export async function postFeedbackResponses(channel, { seedOnly = false } = {}) 
       "",
       item.response.slice(0, 1200),
     ].join("\n");
-    const target = answerBelongsInChannel(item) ? channel : null;
-    if (target) await target.send(text);
-    // The operator is the one who can act on an answer ("pass the segment",
-    // "that ships next week"), so it is also a DM — whether or not a channel
-    // is bound.
     await notify("Elixir answered", text, { fingerprint: `feedback_response:${item.id}` });
     markFeedbackShown(item.id);
-    log.info("feedback_response_posted", { id: item.id, channel: target ? target.id : "dm only" });
+    log.info("feedback_response_delivered", { id: item.id });
   }
 }
 
@@ -503,13 +491,6 @@ export function startEventLoop(routinesFn, resolveChannel) {
 
   const run = async () => {
     const routines = routinesFn();
-    // Maintainer replies are posted by the runner, not the model, so they
-    // need a fixed place: FEEDBACK_CHANNEL, else the first event routine
-    // that binds one, else the first channel in the directory.
-    const feedbackName = config.feedbackChannel || routines.find((r) => r.channel)?.channel || null;
-    const feedbackChannel = feedbackName
-      ? await resolveChannel(feedbackName)
-      : await resolveById(postable(directory())[0]?.id);
 
     // The feed polls run first: their envelopes say whether the maintainer
     // has answered anything, so the feedback read below is a decision rather
@@ -531,11 +512,10 @@ export function startEventLoop(routinesFn, resolveChannel) {
     }
 
     // First run marks the whole feedback history as already shown. An empty
-    // ledger meeting a year of answered feedback is a channel full of old
-    // news, which is a worse first impression than silence.
+    // ledger meeting a year of answered feedback is a DM full of old news.
     if (shouldReadFeedback({ seeded, pending })) {
       if (seeded && pending) log.info("feedback_responses_pending", { pending });
-      await postFeedbackResponses(feedbackChannel, { seedOnly: !seeded }).catch((error) =>
+      await deliverFeedbackResponses({ seedOnly: !seeded }).catch((error) =>
         log.warn("feedback_post_failed", { error: error.message }),
       );
     }

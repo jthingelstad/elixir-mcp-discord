@@ -12,7 +12,6 @@ import {
   relevant,
   noteworthy,
   shouldReadFeedback,
-  answerBelongsInChannel,
   partition,
   releaseDue,
   subscribedKinds,
@@ -407,10 +406,4 @@ test("a dry run hands the model the items the way the live lane does: its kinds,
   );
   assert.equal(pending.events.timeline[0].subject_name, "late");
   assert.equal(state.cursorFor(editor.key), "2026-09-25T10:55:00.000Z", "the cursor is untouched");
-});
-
-test("Elixir's reply to praise reaches the operator, never a member channel", () => {
-  assert.equal(answerBelongsInChannel({ category: "praise" }), false);
-  assert.equal(answerBelongsInChannel({ category: "bug" }), true);
-  assert.equal(answerBelongsInChannel({ category: null }), true, "an older server without category keeps the old path");
 });

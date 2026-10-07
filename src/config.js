@@ -387,9 +387,6 @@ export const config = {
   },
   // Logical channel name for maintainer replies to filed feedback. Unset falls
   // back to the first event routine's channel.
-  get feedbackChannel() {
-    return optional("FEEDBACK_CHANNEL", "") || null;
-  },
   // How many post_message calls one turn may make. One event can fairly be
   // two posts (a welcome for members, a note for leaders); it is never five.
   get maxPostsPerTurn() {

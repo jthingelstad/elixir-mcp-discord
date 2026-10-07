@@ -38,7 +38,7 @@ export const EVERY_PERMISSION = { ...BASE, ...THREADS };
  * Which logical channels to check and what each needs, from the routines.
  * `{ name, needs }` per channel, threads only where a message routine listens.
  */
-export function requirementsFor(routines, { feedbackChannel = config.feedbackChannel } = {}) {
+export function requirementsFor(routines) {
   const needs = new Map();
   for (const routine of routines) {
     if (routine.disabled || !routine.channel) continue;
@@ -46,7 +46,6 @@ export function requirementsFor(routines, { feedbackChannel = config.feedbackCha
     if (routine.trigger === "message") Object.assign(entry, THREADS);
     needs.set(routine.channel, entry);
   }
-  if (feedbackChannel && !needs.has(feedbackChannel)) needs.set(feedbackChannel, { ...BASE });
   return [...needs].map(([name, flags]) => ({ name, needs: flags }));
 }
 

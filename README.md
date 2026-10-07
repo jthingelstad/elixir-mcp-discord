@@ -445,9 +445,8 @@ record of what the agent *wanted* to do and could not.
 not just the ask lane — files through it two ways: inline, while the agent
 still has the context that made the gap obvious, and via a post-turn sweep when
 a tool errored or an answer conceded a limit and nothing was filed. Maintainer
-replies are posted back into the channel. Members watching their complaint get
-answered is the point. A reply to praise goes to the operator's DM only:
-it is a thank-you, and the clan's channel is no place for it.
+replies come back to the operator's DM, never a member channel: the
+operator is the one who can act on them, and `feedback` in the DM lists them.
 
 Readers take part too: a 👎 on any post or answer sends the turn back for
 one reflection and at most one filing (reply to the message with what was
