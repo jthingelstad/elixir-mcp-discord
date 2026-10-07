@@ -22,6 +22,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { readTurns, readReviews, PROMPTS_DIR } from "./ledger.js";
+import { skipReason } from "./skip.js";
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(`--${name}`);
@@ -131,7 +132,12 @@ export function renderTurn(turn, { full = false } = {}) {
   out.push("");
   const output = turn.output || {};
   if (output.error) out.push(`**FAILED:** ${output.error}`);
-  if (output.skipped) out.push("_SKIP — nothing posted_");
+  if (output.skipped) {
+    // The reason is the turn's own word on why it stayed quiet, and the
+    // review needs it to tell a judgement from a miss.
+    const why = skipReason(output.text);
+    out.push(why ? `_SKIP — nothing posted._ Why: ${why}` : "_SKIP — nothing posted_");
+  }
   if (output.posts?.length) {
     for (const p of output.posts) {
       out.push(`**#${p.channelName}** (${p.messageIds?.length ?? 0} message(s))`);

@@ -15,7 +15,8 @@
 import { ask, spendBlock, cacheShare } from "./claude.js";
 import { laneFor } from "./budget.js";
 import { detectFriction, sweepFriction, looksUngrounded } from "./feedback.js";
-import { systemFor, userMessageFor, isSkip, notDelivered, outOfRoom, draftTarget } from "./prompt.js";
+import { systemFor, userMessageFor, notDelivered, outOfRoom, draftTarget } from "./prompt.js";
+import { isSkip } from "./skip.js";
 import { post, recentPosts, replyUnder } from "./post.js";
 import { renderTrace, errorFooter, UNGROUNDED_FOOTER } from "./trace.js";
 import { directory, resolveById } from "./directory.js";

@@ -456,7 +456,8 @@ member started it, and one turn takes at most three.
 ### Silence is a valid output
 
 Any routine with `may_skip: true` may answer `SKIP`, which posts nothing and
-still marks the run done. A channel that manufactures content on a quiet day
+still marks the run done. A SKIP carries one line saying why; it stays in the
+turn ledger for the review and `why`, and never reaches a channel. A channel that manufactures content on a quiet day
 teaches people to mute it. Routines that may *not* skip post what they said, so
 a prompt bug is visible rather than looking like a quiet week. A turn that is
 cut off at its `max_tokens` ceiling is not a SKIP: it is asked once more with

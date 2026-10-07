@@ -118,7 +118,7 @@ test("a skipped turn and a failed turn are recorded too", async () => {
   );
   await runRoutine(routine, {
     channel: fakeChannel(),
-    askFn: async () => result({ text: "SKIP", turnId: "skip0001" }),
+    askFn: async () => result({ text: "SKIP\nThe room already has it.", turnId: "skip0001" }),
   });
   await runRoutine(routine, {
     channel: fakeChannel(),
@@ -140,6 +140,11 @@ test("a skipped turn and a failed turn are recorded too", async () => {
       ["skip0001", true, null],
       ["fail0001", false, "overloaded"],
     ],
+  );
+  assert.match(
+    renderTurn(turns[0]),
+    /_SKIP — nothing posted\._ Why: The room already has it\./,
+    "the review reads the why",
   );
 });
 

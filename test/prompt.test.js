@@ -7,7 +7,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { test } from "node:test";
-import { systemFor, userMessageFor, isSkip, readIdentity, MECHANICS } from "../src/prompt.js";
+import { systemFor, userMessageFor, readIdentity, MECHANICS } from "../src/prompt.js";
+import { isSkip, skipReason } from "../src/skip.js";
 import { parseRoutine } from "../src/routines.js";
 
 const routine = (fields, body = "Do the thing.") =>
@@ -140,6 +141,23 @@ test("SKIP is recognised even when the model explains itself first", () => {
   assert.ok(isSkip('period.kind is "training", not a war day.\n\nSKIP'));
   assert.ok(!isSkip("**War decks** — 9 untouched, 4 partial."));
   assert.ok(!isSkip("Nobody should skip their war decks today."));
+});
+
+test("a skip carries its reason, on the next line or the same one, and the reason is read back without the SKIP", () => {
+  assert.ok(isSkip("SKIP\nThe room already has the arena move."));
+  assert.ok(isSkip("SKIP: the room already has it"));
+  assert.ok(isSkip("SKIP — too minor for the clan"));
+  assert.ok(!isSkip("Skip: your war decks are due in four hours."), "a lower-case skip leading a line is a post");
+  assert.equal(skipReason("SKIP\nThe room already has the arena move."), "The room already has the arena move.");
+  assert.equal(skipReason("A losing record is no standout.\n\nSKIP"), "A losing record is no standout.");
+  assert.equal(skipReason("SKIP: the room already has it"), "the room already has it");
+  assert.equal(skipReason("SKIP"), "");
+});
+
+test("the skip rule asks for one line of why, kept out of the channel", () => {
+  const may = routine({ trigger: "schedule", channel: "pulse", at: "01:00", may_skip: "true" });
+  assert.match(systemFor(may, { identity: null }), /SKIP on a line by itself\. Then one short line saying why/);
+  assert.match(systemFor(may, { identity: null }), /never to a channel/);
 });
 
 /**
