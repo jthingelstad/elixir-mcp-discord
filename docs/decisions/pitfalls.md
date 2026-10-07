@@ -119,6 +119,10 @@
   first. Keep the system block a stable prefix — the asker's id rides in the
   user turn for exactly this reason — and keep `cache_control` on the
   `mcp_toolset`; the trace footer's `cache N%` is how you notice it broke.
+  **Since 2026-10-07 a third, automatic one** (top-level `cache_control` on
+  the request): it lands on the last block and moves with each round, so a
+  multi-round turn reads its earlier rounds from cache. The API allows four
+  breakpoints; a test counts them.
 - **Tool errors carry a code.** `readResponse` (src/claude.js) keeps `error.code` (from
   the contract's closed set) beside the message, and `detectFriction` decides
   on it: `no_subject` (ask who is asking) and `quota_exceeded` (the ceiling

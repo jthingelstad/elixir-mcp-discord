@@ -88,6 +88,13 @@ const mcpServers = [
  * cache-read rate for the bulk of what it sends. The usage block says how
  * much was actually served from cache; the trace footer shows it, because a
  * cache that silently stopped hitting is a cost regression nobody would see.
+ *
+ * A third, automatic one (top-level `cache_control`) since 2026-10-07: it
+ * sits on the last block of the request and moves with the conversation,
+ * so round two of a turn reads round one's messages from cache instead of
+ * paying for them again. The review is what it is for — its ~180K-token
+ * transcript is the user turn, re-sent on every propose_change round — and
+ * any routine that runs a local tool (post_message) gets it too.
  */
 /** The server's tools, with the writes this kind of turn may not use
  *  switched off (src/tools.js). Stable per kind of turn, so the cache
@@ -492,6 +499,7 @@ export async function ask({
         messages: history,
         mcp_servers: mcpServers,
         tools: toolsFor(localTools, disabled),
+        cache_control: { type: "ephemeral" },
         ...depth,
       });
 

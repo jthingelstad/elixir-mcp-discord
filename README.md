@@ -591,7 +591,10 @@ changed to an unpriced one later fails before the call, not after it.
 - **Times are yours.** `TIMEZONE` decides what `at: 22:00` means, DST included.
 - **Cost.** Roughly $0.03–0.15 per post. The tool surface and the system
   block are cache breakpoints, so a turn that follows another within the
-  cache window pays the cache-read rate for most of what it sends; the footer
+  cache window pays the cache-read rate for most of what it sends, and a
+  third, automatic breakpoint follows the conversation so a turn's later
+  rounds read its earlier ones from cache (the review's transcript above
+  all); the footer
   shows the share (`cache 89%`), because a cache that quietly stops hitting
   is a cost regression nobody would otherwise see. Every ask carries a footer
   with the tools called and what the turn cost; `npm run routines` shows this month

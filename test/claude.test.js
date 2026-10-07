@@ -255,3 +255,15 @@ test("a switched-off tool the API hands back to run is refused on the direct pat
   assert.equal(result.is_error, true);
   assert.match(result.content, /not available in this turn/);
 });
+
+test("three cache breakpoints: the toolset, the system block, and the automatic one that follows the conversation", async () => {
+  const done = { content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage };
+  const { stream, requests } = playing([done]);
+  await ask({ system: "s", messages: [{ role: "user", content: "go" }], stream, catalogFn: CATALOG });
+  const [request] = requests;
+  assert.deepEqual(request.cache_control, { type: "ephemeral" }, "round two reads round one's messages from cache");
+  assert.ok(request.tools.find((t) => t.type === "mcp_toolset").cache_control);
+  assert.ok(request.system.at(-1).cache_control);
+  const marks = 1 + [...request.tools, ...request.system].filter((b) => b.cache_control).length;
+  assert.ok(marks <= 4, "the API allows four");
+});
