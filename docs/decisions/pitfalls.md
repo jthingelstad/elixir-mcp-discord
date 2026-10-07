@@ -364,3 +364,11 @@ one could hold it. Live after each instance restarts on the new code.
   partial send is now the post, with a `post cut short` notice.
 - **`/routines` read a clock routine as "on message"** and a wake/carry
   editor as "timeline: everything", days as numbers; it names them now.
+- **Elixir's thank-you for a 👍 landed in the updates channel** (POAP
+  KINGS, 2026-10-06), under "Elixir MCP answered feedback this agent
+  filed", quoting "Asked: You have been handed a batch of timeline
+  items…": praise for a routine quoted the routine's brief as the
+  question, and every reply was posted to `FEEDBACK_CHANNEL`. Since
+  2026-10-07 a routine's praise quotes the post (`praiseMessage`), and a
+  reply to `category: "praise"` goes to the operator's DM only
+  (`answerBelongsInChannel`). Replies to friction still post publicly.

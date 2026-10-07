@@ -125,14 +125,33 @@ ${CLASSIFY_RULES}`;
   return summary.slice(0, 200);
 }
 
+/**
+ * What a 👍 tells Elixir. A member's question is what was asked; a routine
+ * had no asker, and its `question` is the routine's whole brief, so the praise
+ * quotes the post instead. Quoting the brief sent Elixir "Asked: You have
+ * been handed a batch of timeline items…" for a post about a clan member, and
+ * that text came back into the clan's channel with the answer (2026-10-06).
+ */
+export function praiseMessage(turn) {
+  const tools = tallyCalls(turn.called) || "none";
+  const quoted =
+    turn.lane === "routines"
+      ? turn.answer
+        ? `Posted: ${turn.answer.slice(0, 300)}`
+        : ""
+      : turn.question
+        ? `Asked: ${turn.question.slice(0, 300)}`
+        : "";
+  const what = turn.lane === "routines" ? "post" : "answer";
+  return `A reader marked this ${what} as good (routine "${turn.routine}"). ${quoted} Tools: ${tools}. Worth protecting from regression.`;
+}
+
 /** The 👍 path: praise, filed directly, no model. Returns true when filed. */
 export async function filePraise({ turn }) {
   const args = {
     category: "praise",
     context: tallyCalls(turn.called) || turn.routine,
-    message: `A reader marked this answer as good (routine "${turn.routine}"). ${
-      turn.question ? `Asked: ${turn.question.slice(0, 300)}` : ""
-    } Tools: ${tallyCalls(turn.called) || "none"}. Worth protecting from regression.`,
+    message: praiseMessage(turn),
   };
   if (turn.requestIds?.[0]) args.request_id = turn.requestIds[0];
   const result = await callTool("elixir_send_feedback", args);

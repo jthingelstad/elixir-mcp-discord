@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
-import { handleReaction } from "../src/reactions.js";
+import { handleReaction, praiseMessage } from "../src/reactions.js";
 import * as state from "../src/state.js";
 
 const TURN = {
@@ -137,4 +137,19 @@ test("turn records prune oldest first and drop their message ids", () => {
   assert.equal(state.turnForMessage("msg5").turnId, "k5");
   assert.equal(state.turnForMessage("msg204").turnId, "k204");
   fs.rmSync(process.env.STATE_PATH, { force: true });
+});
+
+test("praise for a routine post quotes the post, never the routine's brief", () => {
+  const routineTurn = {
+    ...TURN,
+    routine: "editor",
+    lane: "routines",
+    question: "You have been handed a batch of timeline items from Elixir MCP",
+    answer: "Alfablack reached 4,000 career wins.",
+  };
+  const message = praiseMessage(routineTurn);
+  assert.match(message, /marked this post as good/);
+  assert.match(message, /Posted: Alfablack reached 4,000 career wins\./);
+  assert.doesNotMatch(message, /handed a batch/);
+  assert.match(praiseMessage(TURN), /marked this answer as good[\s\S]*Asked: how am I playing\?/);
 });

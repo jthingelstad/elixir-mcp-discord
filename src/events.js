@@ -455,11 +455,23 @@ export function shouldReadFeedback({ seeded, pending }) {
 }
 
 /**
+ * Whether an answer goes to the channel as well as the operator's DM.
+ *
+ * Praise is filed from a 👍, and Elixir's reply to it is a thank-you: news to
+ * the operator, noise to the clan. Two of them landed in POAP KINGS' updates
+ * channel on 2026-10-06, between member news, and read as nonsense there.
+ */
+export function answerBelongsInChannel(item) {
+  return item.category !== "praise";
+}
+
+/**
  * Maintainer replies to feedback this agent filed, posted back into a channel.
  *
  * Closing this loop in public is half the point of running the channels at
  * all: a member watching their complaint get answered is the strongest
- * argument for the product there is.
+ * argument for the product there is. Replies to praise are the exception
+ * (answerBelongsInChannel): they go to the operator only.
  */
 export async function postFeedbackResponses(channel, { seedOnly = false } = {}) {
   for (const item of await newFeedbackResponses({ seedOnly })) {
@@ -470,13 +482,14 @@ export async function postFeedbackResponses(channel, { seedOnly = false } = {}) 
       "",
       item.response.slice(0, 1200),
     ].join("\n");
-    if (channel) await channel.send(text);
+    const target = answerBelongsInChannel(item) ? channel : null;
+    if (target) await target.send(text);
     // The operator is the one who can act on an answer ("pass the segment",
     // "that ships next week"), so it is also a DM — whether or not a channel
     // is bound.
     await notify("Elixir answered", text, { fingerprint: `feedback_response:${item.id}` });
     markFeedbackShown(item.id);
-    log.info("feedback_response_posted", { id: item.id, channel: channel ? channel.id : "dm only" });
+    log.info("feedback_response_posted", { id: item.id, channel: target ? target.id : "dm only" });
   }
 }
 
