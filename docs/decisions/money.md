@@ -50,3 +50,14 @@ over the catalog in `src/pricing.js`. An unpriced model throws at boot and on
 call: the old hardcoded table returned $0 for anything it did not know, which
 turned every budget into a number that could not be reached. A budget that
 cannot be enforced is worse than none, because it looks like it works.
+
+**Since 2026-10-07 the later rounds of a turn are cached too** (top-level
+`cache_control`, src/claude.js). Measured from the three ledgers, 14 Sep to
+6 Oct: about 71% of the Sonnet spend was cache WRITES of the ~35K-token
+system-and-tools prefix, because editor turns are mostly more than five
+minutes apart and the cache has gone cold by the next one. A one-hour TTL was
+simulated and rejected: it saves $0.60 a month on POAP KINGS and costs Ship It!
+and Elixir Kings about $2 each, because their turns are hours apart. The
+review lane's ~180K-token transcript was billed uncached on every
+propose_change round; the automatic breakpoint makes round two onward a cache
+read.
