@@ -147,10 +147,6 @@ export const SETTINGS = {
     check: (v) => (/^[a-z0-9_-]*$/.test(v) ? null : "letters, digits, - and _ only"),
     restart: true,
   },
-  FEEDBACK_CHANNEL: {
-    about: "logical channel name for Elixir's replies to filed feedback",
-    check: (v) => (/^[a-z0-9-]*$/.test(v) ? null : "a channel's logical name (lowercase, hyphens)"),
-  },
   ADMIN_USER_IDS: {
     about: "who may DM the bot and use its commands; comma-separated Discord user ids",
     check: (v) =>

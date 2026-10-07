@@ -437,7 +437,6 @@ export async function newFeedbackResponses({ seedOnly = false } = {}) {
       response,
       shippedIn: item.shipped_in ?? item.shippedIn ?? null,
       status: item.status ?? null,
-      category: item.category ?? null,
     });
   }
 

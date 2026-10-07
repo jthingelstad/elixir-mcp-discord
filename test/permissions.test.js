@@ -39,14 +39,11 @@ function fakeChannel({ id = "2", guildId = GUILD, perms = ALL, name = "general",
 }
 
 test("an ask channel needs thread permissions, a report channel does not", () => {
-  const reqs = requirementsFor(
-    [
-      { key: "ask", trigger: "message", channel: "ask" },
-      { key: "feed", trigger: "events", channel: "pulse" },
-      { key: "off", trigger: "schedule", channel: "nowhere", disabled: true },
-    ],
-    { feedbackChannel: null },
-  );
+  const reqs = requirementsFor([
+    { key: "ask", trigger: "message", channel: "ask" },
+    { key: "feed", trigger: "events", channel: "pulse" },
+    { key: "off", trigger: "schedule", channel: "nowhere", disabled: true },
+  ]);
   const byName = Object.fromEntries(reqs.map((r) => [r.name, Object.keys(r.needs)]));
   assert.deepEqual(Object.keys(byName).sort(), ["ask", "pulse"], "a disabled routine's channel is not checked");
   assert.ok(byName.ask.includes("CreatePublicThreads"));
@@ -56,7 +53,7 @@ test("an ask channel needs thread permissions, a report channel does not", () =>
 });
 
 test("inspectChannel names the exact permissions missing, and the guild mismatch", () => {
-  const needs = requirementsFor([{ trigger: "message", channel: "ask" }], { feedbackChannel: null })[0].needs;
+  const needs = requirementsFor([{ trigger: "message", channel: "ask" }])[0].needs;
 
   assert.equal(inspectChannel({ name: "ask", needs, channel: fakeChannel(), botId: "b", guildId: GUILD }), null);
 
