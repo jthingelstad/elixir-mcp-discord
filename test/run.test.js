@@ -785,7 +785,7 @@ test("post() never sends more than Discord's 2,000 characters, whatever max_char
   assert.ok(channel.sent.every((m) => m.text.length <= 2000));
 });
 
-test("a replay runs on the past turn's recall and room, not today's", async () => {
+test("a replay runs on the past turn's recall, room and clock, not today's", async () => {
   const room = {
     name: "recent_channel_messages",
     description: "the room as it was",
@@ -798,7 +798,7 @@ test("a replay runs on the past turn's recall and room, not today's", async () =
     events: { timeline: [{ kind: "member_joined", text: "New joined", facts: {} }] },
     dryRun: true,
     entries,
-    replay: { recent: ["**Then** — what it had posted before."], room },
+    replay: { recent: ["**Then** — what it had posted before."], room, now: new Date("2026-10-01T15:00:00Z") },
     askFn: async (args) => {
       seen = args;
       return answer("SKIP\nThe room already has it.");
@@ -806,5 +806,6 @@ test("a replay runs on the past turn's recall and room, not today's", async () =
   });
   assert.equal(run.skipped, true);
   assert.match(seen.messages[0].content, /what it had posted before/);
+  assert.match(seen.messages[0].content, /\[now: \w+ 2026-10-01 /, "the prompt's clock is the turn's own");
   assert.ok(seen.localTools.includes(room), "the recorded room stands in for the live one");
 });
