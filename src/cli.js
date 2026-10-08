@@ -15,7 +15,7 @@
  * A dry run costs a real model call and real tokens; it just does not touch
  * Discord. `--post` connects, posts, and exits.
  *
- *   npm run replay -- editor <ledger.jsonl>... [--model <id>] [--limit <n>]
+ *   npm run replay -- editor <ledger.jsonl>... [--model <id>] [--limit <n>] [--pause <s>]
  *
  * `replay` runs a routine again on batches it was really handed: each turn
  * record in the files, oldest first, with that turn's own recall and what
@@ -24,6 +24,10 @@
  * against the record before it posts anything (Haiku 5.5, 2026-10-08). Run
  * it against a scratch instance directory: a dry run still counts its
  * spend, and the live bot's state file is not a second process's to write.
+ * The prompt's clock is the past turn's, so old news is judged as it was
+ * then; the Elixir tools still answer as of now. Every turn spends the
+ * owner's hourly hub requests, shared with the live bots: `--pause` spaces
+ * the turns so a long replay cannot starve them (it did on 2026-10-08).
  */
 
 import { config, provenance } from "./config.js";
@@ -42,7 +46,7 @@ import { lastOccurrence, periodKey } from "./schedule.js";
 
 const [command, ...rest] = process.argv.slice(2);
 const flags = new Set(rest.filter((arg) => arg.startsWith("--")));
-const VALUED = new Set(["--model", "--limit"]);
+const VALUED = new Set(["--model", "--limit", "--pause"]);
 const valueOf = (flag) => {
   const at = rest.indexOf(flag);
   return at >= 0 ? rest[at + 1] : undefined;
@@ -301,7 +305,7 @@ async function replayRoutine() {
   const { routines } = loadRoutines();
   const found = routines.find((entry) => entry.key === key);
   if (!found || files.length === 0) {
-    console.error("usage: cli.js replay <routine> <ledger.jsonl>... [--model <id>] [--limit <n>]");
+    console.error("usage: cli.js replay <routine> <ledger.jsonl>... [--model <id>] [--limit <n>] [--pause <s>]");
     process.exit(1);
   }
   const routine = valueOf("--model") ? { ...found, model: valueOf("--model") } : found;
@@ -317,12 +321,14 @@ async function replayRoutine() {
   const entries = await loadDirectory(routines, routine);
   console.error(`# replaying ${Math.min(limit, turns.length)} of ${turns.length} ${key} turns on ${routine.model}`);
 
-  for (const turn of turns.slice(-limit)) {
+  const pauseMs = (Number(valueOf("--pause")) || 0) * 1000;
+  for (const [index, turn] of turns.slice(-limit).entries()) {
+    if (index > 0 && pauseMs > 0) await new Promise((resolve) => setTimeout(resolve, pauseMs));
     const run = await runRoutine(routine, {
       events: turn.input.events,
       dryRun: true,
       entries,
-      replay: { recent: turn.input.recent ?? [], room: recordedRoom(turn) },
+      replay: { recent: turn.input.recent ?? [], room: recordedRoom(turn), now: new Date(turn.at) },
     });
     const posts = (turn.output?.posts || []).map((p) => ({ channel: `#${p.channelName}`, text: p.text }));
     const trace = run.result?.trace || [];
@@ -356,7 +362,7 @@ else if (command === "replay") await replayRoutine();
 else if (command === "review") await reviewDry();
 else {
   console.error(
-    "usage: cli.js list | try <routine> [--post] [--show-prompt] | replay <routine> <ledger.jsonl>... [--model <id>] [--limit <n>] | review",
+    "usage: cli.js list | try <routine> [--post] [--show-prompt] | replay <routine> <ledger.jsonl>... [--model <id>] [--limit <n>] [--pause <s>] | review",
   );
   process.exit(1);
 }

@@ -337,8 +337,8 @@ export function turnRecord({ routine, lane, question, text, result, channelId })
  * @param {Array}  options.entries   the channel directory (default: live)
  * @param {object} options.overrides { identity, memory } text to run on instead of the files
  * @param {string} options.lane      which budget pays (default: the routine's own)
- * @param {object} options.replay    { recent, room }: a past turn's own recall and
- *   room tool, so a replay sees what that turn saw (src/cli.js `replay`)
+ * @param {object} options.replay    { recent, room, now }: a past turn's own recall,
+ *   room tool and clock, so a replay sees what that turn saw (src/cli.js `replay`)
  */
 export async function runRoutine(routine, options = {}) {
   if (isStopping()) return { ok: false, error: "shutting_down" };
@@ -455,7 +455,9 @@ async function runRoutineNow(
   }
   let result = await askFn({
     system,
-    messages: [{ role: "user", content: userMessageFor(routine, { events, recent, withTool }) }],
+    messages: [
+      { role: "user", content: userMessageFor(routine, { events, recent, withTool, now: replay?.now ?? new Date() }) },
+    ],
     maxTokens: routine.maxTokens,
     model: routine.model,
     effort: routine.effort,
