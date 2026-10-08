@@ -43,10 +43,13 @@ test("a 👍 files praise once, with the answer's request id", async () => {
   state.rememberTurn("t1", TURN, ["m1", "m2"]);
   const filed = [];
   const { posted, reaction } = fakeReaction("👍", "m2");
-  const first = await handleReaction(reaction, reader, { praiseFn: async ({ turn }) => (filed.push(turn), true) });
+  const first = await handleReaction(reaction, reader, {
+    praiseFn: async ({ turn, reader: who }) => (filed.push({ ...turn, who }), true),
+  });
   assert.equal(first.filed, true);
   assert.equal(filed[0].requestIds[0], "dc5ec8de-b919");
   assert.equal(filed[0].turnId, "t1", "footer message resolves to the same turn as the post");
+  assert.equal(filed[0].who, "discord:77", "the reader rides as on_behalf_of");
   assert.match(posted[0], /Filed as praise/);
   const again = await handleReaction(reaction, reader, { praiseFn: async () => (filed.push("again"), true) });
   assert.equal(again, null, "second 👍 on the same turn does nothing");
@@ -60,10 +63,14 @@ test("a 👎 sweeps with the reader's reply in hand and files", async () => {
   const { posted, reaction } = fakeReaction("👎", "m3", { replies: [reply] });
   let seen = null;
   const result = await handleReaction(reaction, reader, {
-    sweepFn: async ({ turn, note }) => ((seen = { turn, note }), "Filed: window defaulted to last month"),
+    sweepFn: async ({ turn, note, reader: who }) => (
+      (seen = { turn, note, who }),
+      "Filed: window defaulted to last month"
+    ),
   });
   assert.equal(result.filed, true);
   assert.equal(seen.note, "that's last month's number");
+  assert.equal(seen.who, "discord:77");
   assert.equal(seen.turn.question, "how am I playing?");
   assert.match(posted[0], /Filed with Elixir MCP: Filed: window/);
 });

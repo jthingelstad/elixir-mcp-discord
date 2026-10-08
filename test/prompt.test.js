@@ -92,6 +92,8 @@ test("only a message routine is told how to work out who is asking", () => {
   assert.match(ask, /clans_roster/);
   assert.match(ask, /whole name and one match/);
   assert.match(ask, /partial or similar name is never a link/i);
+  // A member's feedback, relayed, says whose it was (Elixir 11.3.0).
+  assert.match(ask, /elixir_send_feedback[\s\S]*as on_behalf_of/);
   assert.doesNotMatch(
     systemFor(routine({ trigger: "schedule", channel: "pulse", at: "01:00" }), { identity: null }),
     /on_behalf_of/,
