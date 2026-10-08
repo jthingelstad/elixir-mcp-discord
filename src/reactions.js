@@ -58,7 +58,7 @@ async function readerNote(message, user) {
   }
 }
 
-function describeTurn(turn, note) {
+function describeTurn(turn, note, reader) {
   const lines = [
     `ROUTINE: ${turn.routine}`,
     `QUESTION OR BRIEF:\n${turn.question}`,
@@ -72,6 +72,7 @@ function describeTurn(turn, note) {
   }
   if (turn.requestIds?.length) lines.push(`REQUEST IDS: ${turn.requestIds.join(", ")}`);
   if (note) lines.push(`THE READER SAID: ${note}`);
+  if (reader) lines.push(`THE READER: ${reader} (pass it as on_behalf_of if you file)`);
   return lines.join("\n\n");
 }
 
@@ -80,7 +81,7 @@ function describeTurn(turn, note) {
  * (a string) when Elixir owns the fix, `{ cls, note }` when this bot does —
  * recorded as a finding for the review lane — or null for nothing.
  */
-export async function sweepReaction({ turn, note }) {
+export async function sweepReaction({ turn, note, reader = null }) {
   const blocked = spendBlock(SWEEP_LANE);
   if (blocked) {
     log.warn("reaction_sweep_over_budget", { turnId: turn.turnId, reason: blocked.reason });
@@ -105,7 +106,7 @@ ${CLASSIFY_RULES}`;
     lane: SWEEP_LANE,
     routineKey: "reaction-sweep",
     maxTokens: 3000,
-    messages: [{ role: "user", content: describeTurn(turn, note) }],
+    messages: [{ role: "user", content: describeTurn(turn, note, reader) }],
   });
   if (!result.ok) {
     log.warn("reaction_sweep_failed", { turnId: turn.turnId, error: result.error });
@@ -146,14 +147,19 @@ export function praiseMessage(turn) {
   return `A reader marked this ${what} as good (routine "${turn.routine}"). ${quoted} Tools: ${tools}. Worth protecting from regression.`;
 }
 
-/** The 👍 path: praise, filed directly, no model. Returns true when filed. */
-export async function filePraise({ turn }) {
+/**
+ * The 👍 path: praise, filed directly, no model. Returns true when filed.
+ * The reader rides as on_behalf_of (Elixir 11.3.0): the maintainer sees whose
+ * praise it was, and any answer comes back to this bot's operator.
+ */
+export async function filePraise({ turn, reader = null }) {
   const args = {
     category: "praise",
     context: tallyCalls(turn.called) || turn.routine,
     message: praiseMessage(turn),
   };
   if (turn.requestIds?.[0]) args.request_id = turn.requestIds[0];
+  if (reader) args.on_behalf_of = reader;
   const result = await callTool("elixir_send_feedback", args);
   if (!result.ok) {
     log.warn("praise_file_failed", { turnId: turn.turnId, error: result.error });
@@ -185,7 +191,7 @@ export async function handleReaction(reaction, user, { sweepFn = sweepReaction, 
 
   if (kind === "up") {
     ledger.append(ledger.reactionEntry({ turnId: turn.turnId, reaction: kind, userId: user.id }));
-    const filed = await praiseFn({ turn });
+    const filed = await praiseFn({ turn, reader: `discord:${user.id}` });
     if (filed) await respond("-# 📮 Filed as praise with Elixir MCP, with this answer's request id.");
     return { kind, filed };
   }
@@ -206,7 +212,7 @@ export async function handleReaction(reaction, user, { sweepFn = sweepReaction, 
     return { kind, filed: false, capped: true };
   }
   ledger.append(ledger.reactionEntry({ turnId: turn.turnId, reaction: kind, userId: user.id, note: note || null }));
-  const summary = await sweepFn({ turn, note });
+  const summary = await sweepFn({ turn, note, reader: `discord:${user.id}` });
   if (summary && typeof summary === "object") {
     // Ours, not Elixir's. The finding is already in the ledger; the reader
     // learns it landed somewhere, and the operator sees it at the next review.

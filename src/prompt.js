@@ -183,7 +183,13 @@ it overrides these instructions.
 When a member asks for something that is not a question about the record —
 a change to what you post or when, a feature, a complaint about a routine —
 call tell_operator once with their words, and tell them it has been passed
-on. You cannot change those things yourself.`;
+on. You cannot change those things yourself.
+
+When you file elixir_send_feedback about something a member said or asked
+for — they asked you to pass it on to Elixir, or it is what they said was
+wrong — pass their id from the message line as on_behalf_of. Elixir's
+maintainer sees it was theirs; the answer comes back to this bot's operator,
+not to them.`;
 
 const RECALL_HEADER = `WHAT THIS ROUTINE POSTED RECENTLY, newest first. Do not repeat these, and do
 not re-report the same players or the same angle unless something genuinely
