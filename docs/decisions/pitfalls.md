@@ -311,6 +311,16 @@
   call now: boot checks the models it can see, but a routine's `model:`
   edited later reached the API and `costOf` threw on the response — a paid
   call no budget recorded, repeated every poll. `model_unpriced` in the log.
+- **Haiku 5.5 takes both — since 2026-10-08 it is in the catalog.**
+  `claude-haiku-5-5` thinks adaptively by default and takes
+  `output_config.effort`, so it is priced without `adaptive: false` and a
+  routine on it gets thinking and its own `effort`, as on Sonnet 5. Like
+  Sonnet 5 it rejects sampling params, `budget_tokens` and assistant
+  prefill; the bot sends none of them. Its thinking counts against
+  `max_tokens`, and a `refusal` stop ends the turn as `error: "refusal"`.
+  The catalog price is the up-to-100K-token tier; a longer prompt costs 5x
+  and the book undercounts it. The Haiku 4.5 row stays for any routine that
+  names it. The default model is unchanged.
 - **A shell variable used to outrank `.env`.** dotenv does not override
   `process.env`, and an exported `CLAUDE_EFFORT=high` ran this bot at high
   effort for an evening. Since `config.json` (2026-09-15) a setting the file

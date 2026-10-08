@@ -526,8 +526,10 @@ max_tokens: 2000
 
 `effort` (and the adaptive thinking it tunes) is sent only to models that
 take them. `claude-haiku-4-5` takes neither — either is an API error there —
-so a Haiku routine runs without thinking and its `effort` is ignored; mark
-another such model `"adaptive": false` in `models.json`.
+so a Haiku 4.5 routine runs without thinking and its `effort` is ignored; mark
+another such model `"adaptive": false` in `models.json`. `claude-haiku-5-5`
+(since 2026-10-08) takes both, like Sonnet 5, at a tenth of Haiku 4.5's price;
+its thinking counts against `max_tokens` too.
 
 `max_tokens` (default 6000) caps thinking plus text plus tool arguments for
 one turn; at `effort: high` a routine that makes several large reads can
