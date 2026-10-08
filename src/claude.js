@@ -121,15 +121,22 @@ function mcpToolset(disabled = [], defer = false) {
  * billed as input on that turn. It changes how the model finds tools, so it
  * goes lane by lane and is judged from the ledger (`search` steps, cost per
  * post) — there is no eval that could clear it in advance.
+ *
+ * REGEX, not BM25 (since 2026-10-08). The briefs name tools exactly, and the
+ * model searches by those names: BM25 asked for "players_summary player
+ * stats" and loaded players_profile, players_collection and three others,
+ * never players_summary — an underscored name is one term that no tool's
+ * `elixir-mcp_players_summary` shares. A regex is `re.search` over names
+ * and descriptions, so a named tool is always found.
  */
 const SEARCH = "tool_search_tool";
 const searchTool = {
-  type: "tool_search_tool_bm25_20251119",
-  name: "tool_search_tool_bm25",
+  type: "tool_search_tool_regex_20251119",
+  name: "tool_search_tool_regex",
   cache_control: { type: "ephemeral" },
 };
 const SEARCH_NOTE =
-  "Elixir's tools load on demand. Search for what you need in plain words (what it reads, about whom), then call one of the tools the search loads. A search loads only a few tools; search again with other words if none of them fits.";
+  "Elixir's tools load on demand. Search with a short regular expression over tool names and descriptions: a tool's exact name when your instructions give one, otherwise a key word (war, deck, trophies). Then call one of the tools the search loads. A search loads at most five tools; search again with another pattern if none of them fits.";
 
 function isSearch(block) {
   return block.type.startsWith(SEARCH) || (block.type === "server_tool_use" && String(block.name).startsWith(SEARCH));
@@ -339,7 +346,7 @@ function readResponse(activity, content, timings) {
       // never in `called` (the friction sweep counts those), and its
       // result is echoed back untouched, never answered with a tool_result.
       if (block.type === "server_tool_use") {
-        const step = { kind: "search", query: String(block.input?.query ?? ""), id: block.id };
+        const step = { kind: "search", query: String(block.input?.pattern ?? block.input?.query ?? ""), id: block.id };
         if (block.id) activity.byId.set(block.id, step);
         activity.trace.push(step);
       } else {
