@@ -337,6 +337,8 @@ export function turnRecord({ routine, lane, question, text, result, channelId })
  * @param {Array}  options.entries   the channel directory (default: live)
  * @param {object} options.overrides { identity, memory } text to run on instead of the files
  * @param {string} options.lane      which budget pays (default: the routine's own)
+ * @param {object} options.replay    { recent, room }: a past turn's own recall and
+ *   room tool, so a replay sees what that turn saw (src/cli.js `replay`)
  */
 export async function runRoutine(routine, options = {}) {
   if (isStopping()) return { ok: false, error: "shutting_down" };
@@ -380,6 +382,7 @@ async function runRoutineNow(
     // policy read. A direct rehearsal checks the same gate without a ledger.
     beforeInvoke = null,
     gate = policyGate,
+    replay = null,
   } = {},
 ) {
   const blocked = spendBlock(lane);
@@ -405,8 +408,8 @@ async function runRoutineNow(
   // What THIS routine said last, from its own ledger. The channel is the
   // fallback for a routine that has never posted since the ledger existed —
   // and a rough one: in a shared channel it hands back other routines' posts.
-  let recent = routine.recall ? state.recentOwnPosts(routine.key, routine.recall) : [];
-  if (recent.length === 0 && channel && routine.recall) {
+  let recent = replay ? (replay.recent ?? []) : routine.recall ? state.recentOwnPosts(routine.key, routine.recall) : [];
+  if (!replay && recent.length === 0 && channel && routine.recall) {
     recent = await recentPosts(channel, routine.recall);
   }
   // The directory the model sees. The ask lane never gets it (src/ask.js has
@@ -463,7 +466,7 @@ async function runRoutineNow(
     localTools: withTool
       ? [
           postTool({ routine, entries: directoryEntries, dryRun: dryRun || false, posts, resolve }),
-          roomTool({ entries: directoryEntries, resolve }),
+          replay?.room ?? roomTool({ entries: directoryEntries, resolve }),
         ]
       : [],
     nudge: withTool ? ({ text, truncated }) => deliveryNudge(routine, { text, posts, truncated }) : null,

@@ -33,3 +33,11 @@ that number right?" you need the tool's result body, and nothing kept it.
   read another instance's ledger. No `.env` is needed to read one —
   `ledger.js` resolves the instance directory itself rather than importing
   `config.js` for that reason.
+- **Since 2026-10-08 `npm run replay` runs a routine again on batches the
+  ledger recorded** (`src/cli.js`): each turn's own events, its recall
+  (`input.recent`), and what its room tool read then (a turn that never
+  looked gets a quiet room), as a dry run with `--model` to swap the
+  model. One JSON line per turn puts the original's post or skip beside the
+  replay's. Point it at a scratch instance directory: a dry run still
+  counts spend, and the live bot's `state.json` is not a second process's
+  to write. Built to judge Haiku 5.5 on the editor before it posts.

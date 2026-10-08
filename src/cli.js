@@ -14,6 +14,16 @@
  *
  * A dry run costs a real model call and real tokens; it just does not touch
  * Discord. `--post` connects, posts, and exits.
+ *
+ *   npm run replay -- editor <ledger.jsonl>... [--model <id>] [--limit <n>]
+ *
+ * `replay` runs a routine again on batches it was really handed: each turn
+ * record in the files, oldest first, with that turn's own recall and what
+ * its room tool read, as a dry run. One JSON line per turn on stdout, the
+ * original's decision beside the replay's. It is how a model is judged
+ * against the record before it posts anything (Haiku 5.5, 2026-10-08). Run
+ * it against a scratch instance directory: a dry run still counts its
+ * spend, and the live bot's state file is not a second process's to write.
  */
 
 import { config, provenance } from "./config.js";
@@ -21,16 +31,24 @@ import { initialize, describePrincipal } from "./mcp.js";
 import { loadRoutines } from "./routines.js";
 import * as budget from "./budget.js";
 import { rateFor, UnpricedModel } from "./pricing.js";
-import { runRoutine } from "./run.js";
+import { runRoutine, ROOM_TOOL } from "./run.js";
 import { systemFor, userMessageFor } from "./prompt.js";
 import { renderTrace } from "./trace.js";
+import { skipReason } from "./skip.js";
+import fs from "node:fs";
 import { eventsForDryRun } from "./events.js";
 import * as state from "./state.js";
 import { lastOccurrence, periodKey } from "./schedule.js";
 
 const [command, ...rest] = process.argv.slice(2);
 const flags = new Set(rest.filter((arg) => arg.startsWith("--")));
-const key = rest.find((arg) => !arg.startsWith("--"));
+const VALUED = new Set(["--model", "--limit"]);
+const valueOf = (flag) => {
+  const at = rest.indexOf(flag);
+  return at >= 0 ? rest[at + 1] : undefined;
+};
+const positional = rest.filter((arg, i) => !arg.startsWith("--") && !VALUED.has(rest[i - 1]));
+const key = positional[0];
 
 function budgetLines() {
   return budget.status().map((b) => {
@@ -92,30 +110,11 @@ function warnAboutShadowedConfig() {
   }
 }
 
-async function tryRoutine() {
-  warnAboutShadowedConfig();
-  const { routines } = loadRoutines();
-  const routine = routines.find((entry) => entry.key === key);
-  if (!routine) {
-    console.error(`No routine called "${key ?? ""}". Run \`npm run routines\` to see them.`);
-    process.exit(1);
-  }
-
-  // Refresh who we are connected as, so a dry run assembles the same prompt the
-  // service would. It is one HTTP call and it costs nothing.
-  const handshake = await initialize();
-  if (handshake.ok && handshake.principal) {
-    state.set({
-      principal: handshake.principal,
-      serverVersion: handshake.version,
-    });
-    console.error(`# connected as ${describePrincipal(handshake.principal)}`);
-  } else if (!handshake.ok) {
-    console.error(`# WARNING: initialize failed (${handshake.error}) — prompt may lack its subject`);
-  }
-
-  // The channel directory, over REST, so a dry run exercises the model's
-  // choice of channel exactly as the service would — and prints it.
+/**
+ * The channel directory, over REST, so a dry run exercises the model's
+ * choice of channel exactly as the service would — and prints it.
+ */
+async function loadDirectory(routines, routine) {
   let entries = [];
   if (routine.trigger !== "message" && process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_GUILD_ID) {
     try {
@@ -143,6 +142,33 @@ async function tryRoutine() {
       console.error(`# directory: unavailable (${error.message})`);
     }
   }
+
+  return entries;
+}
+
+async function tryRoutine() {
+  warnAboutShadowedConfig();
+  const { routines } = loadRoutines();
+  const routine = routines.find((entry) => entry.key === key);
+  if (!routine) {
+    console.error(`No routine called "${key ?? ""}". Run \`npm run routines\` to see them.`);
+    process.exit(1);
+  }
+
+  // Refresh who we are connected as, so a dry run assembles the same prompt the
+  // service would. It is one HTTP call and it costs nothing.
+  const handshake = await initialize();
+  if (handshake.ok && handshake.principal) {
+    state.set({
+      principal: handshake.principal,
+      serverVersion: handshake.version,
+    });
+    console.error(`# connected as ${describePrincipal(handshake.principal)}`);
+  } else if (!handshake.ok) {
+    console.error(`# WARNING: initialize failed (${handshake.error}) — prompt may lack its subject`);
+  }
+
+  const entries = await loadDirectory(routines, routine);
 
   let events = null;
   if (routine.trigger === "events") {
@@ -246,10 +272,91 @@ async function reviewDry() {
   );
 }
 
+/** What a ledger turn or a replay decided, in the same shape. */
+function decision({ posts, skipped, text }) {
+  return {
+    posted: posts.length > 0,
+    posts: posts.map((p) => ({ channel: p.channel, text: p.text })),
+    why: skipped ? skipReason(text) : null,
+  };
+}
+
+/** The room as the past turn read it, or quiet when it never looked. */
+function recordedRoom(turn) {
+  const read = (turn.trace || []).find((t) => t.kind === "tool" && t.name === "recent_channel_messages");
+  let body = { messages: [], note: "Quiet for two hours." };
+  if (read?.result) {
+    try {
+      body = JSON.parse(read.result);
+    } catch {
+      body = { as_read_then: read.result };
+    }
+  }
+  return { ...ROOM_TOOL, handler: async () => ({ ok: true, body }) };
+}
+
+async function replayRoutine() {
+  warnAboutShadowedConfig();
+  const files = positional.slice(1);
+  const { routines } = loadRoutines();
+  const found = routines.find((entry) => entry.key === key);
+  if (!found || files.length === 0) {
+    console.error("usage: cli.js replay <routine> <ledger.jsonl>... [--model <id>] [--limit <n>]");
+    process.exit(1);
+  }
+  const routine = valueOf("--model") ? { ...found, model: valueOf("--model") } : found;
+  rateFor(routine.model);
+  const turns = files
+    .flatMap((file) => fs.readFileSync(file, "utf8").split("\n").filter(Boolean))
+    .map((line) => JSON.parse(line))
+    .filter((r) => r.kind === "turn" && r.routine === key && r.input?.events)
+    .sort((a, b) => a.at.localeCompare(b.at));
+  const limit = Number(valueOf("--limit")) || turns.length;
+  const handshake = await initialize();
+  if (handshake.ok && handshake.principal) state.set({ principal: handshake.principal });
+  const entries = await loadDirectory(routines, routine);
+  console.error(`# replaying ${Math.min(limit, turns.length)} of ${turns.length} ${key} turns on ${routine.model}`);
+
+  for (const turn of turns.slice(-limit)) {
+    const run = await runRoutine(routine, {
+      events: turn.input.events,
+      dryRun: true,
+      entries,
+      replay: { recent: turn.input.recent ?? [], room: recordedRoom(turn) },
+    });
+    const posts = (turn.output?.posts || []).map((p) => ({ channel: `#${p.channelName}`, text: p.text }));
+    const trace = run.result?.trace || [];
+    console.log(
+      JSON.stringify({
+        turnId: turn.turnId,
+        at: turn.at,
+        kinds: (turn.input.events.timeline || []).map((i) => i.kind),
+        original: {
+          model: turn.model,
+          usd: turn.usd,
+          ...decision({ posts, skipped: turn.output?.skipped, text: turn.output?.text }),
+        },
+        replay: run.ok
+          ? {
+              model: routine.model,
+              usd: run.result.usd,
+              ...decision({ posts: run.posts || [], skipped: run.skipped, text: run.text }),
+              searches: trace.filter((t) => t.kind === "search").map((t) => ({ query: t.query, found: t.found })),
+              called: run.result.called,
+            }
+          : { model: routine.model, error: run.error },
+      }),
+    );
+  }
+}
+
 if (command === "list") listRoutines();
 else if (command === "try") await tryRoutine();
+else if (command === "replay") await replayRoutine();
 else if (command === "review") await reviewDry();
 else {
-  console.error("usage: cli.js list | try <routine> [--post] [--show-prompt] | review");
+  console.error(
+    "usage: cli.js list | try <routine> [--post] [--show-prompt] | replay <routine> <ledger.jsonl>... [--model <id>] [--limit <n>] | review",
+  );
   process.exit(1);
 }
