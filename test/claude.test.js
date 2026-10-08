@@ -304,8 +304,8 @@ test("a lane with tool search defers the toolset, keeps its switched-off writes,
   assert.deepEqual(toolset.default_config, { defer_loading: true });
   assert.equal(toolset.cache_control, undefined, "the API refuses cache_control on a deferred tool");
   assert.deepEqual(Object.keys(toolset.configs).sort(), ["elixir_identify", "elixir_track_clan"]);
-  const search = tools.find((t) => t.type === "tool_search_tool_bm25_20251119");
-  assert.equal(search.name, "tool_search_tool_bm25");
+  const search = tools.find((t) => t.type === "tool_search_tool_regex_20251119");
+  assert.equal(search.name, "tool_search_tool_regex");
   assert.ok(search.cache_control, "the search tool holds the tools breakpoint instead");
   assert.match(system[0].text, /^s\n\n.*load on demand/s, "the note rides the cached system block");
   assert.doesNotMatch(system[0].text, /players_|battles_|clans_/, "and names no tool");
@@ -315,8 +315,8 @@ test("a tool search is traced as a search, never counted as a call, and echoed b
   const search = {
     type: "server_tool_use",
     id: "srvtoolu_1",
-    name: "tool_search_tool_bm25",
-    input: { query: "war deck usage" },
+    name: "tool_search_tool_regex",
+    input: { pattern: "war_current" },
   };
   const found = {
     type: "tool_search_tool_result",
@@ -349,7 +349,7 @@ test("a tool search is traced as a search, never counted as a call, and echoed b
   );
   assert.deepEqual(out.called, ["battles_meta_decks", "post_message"], "the search is not a call");
   const step = out.trace.find((s) => s.kind === "search");
-  assert.equal(step.query, "war deck usage");
+  assert.equal(step.query, "war_current", "a regex search is traced by its pattern");
   assert.deepEqual(step.found, ["war_current"]);
   assert.deepEqual(requests[1].messages[1].content.slice(0, 2), [search, found], "echoed as the API sent it");
   const results = requests[1].messages[2].content;

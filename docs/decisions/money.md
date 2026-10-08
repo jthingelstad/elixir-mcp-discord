@@ -68,7 +68,7 @@ the next cost question about it is answered from the ledger, not estimated.
 prefix every turn sends, and an editor turn called one Elixir tool or none
 (221 of 328 turns made no call at all). Naming a lane defers the toolset
 (`default_config: { defer_loading: true }`, the lane's switched-off writes
-still apply) behind a BM25 tool search, and adds one sentence to the system
+still apply) behind a tool search, and adds one sentence to the system
 block saying tools load on demand — no tool names. The ceiling is roughly
 the editor's $24 a month falling toward $7, but it changes how the model
 finds tools and there is no eval to clear that in advance, so it is the
@@ -76,3 +76,11 @@ operator's call per lane, judged from the ledger: the `search` steps in a
 turn's trace (query and what loaded), cost per post, and the review. A
 search is never counted as a tool call, so the friction sweep's
 `many_calls` reads the same as before.
+
+**Since 2026-10-08 the search is regex, not BM25.** On its first day BM25
+missed by name: the editor searched "players_summary player stats", as the
+brief names the tool, and got five other tools, never `players_summary`.
+An underscored name is one BM25 term, and the toolset's own names carry the
+server prefix. The regex variant is `re.search` over names and descriptions,
+case-insensitive, so the system note now says to search by a tool's exact
+name when the instructions give one, and by a key word otherwise.
