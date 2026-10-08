@@ -205,6 +205,8 @@ export INSTANCE_DIR=~/.elixir-mcp-discord/myclan  # once per shell
 npm run try editor                          # run it now, print it, post nothing
 npm run try ask -- --show-prompt    # also print the assembled prompt
 npm run try editor -- --post                # actually post it
+npm run replay -- editor state/turns/2026-10-0*.jsonl --model claude-haiku-5-5
+                                            # re-run past batches, one JSON line each
 npm run probe                               # the key, the surface, the feed
 npm run routines                            # what will run, where, and this month's spend
 ```

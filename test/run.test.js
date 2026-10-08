@@ -784,3 +784,27 @@ test("post() never sends more than Discord's 2,000 characters, whatever max_char
   assert.equal(channel.sent.length, 2);
   assert.ok(channel.sent.every((m) => m.text.length <= 2000));
 });
+
+test("a replay runs on the past turn's recall and room, not today's", async () => {
+  const room = {
+    name: "recent_channel_messages",
+    description: "the room as it was",
+    input_schema: { type: "object" },
+    handler: async () => ({ ok: true, body: { messages: [] } }),
+  };
+  const entries = [{ id: "11", name: "news", topic: "", visibility: "everyone", threads: false, role: null }];
+  let seen;
+  const run = await runRoutine(routine({ trigger: "events", wake: "member_joined", may_skip: "true", recall: 3 }), {
+    events: { timeline: [{ kind: "member_joined", text: "New joined", facts: {} }] },
+    dryRun: true,
+    entries,
+    replay: { recent: ["**Then** — what it had posted before."], room },
+    askFn: async (args) => {
+      seen = args;
+      return answer("SKIP\nThe room already has it.");
+    },
+  });
+  assert.equal(run.skipped, true);
+  assert.match(seen.messages[0].content, /what it had posted before/);
+  assert.ok(seen.localTools.includes(room), "the recorded room stands in for the live one");
+});
