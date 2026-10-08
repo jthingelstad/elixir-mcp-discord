@@ -33,6 +33,13 @@ const CATALOG = {
   "claude-opus-4-6": { input: 5, output: 25 },
   "claude-sonnet-5": { input: 2, output: 10 },
   "claude-sonnet-4-6": { input: 3, output: 15 },
+  // Adaptive thinking (on by default) and effort, like the rest; no sampling
+  // params and no prefill, which this bot never sends. These are the prices
+  // for a prompt of up to 100K tokens. Past that the API charges $0.50 in /
+  // $2.50 out / $0.625 cache write / $0.05 cache read, and this book has one
+  // tier per model, so a turn over 100K is undercounted by 5x. It also counts
+  // about 30% more tokens than Haiku 4.5 for the same text. Since 2026-10-08.
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheWrite: 0.125, cacheRead: 0.01 },
   // No adaptive thinking and no effort parameter: both are a 400 here, so a
   // turn on this model sends neither (src/claude.js).
   "claude-haiku-4-5": { input: 1, output: 5, adaptive: false },

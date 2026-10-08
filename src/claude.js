@@ -526,7 +526,8 @@ export async function ask({
   const defer = config.toolSearchLanes.has(lane);
 
   // Thinking and effort only where the model takes them: on Haiku 4.5 either
-  // is a 400, so `model: claude-haiku-4-5` failed every turn.
+  // is a 400, so `model: claude-haiku-4-5` failed every turn. Haiku 5.5
+  // takes both.
   const depth = adaptive
     ? {
         // "omitted" is the default on Sonnet 5 and returns empty thinking

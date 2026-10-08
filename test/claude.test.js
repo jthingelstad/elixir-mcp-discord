@@ -204,6 +204,47 @@ test("a model without adaptive thinking is sent neither thinking nor effort; the
   assert.ok(sonnet.requests[0].output_config.effort);
 });
 
+test("Haiku 5.5 is priced, thinks adaptively at the routine's effort, and is sent no sampling params", async () => {
+  const done = {
+    content: [
+      { type: "thinking", thinking: "", signature: "sig" },
+      { type: "text", text: "ok" },
+    ],
+    stop_reason: "end_turn",
+    usage,
+  };
+  const haiku = playing([done]);
+  const out = await ask({
+    system: "s",
+    messages: [{ role: "user", content: "go" }],
+    model: "claude-haiku-5-5",
+    effort: "low",
+    stream: haiku.stream,
+    catalogFn: CATALOG,
+  });
+  assert.equal(out.ok, true);
+  assert.equal(out.text, "ok", "the text block, not the thinking block before it");
+  const request = haiku.requests[0];
+  assert.equal(request.model, "claude-haiku-5-5");
+  assert.equal(request.thinking.type, "adaptive");
+  assert.deepEqual(request.output_config, { effort: "low" });
+  for (const key of ["temperature", "top_p", "top_k"]) assert.equal(key in request, false, key);
+  assert.equal(request.messages.at(-1).role, "user", "no assistant prefill");
+  // 100 input + 50 output tokens at $0.10 / $0.50 per million.
+  assert.ok(Math.abs(out.usd - (100 * 0.1 + 50 * 0.5) / 1_000_000) < 1e-12);
+
+  const refused = playing([{ content: [], stop_reason: "refusal", usage }]);
+  const no = await ask({
+    system: "s",
+    messages: [{ role: "user", content: "go" }],
+    model: "claude-haiku-5-5",
+    stream: refused.stream,
+    catalogFn: CATALOG,
+  });
+  assert.equal(no.ok, false);
+  assert.equal(no.error, "refusal");
+});
+
 test("an unpriced model is refused before the call, not discovered on the bill", async () => {
   const { stream, requests } = playing([]);
   const out = await ask({
