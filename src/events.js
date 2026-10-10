@@ -32,6 +32,7 @@ import { runRoutine } from "./run.js";
 import { markFeedbackShown, newFeedbackResponses } from "./feedback.js";
 import { directory, postable } from "./directory.js";
 import { log } from "./log.js";
+import { instanceName } from "./ledger.js";
 import { notify } from "./notify.js";
 import * as state from "./state.js";
 
@@ -647,7 +648,10 @@ export function startEventLoop(routinesFn, resolveChannel, { now = () => Date.no
     if (!stopped) timer = setTimeout(() => void tick(), ms);
   };
 
-  schedule(staggerMs(path.basename(instanceDir), baseMs));
+  // The instance's name, not its directory's: in Docker every instance is
+  // mounted at /instance, and the first stagger (2026-10-10) put all three
+  // bots in the same second.
+  schedule(staggerMs(instanceName(), baseMs));
   return {
     stop() {
       stopped = true;
