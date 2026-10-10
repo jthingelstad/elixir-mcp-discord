@@ -25,7 +25,44 @@ const PACKAGE_VERSION = createRequire(import.meta.url)("../package.json").versio
 const TIMEOUT_MS = 20_000;
 let nextId = 0;
 
+/**
+ * ONE LINE PER CALL (2026-10-10). Every request this client makes is logged:
+ * `mcp_call` for a tool, `mcp_rpc` for the handshake and the catalog, with
+ * how long it took, the response's size and, for a tool, the hub's
+ * `meta.request_id` — the key of the hub's own audit row, so a line here and
+ * a row there are the same call. Before this only failures were logged, and
+ * the bot's share of the hub's traffic (864 polls on 2026-10-09) had to be
+ * read off the hub. Calls the model makes through the Claude API's connector
+ * never pass through here; the turn's ledger record names those.
+ */
 async function rpc(method, params, auth = null) {
+  const started = Date.now();
+  const result = await send(method, params, auth);
+  const fields = { ms: Date.now() - started, bytes: result.bytes, ok: result.ok };
+  if (!result.ok) fields.error = result.error;
+  if (method === "tools/call") {
+    const requestId = requestIdOf(result.body);
+    log.info("mcp_call", { tool: params?.name, ...fields, ...(requestId ? { request_id: requestId } : {}) });
+  } else {
+    log.info("mcp_rpc", { method, ...fields });
+  }
+  return result;
+}
+
+/** The hub's request id from a tool result: `meta.request_id` in the JSON
+ *  body, success or refusal. Null when the body is not JSON or has none. */
+export function requestIdOf(result) {
+  const text = result?.content?.[0]?.text;
+  if (typeof text !== "string" || !text.includes("request_id")) return null;
+  try {
+    const body = JSON.parse(text);
+    return body?.meta?.request_id ?? body?.error?.request_id ?? body?.request_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function send(method, params, auth) {
   const id = ++nextId;
   const url = auth?.url ?? config.mcp.url;
   const token = auth?.token ?? config.mcp.token;
@@ -49,16 +86,23 @@ async function rpc(method, params, auth = null) {
     return { ok: false, error: `http ${response.status}` };
   }
 
+  let raw;
   let envelope;
   try {
-    envelope = await response.json();
+    raw = await response.text();
+    envelope = JSON.parse(raw);
   } catch (error) {
-    return { ok: false, error: `malformed envelope: ${error.message}` };
+    return {
+      ok: false,
+      error: `malformed envelope: ${error.message}`,
+      bytes: raw === undefined ? undefined : Buffer.byteLength(raw),
+    };
   }
+  const bytes = Buffer.byteLength(raw);
   if (envelope.error) {
-    return { ok: false, error: `rpc ${envelope.error.code}: ${envelope.error.message}` };
+    return { ok: false, error: `rpc ${envelope.error.code}: ${envelope.error.message}`, bytes };
   }
-  return { ok: true, body: envelope.result };
+  return { ok: true, body: envelope.result, bytes };
 }
 
 /**

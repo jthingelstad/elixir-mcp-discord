@@ -24,14 +24,15 @@ test("the MCP transport reads the assigned context with no clan argument and unw
     calls.push(call);
     return {
       ok: true,
-      json: async () => ({
-        jsonrpc: "2.0",
-        id: call.id,
-        result: {
-          isError: fixture.isError,
-          content: [{ type: "text", text: JSON.stringify(fixture.response) }],
-        },
-      }),
+      text: async () =>
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: call.id,
+          result: {
+            isError: fixture.isError,
+            content: [{ type: "text", text: JSON.stringify(fixture.response) }],
+          },
+        }),
     };
   };
   try {
