@@ -330,6 +330,10 @@ export const config = {
   // daily allowance — which is fine for an unlimited agent and a bad default
   // for an example project. Read once: it is a timer.
   eventPollSeconds: num("EVENT_POLL_SECONDS", "1800"),
+  // The longest the feed waits once the clan has gone quiet (src/events.js,
+  // "THE POLL'S PACE"): an empty poll doubles the wait up to here, and the
+  // first item read puts it back to EVENT_POLL_SECONDS. Read once.
+  eventPollMaxSeconds: num("EVENT_POLL_MAX_SECONDS", "3600"),
 
   // MONTHLY BUDGETS, per lane, in dollars. Unset means unlimited — which is a
   // choice, not a default anybody should arrive at by accident, so the boot

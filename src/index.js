@@ -355,7 +355,8 @@ async function boot(ready) {
   const since = new Date(Date.now() - 14 * 24 * 3600000).toISOString().slice(0, 10);
   const seeded = state.seedPostTimes(ledger.readTurns({ since }));
   if (seeded) log.info("silence_clock_seeded", { channels: seeded, since });
-  timers.push(startEventLoop(() => routinesFor("events"), resolveChannel));
+  const eventLoop = startEventLoop(() => routinesFor("events"), resolveChannel);
+  stoppers.push(() => eventLoop.stop());
   timers.push(startScheduler(() => routinesFor("schedule"), resolveChannel));
   // After the scheduler: both seed the same run ledger, and the scheduler's
   // first seeding replaces it wholesale. The clock lane likewise.

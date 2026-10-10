@@ -306,10 +306,12 @@ export function failureHoldMs(n, { hard = false, pollMs = config.eventPollSecond
   return Math.min(FAILURE_HOLD_CAP_MS, pollMs * 2 ** (n - 1));
 }
 
-/** Polls one routine. Returns the envelope of the first `elixir_timeline`
- *  response it read (or null when it read none), so the tick can act on the
- *  hints without a call of its own. `call` and `run` are the transport and
- *  the turn, for tests. */
+/** Polls one routine. Returns `{ meta, items }`: the envelope of the first
+ *  `elixir_timeline` response it read, so the tick can act on the hints
+ *  without a call of its own, and how many timeline items that read held,
+ *  so the loop knows whether the clan is active. Null when it read nothing
+ *  (held, or the read failed). `call` and `run` are the transport and the
+ *  turn, for tests. */
 export async function pollRoutine(
   routine,
   channel,
@@ -328,7 +330,7 @@ export async function pollRoutine(
     if (seeded === null) return null;
     state.setCursor(routine.key, seeded.cursor);
     log.info("cursor_seeded", { routine: routine.key, cursor: seeded.cursor });
-    return seeded.meta;
+    return { meta: seeded.meta, items: 0 };
   }
 
   const result = await readWindow(
@@ -377,7 +379,7 @@ export async function pollRoutine(
     release = held.length + carry.length > 0 && releaseDue(silenceFor(routine));
     if (!release) {
       if (result.cursor) state.setCursor(routine.key, result.cursor);
-      return result.meta;
+      return { meta: result.meta, items: result.timeline.length };
     }
   }
   const items = oldestFirst([...held, ...wake, ...carry]);
@@ -421,7 +423,7 @@ export async function pollRoutine(
       });
     }
   }
-  return result.meta;
+  return { meta: result.meta, items: result.timeline.length };
 }
 
 /** The silence clock over the channels this routine could post in. */
@@ -482,11 +484,53 @@ export async function deliverFeedbackResponses({ seedOnly = false } = {}) {
 }
 
 /**
+ * THE POLL'S PACE (Jamie, 2026-10-10). Every poll is a metered call that
+ * builds the clan's whole entry, and on 2026-10-09 the three bots made 864
+ * of them in a day, 89% of the hub's MCP traffic, nearly all empty: two of
+ * the clans woke a turn once a day. So the pace follows the clan:
+ *
+ *   - while items are arriving, and for ACTIVE_POLLS polls after the last
+ *     one, the timeline is read every EVENT_POLL_SECONDS — a join still
+ *     posts within minutes of a busy stretch;
+ *   - after that each empty poll doubles the wait, up to
+ *     EVENT_POLL_MAX_SECONDS (an hour);
+ *   - the first poll that reads any item puts it straight back to the base.
+ *
+ * A read that failed or was held says nothing about the clan and keeps the
+ * pace it had. The worst case is a join in a long-quiet clan waiting up to
+ * the cap, which Jamie chose over polling an empty feed every five minutes.
+ */
+export const ACTIVE_POLLS = 6;
+
+export function nextPollMs({ baseMs, maxMs, sinceActivityMs, lastMs }) {
+  const ceiling = Math.max(baseMs, maxMs);
+  if (sinceActivityMs < ACTIVE_POLLS * baseMs) return baseMs;
+  return Math.min(ceiling, Math.max(baseMs, lastMs) * 2);
+}
+
+/** Where in the first interval this instance starts. Three bots rebuilt
+ *  together used to poll in the same second for as long as they ran; an
+ *  offset from the instance's name spreads them, and the same name always
+ *  lands in the same place. */
+export function staggerMs(name, baseMs) {
+  let hash = 0;
+  for (const ch of String(name)) hash = (hash * 31 + ch.codePointAt(0)) >>> 0;
+  return hash % Math.max(1, Math.floor(baseMs));
+}
+
+/** ±10%, so instances that started together drift apart rather than back
+ *  into step. */
+export function jittered(ms, random = Math.random) {
+  return Math.round(ms * (0.9 + 0.2 * random()));
+}
+
+/**
  * @param {Function} routinesFn  returns the current event routines (re-read
  *   every tick, so adding one is a file, not a restart)
  * @param {Function} resolveChannel  logical name -> Discord channel
+ * @returns {{ stop: Function }}
  */
-export function startEventLoop(routinesFn, resolveChannel) {
+export function startEventLoop(routinesFn, resolveChannel, { now = () => Date.now(), random = Math.random } = {}) {
   let seeded = state.get("cursors") && Object.keys(state.get("cursors")).length > 0;
 
   const run = async () => {
@@ -496,18 +540,23 @@ export function startEventLoop(routinesFn, resolveChannel) {
     // has answered anything, so the feedback read below is a decision rather
     // than a habit.
     let pending;
+    let read = false;
+    let items = 0;
     for (const routine of routines) {
       const channel = routine.channel ? await resolveChannel(routine.channel) : null;
       if (routine.channel && !channel) continue;
-      const meta = await pollRoutine(routine, channel).catch(async (error) => {
+      const polled = await pollRoutine(routine, channel).catch(async (error) => {
         log.error("events_routine_crashed", { routine: routine.key, error: error.message });
         await notify("feed routine crashed", `${routine.key}: ${error.message.slice(0, 300)}`, {
           fingerprint: `events_crashed:${routine.key}`,
         });
         return null;
       });
-      if (meta?.feedback_responses_pending !== undefined) {
-        pending = meta.feedback_responses_pending;
+      if (!polled) continue;
+      read = true;
+      items += polled.items;
+      if (polled.meta?.feedback_responses_pending !== undefined) {
+        pending = polled.meta.feedback_responses_pending;
       }
     }
 
@@ -520,26 +569,49 @@ export function startEventLoop(routinesFn, resolveChannel) {
       );
     }
     seeded = true;
+    return { read, items };
   };
 
-  // One poll at a time. A turn can outlast the interval (a busy window, a slow
+  // One poll at a time, by construction: the next is scheduled only when this
+  // one has finished. A turn can outlast the interval (a busy window, a slow
   // model), and the cursor moves only after it succeeds — so an overlapping
-  // tick read the same window from the same cursor and posted it twice.
-  let busy = false;
+  // poll read the same window from the same cursor and posted it twice.
+  const baseMs = config.eventPollSeconds * 1000;
+  const maxMs = config.eventPollMaxSeconds * 1000;
+  let lastActivity = now();
+  let paceMs = baseMs;
+  let timer = null;
+  let stopped = false;
+
   const tick = async () => {
-    if (busy) {
-      log.info("events_tick_skipped", { reason: "previous poll still running" });
-      return;
-    }
-    busy = true;
+    let outcome = null;
     try {
-      await run();
+      outcome = await run();
     } catch (error) {
       log.error("events_tick_failed", { error: error.message });
-    } finally {
-      busy = false;
     }
+    if (outcome?.items > 0) lastActivity = now();
+    if (outcome?.read) {
+      const next = nextPollMs({ baseMs, maxMs, sinceActivityMs: now() - lastActivity, lastMs: paceMs });
+      if (next !== paceMs) {
+        log.info("events_pace", {
+          seconds: Math.round(next / 1000),
+          quietMinutes: Math.round((now() - lastActivity) / 60000),
+        });
+      }
+      paceMs = next;
+    }
+    schedule(jittered(paceMs, random));
   };
-  void tick();
-  return setInterval(() => void tick(), config.eventPollSeconds * 1000);
+  const schedule = (ms) => {
+    if (!stopped) timer = setTimeout(() => void tick(), ms);
+  };
+
+  schedule(staggerMs(path.basename(instanceDir), baseMs));
+  return {
+    stop() {
+      stopped = true;
+      clearTimeout(timer);
+    },
+  };
 }

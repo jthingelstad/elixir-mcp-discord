@@ -92,6 +92,18 @@
   agent has no ceiling and wants joins posted within minutes sets
   `EVENT_POLL_SECONDS=300` explicitly; the shipped default is for everyone
   else.
+- **The feed poll slows down when the clan is quiet — since 2026-10-10.**
+  Three bots at 300 s made 864 `elixir_timeline` calls in a day, 89% of the
+  hub's MCP traffic, about 96% of them empty, and all three in the same
+  second. `EVENT_POLL_SECONDS` is now the pace while items are arriving and
+  for six polls after the last one; then each empty poll doubles the wait
+  up to `EVENT_POLL_MAX_SECONDS` (3600), and the first item read resets it
+  (`nextPollMs` in `src/events.js`). The first poll starts at an offset
+  hashed from the instance's name and every wait carries ±10% jitter, so
+  bots started together do not stay in step. The cost: a join in a clan
+  that has been quiet for hours can wait up to the cap. The loop is a
+  `setTimeout` chain, so a long turn delays the next poll instead of
+  overlapping it.
 - **The ask lane answers in a thread per question — since 2026-09-13.**
   History used to be channel-wide, so one member's question arrived with
   another's context and the model once answered "same as above" to the

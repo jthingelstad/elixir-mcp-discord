@@ -20,6 +20,10 @@ import {
   pollRoutine,
   eventsForDryRun,
   CARRY_RELEASE_HOURS,
+  ACTIVE_POLLS,
+  nextPollMs,
+  staggerMs,
+  jittered,
 } from "../src/events.js";
 import * as state from "../src/state.js";
 
@@ -406,4 +410,50 @@ test("a dry run hands the model the items the way the live lane does: its kinds,
   );
   assert.equal(pending.events.timeline[0].subject_name, "late");
   assert.equal(state.cursorFor(editor.key), "2026-09-25T10:55:00.000Z", "the cursor is untouched");
+});
+
+// The poll's pace (2026-10-10): five minutes while the clan is active, then
+// doubling on each empty poll up to the hour.
+test("the poll stays at the base while items are recent, then doubles to the cap", () => {
+  const baseMs = 300_000;
+  const maxMs = 3_600_000;
+  const pace = (sinceActivityMs, lastMs) => nextPollMs({ baseMs, maxMs, sinceActivityMs, lastMs });
+  assert.equal(pace(0, baseMs), baseMs);
+  assert.equal(pace((ACTIVE_POLLS - 1) * baseMs, baseMs), baseMs);
+  let ms = baseMs;
+  const steps = [];
+  for (let quiet = ACTIVE_POLLS * baseMs; steps.length < 6; quiet += ms) {
+    ms = pace(quiet, ms);
+    steps.push(ms / 60_000);
+  }
+  assert.deepEqual(steps, [10, 20, 40, 60, 60, 60]);
+  // An item read puts it straight back.
+  assert.equal(pace(0, maxMs), baseMs);
+});
+
+test("a cap below the base never slows the active pace", () => {
+  assert.equal(nextPollMs({ baseMs: 1_800_000, maxMs: 600_000, sinceActivityMs: 1e9, lastMs: 1_800_000 }), 1_800_000);
+});
+
+test("instances start at different, stable places in the first interval", () => {
+  const base = 300_000;
+  const offsets = ["poapkings", "shipit", "elixirkings"].map((name) => staggerMs(name, base));
+  for (const ms of offsets) assert.ok(ms >= 0 && ms < base);
+  assert.equal(new Set(offsets).size, 3);
+  assert.equal(staggerMs("poapkings", base), offsets[0]);
+});
+
+test("jitter stays within ten percent", () => {
+  assert.equal(
+    jittered(1000, () => 0),
+    900,
+  );
+  assert.equal(
+    jittered(1000, () => 0.5),
+    1000,
+  );
+  assert.equal(
+    jittered(1000, () => 0.999999),
+    1100,
+  );
 });
