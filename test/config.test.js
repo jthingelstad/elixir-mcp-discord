@@ -12,6 +12,49 @@ test("the feed is polled every thirty minutes unless the operator says otherwise
   if (!process.env.EVENT_POLL_SECONDS) assert.equal(config.eventPollSeconds, 1800);
 });
 
+test("a poll setting the timer cannot honour is the default, and the boot log says so", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const { fileURLToPath } = await import("node:url");
+  const root = fileURLToPath(new URL("..", import.meta.url));
+  // A fresh process: both settings are read once, when config.js loads.
+  const load = (env) =>
+    JSON.parse(
+      execFileSync(
+        process.execPath,
+        [
+          "--import",
+          "./scripts/setup-tests.js",
+          "--input-type=module",
+          "-e",
+          `const { config, provenance } = await import("./src/config.js");
+           console.log(JSON.stringify({ base: config.eventPollSeconds, max: config.eventPollMaxSeconds,
+             invalid: provenance.filter((p) => p.source.startsWith("INVALID")).map((p) => p.name) }));`,
+        ],
+        { cwd: root, env: { ...process.env, ...env }, encoding: "utf8" },
+      ),
+    );
+  // Each of these reached setTimeout, which fires NaN or anything past 2^31-1 ms after 1 ms.
+  for (const bad of ["often", "Infinity", "1e400", "2147484", "59", "90.5", "-3600"]) {
+    const out = load({ EVENT_POLL_SECONDS: bad, EVENT_POLL_MAX_SECONDS: bad });
+    assert.deepEqual(out, { base: 1800, max: 3600, invalid: ["EVENT_POLL_SECONDS", "EVENT_POLL_MAX_SECONDS"] }, bad);
+  }
+  assert.deepEqual(load({ EVENT_POLL_SECONDS: "60", EVENT_POLL_MAX_SECONDS: "2147483" }), {
+    base: 60,
+    max: 2147483,
+    invalid: [],
+  });
+});
+
+test("the DM refuses a poll setting past the timer's ceiling", async () => {
+  const { checkSetting } = await import("../src/settings.js");
+  for (const key of ["EVENT_POLL_SECONDS", "EVENT_POLL_MAX_SECONDS"]) {
+    assert.equal(checkSetting(key, "2147483", { entries: [] }).ok, true);
+    assert.equal(checkSetting(key, "60", { entries: [] }).ok, true);
+    for (const bad of ["2147484", "99999999", "59", "soon", "Infinity"])
+      assert.equal(checkSetting(key, bad, { entries: [] }).ok, false, `${key}=${bad}`);
+  }
+});
+
 test("a pre-config.json instance is migrated once: settings to config.json, .env down to secrets, a backup under state/", async () => {
   const fs = await import("node:fs");
   const os = await import("node:os");
