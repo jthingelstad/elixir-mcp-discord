@@ -263,6 +263,37 @@ function validTimezone(tz) {
 }
 
 const num = (name, fallback) => Number(optional(name, fallback));
+
+/**
+ * THE POLL TIMERS' BOUNDS (since 2026-10-10). Both poll settings go
+ * straight into setTimeout, and Node does not refuse a bad delay: a value
+ * that is not a number, or one past its ceiling (2^31-1 ms, about 24.8
+ * days), fires after 1 ms. A hand-edited typo in EVENT_POLL_MAX_SECONDS
+ * therefore read the timeline back to back once the clan went quiet, every
+ * read a metered call on the owner's budget. A value that is not a whole
+ * number of seconds between these bounds is the default, as a typo in a
+ * budget is (budgetSource below), and the boot log says so.
+ */
+export const POLL_SECONDS_MIN = 60;
+export const POLL_SECONDS_MAX = Math.floor((2 ** 31 - 1) / 1000);
+
+/** A poll setting as seconds the timer can honour, or null. */
+export function validPollSeconds(raw) {
+  const seconds = Number(String(raw ?? "").trim() || NaN);
+  return Number.isInteger(seconds) && seconds >= POLL_SECONDS_MIN && seconds <= POLL_SECONDS_MAX ? seconds : null;
+}
+
+function pollSeconds(name, fallback) {
+  const raw = optional(name, fallback);
+  const seconds = validPollSeconds(raw);
+  if (seconds !== null) return seconds;
+  provenance.push({
+    name,
+    value: fallback,
+    source: `INVALID "${raw}" ignored (whole seconds ${POLL_SECONDS_MIN}-${POLL_SECONDS_MAX}); default used`,
+  });
+  return Number(fallback);
+}
 const money = (name) => (lookup(name) ? Number(lookup(name)) : null);
 
 /**
@@ -329,11 +360,11 @@ export const config = {
   // is 288 calls a day for the feed alone — more than half a member's whole
   // daily allowance — which is fine for an unlimited agent and a bad default
   // for an example project. Read once: it is a timer.
-  eventPollSeconds: num("EVENT_POLL_SECONDS", "1800"),
+  eventPollSeconds: pollSeconds("EVENT_POLL_SECONDS", "1800"),
   // The longest the feed waits once the clan has gone quiet (src/events.js,
   // "THE POLL'S PACE"): an empty poll doubles the wait up to here, and the
   // first item read puts it back to EVENT_POLL_SECONDS. Read once.
-  eventPollMaxSeconds: num("EVENT_POLL_MAX_SECONDS", "3600"),
+  eventPollMaxSeconds: pollSeconds("EVENT_POLL_MAX_SECONDS", "3600"),
 
   // MONTHLY BUDGETS, per lane, in dollars. Unset means unlimited — which is a
   // choice, not a default anybody should arrive at by accident, so the boot

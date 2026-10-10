@@ -27,7 +27,7 @@
 
 import path from "node:path";
 import { callTool } from "./mcp.js";
-import { config, instanceDir } from "./config.js";
+import { config, instanceDir, POLL_SECONDS_MIN, POLL_SECONDS_MAX } from "./config.js";
 import { runRoutine } from "./run.js";
 import { markFeedbackShown, newFeedbackResponses } from "./feedback.js";
 import { directory, postable } from "./directory.js";
@@ -574,6 +574,16 @@ export function staggerMs(name, baseMs) {
   return hash % Math.max(1, Math.floor(baseMs));
 }
 
+/** The delay the next poll is armed with: never sooner than the minimum
+ *  poll, never past setTimeout's ceiling, and the minimum for anything that
+ *  is not a number. Node fires NaN, or a delay past 2^31-1 ms, after 1 ms,
+ *  which is the timeline read back to back (2026-10-10). */
+export function pollDelayMs(ms) {
+  const floor = POLL_SECONDS_MIN * 1000;
+  if (!Number.isFinite(ms)) return floor;
+  return Math.min(POLL_SECONDS_MAX * 1000, Math.max(floor, Math.round(ms)));
+}
+
 /** ±10%, so instances that started together drift apart rather than back
  *  into step. */
 export function jittered(ms, random = Math.random) {
@@ -657,7 +667,7 @@ export function startEventLoop(routinesFn, resolveChannel, { now = () => Date.no
       }
       paceMs = next;
     }
-    schedule(jittered(paceMs, random));
+    schedule(pollDelayMs(jittered(paceMs, random)));
   };
   const schedule = (ms) => {
     if (!stopped) timer = setTimeout(() => void tick(), ms);

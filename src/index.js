@@ -191,8 +191,8 @@ async function boot(ready) {
     log.info("wiring_moved_back", { keys: migrated.movedBack.join(","), backup: migrated.backup });
   }
   for (const entry of provenance) {
-    const shadowed = entry.source.startsWith("SHELL");
-    log[shadowed ? "warn" : "info"]("config_resolved", {
+    const wrong = entry.source.startsWith("SHELL") || entry.source.startsWith("INVALID");
+    log[wrong ? "warn" : "info"]("config_resolved", {
       name: entry.name,
       value: entry.value,
       source: entry.source,

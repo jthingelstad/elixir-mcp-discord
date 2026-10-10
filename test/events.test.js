@@ -24,6 +24,7 @@ import {
   nextPollMs,
   staggerMs,
   jittered,
+  pollDelayMs,
   windowEntries,
   majorChanged,
 } from "../src/events.js";
@@ -443,6 +444,17 @@ test("instances start at different, stable places in the first interval", () => 
   for (const ms of offsets) assert.ok(ms >= 0 && ms < base);
   assert.equal(new Set(offsets).size, 3);
   assert.equal(staggerMs("poapkings", base), offsets[0]);
+});
+
+test("the next poll is never armed sooner than a minute or past the timer's ceiling", () => {
+  // A cap that is not a number made nextPollMs NaN, and setTimeout(NaN) fires after 1 ms.
+  const quiet = nextPollMs({ baseMs: 300_000, maxMs: NaN, sinceActivityMs: 1e9, lastMs: 300_000 });
+  assert.equal(pollDelayMs(jittered(quiet, () => 0.5)), 60_000);
+  for (const ms of [NaN, Infinity, -Infinity, undefined, 0, 1, -5, 59_999])
+    assert.equal(pollDelayMs(ms), 60_000, String(ms));
+  assert.equal(pollDelayMs(2 ** 31), 2_147_483_000, "past setTimeout's ceiling fires after 1 ms");
+  assert.equal(pollDelayMs(1e12), 2_147_483_000);
+  assert.equal(pollDelayMs(330_000), 330_000);
 });
 
 test("jitter stays within ten percent", () => {

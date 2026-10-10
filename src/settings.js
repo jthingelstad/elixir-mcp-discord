@@ -29,7 +29,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { instanceDir, configFile, parseReviewAt } from "./config.js";
+import { instanceDir, configFile, parseReviewAt, POLL_SECONDS_MIN, POLL_SECONDS_MAX } from "./config.js";
 import { renderConfig, parseConfig } from "./env-file.js";
 import { rateFor } from "./pricing.js";
 import { directory } from "./directory.js";
@@ -59,6 +59,11 @@ const onOff = (v) => (["on", "off"].includes(v.toLowerCase()) ? null : "on or of
 const trueFalse = (v) => (["true", "false"].includes(v.toLowerCase()) ? null : "true or false");
 const intAtLeast = (min, what) => (v) =>
   Number.isInteger(Number(v)) && Number(v) >= min ? null : `${what} must be a whole number ≥ ${min}`;
+// A poll setting is a timer: past setTimeout's ceiling Node fires it after 1 ms.
+const pollSeconds = (what) => (v) =>
+  Number.isInteger(Number(v)) && Number(v) >= POLL_SECONDS_MIN && Number(v) <= POLL_SECONDS_MAX
+    ? null
+    : `${what} must be a whole number of seconds from ${POLL_SECONDS_MIN} to ${POLL_SECONDS_MAX}`;
 const pricedModel = (v) => {
   try {
     rateFor(v);
@@ -121,12 +126,12 @@ export const SETTINGS = {
   },
   EVENT_POLL_SECONDS: {
     about: "how often the timeline is read while the clan is active; every poll is a metered call (restart)",
-    check: intAtLeast(60, "EVENT_POLL_SECONDS"),
+    check: pollSeconds("EVENT_POLL_SECONDS"),
     restart: true,
   },
   EVENT_POLL_MAX_SECONDS: {
     about: "the longest the timeline waits once the clan is quiet; empty polls double up to it (restart)",
-    check: intAtLeast(60, "EVENT_POLL_MAX_SECONDS"),
+    check: pollSeconds("EVENT_POLL_MAX_SECONDS"),
     restart: true,
   },
   STARTUP_MESSAGE: { about: "the one-line hello to the admins' DM on boot: on or off", check: onOff },

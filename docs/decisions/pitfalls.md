@@ -104,6 +104,16 @@
   that has been quiet for hours can wait up to the cap. The loop is a
   `setTimeout` chain, so a long turn delays the next poll instead of
   overlapping it.
+- **A poll setting the timer cannot honour is the default — since
+  2026-10-10.** Both poll settings go straight into `setTimeout`, and Node
+  fires a delay that is not a number, or one past 2^31-1 ms (about 24.8
+  days), after 1 ms: a hand-edited typo in `EVENT_POLL_MAX_SECONDS` would
+  have read the timeline back to back once the clan went quiet. At load a
+  value that is not a whole number of seconds from 60 to 2,147,483 is the
+  default, as a budget typo is, and the boot log warns (`config_resolved`,
+  source `INVALID`); the DM refuses the same values; and the loop arms
+  every paced poll through `pollDelayMs`, never sooner than a minute nor
+  past the ceiling.
 - **The feed poll asks the hub to skip an empty window — since 2026-10-10.**
   With `skip_empty` (contract 11.7.0) a window with nothing the editor's
   kinds could keep is answered without building the entries: about 25 ms
