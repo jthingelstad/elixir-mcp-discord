@@ -45,14 +45,25 @@ test("a poll setting the timer cannot honour is the default, and the boot log sa
   });
 });
 
-test("the DM refuses a poll setting past the timer's ceiling", async () => {
+test("the DM and setup refuse a poll setting past the timer's ceiling or not whole", async () => {
   const { checkSetting } = await import("../src/settings.js");
   for (const key of ["EVENT_POLL_SECONDS", "EVENT_POLL_MAX_SECONDS"]) {
     assert.equal(checkSetting(key, "2147483", { entries: [] }).ok, true);
     assert.equal(checkSetting(key, "60", { entries: [] }).ok, true);
-    for (const bad of ["2147484", "99999999", "59", "soon", "Infinity"])
+    for (const bad of ["2147484", "99999999", "59", "90.5", "soon", "Infinity"])
       assert.equal(checkSetting(key, bad, { entries: [] }).ok, false, `${key}=${bad}`);
   }
+  // setup.js is a top-level script; it asks the same question of config.js.
+  const { pollSecondsProblem } = await import("../src/config.js");
+  const setupCheck = pollSecondsProblem("the interval");
+  for (const bad of ["2147484", "90.5", "59", "often"]) assert.match(setupCheck(bad), /whole number of seconds/, bad);
+  assert.equal(setupCheck("1800"), null);
+  const fs = await import("node:fs");
+  assert.match(
+    fs.readFileSync(new URL("../src/setup.js", import.meta.url), "utf8"),
+    /validate: pollSecondsProblem\("the interval"\)/,
+    "setup's poll question uses the shared check",
+  );
 });
 
 test("a pre-config.json instance is migrated once: settings to config.json, .env down to secrets, a backup under state/", async () => {

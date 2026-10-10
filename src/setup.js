@@ -44,7 +44,7 @@ import { priceBook } from "./pricing.js";
 import { requirementsFor, inspectChannel } from "./permissions.js";
 import { inspectDiscord, permissionsIn, channelLike, inviteUrl, memberOf } from "./discord-rest.js";
 import { fromRest } from "./directory.js";
-import { channelEnvName } from "./config.js";
+import { channelEnvName, validPollSeconds, pollSecondsProblem } from "./config.js";
 import { renderSecrets, renderConfig, parseConfig } from "./env-file.js";
 import { catalog, installRoutines, disabledAfter, rewriteAt, estimateMonthly, describeWhen } from "./setup-catalog.js";
 
@@ -655,8 +655,8 @@ heading("Polling and commands");
 note("Every feed poll is a metered call; 1800 s is the hub's own advice, 300 s posts");
 note("joins within minutes.");
 values.EVENT_POLL_SECONDS = await askValid("Feed poll interval, seconds", {
-  fallback: values.EVENT_POLL_SECONDS || "1800",
-  validate: numberIn("the interval", 60),
+  fallback: validPollSeconds(values.EVENT_POLL_SECONDS) === null ? "1800" : values.EVENT_POLL_SECONDS,
+  validate: pollSecondsProblem("the interval"),
 });
 values.COMMAND_PREFIX = (
   await ask("Slash-command prefix (→ /<prefix>-run; 'none' for plain /run)", {

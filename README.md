@@ -365,6 +365,12 @@ connector re-reads the surface itself.
 over `fetch`). Reading an event feed is plumbing, and plumbing should not cost
 a model call. The model is only involved once there is something to write
 about.
+Its pace is `EVENT_POLL_SECONDS` while items are arriving, doubling on
+each empty poll up to `EVENT_POLL_MAX_SECONDS` once the clan is quiet.
+Both are whole seconds from 60 to 2,147,483 (the longest timer Node can
+hold); anything else, in `config.json` or the shell, is the default (1800
+and 3600) and the boot log warns `config_resolved` with source `INVALID`.
+Setup and the DM refuse such values.
 
 ### Channels: where it posts
 
@@ -406,7 +412,10 @@ read and only the writes it needs: a routine and the weekly review may
 file feedback; a member's question and your DM may also link who is
 asking; a rehearsal (`npm run try`, `try` in the DM, a proposal's **Try
 it**, `npm run review`) writes nothing at all. Nothing the bot does can
-track a clan or player on your account. `npm run probe` prints the
+track a clan or player on your account. One read is withheld too:
+`clans_context`, the private Clan policy context the runner reads for
+itself, is switched off in every model lane always, even when the tool
+list could not be read or predates it. `npm run probe` prints the
 split. For belt and braces, untick `recordings:write` and
 `collections:write` on your agent's page in Elixir; the hub enforces that
 on the next call.
