@@ -24,6 +24,7 @@ import {
   nextPollMs,
   staggerMs,
   jittered,
+  windowEntries,
 } from "../src/events.js";
 import * as state from "../src/state.js";
 
@@ -456,4 +457,47 @@ test("jitter stays within ten percent", () => {
     jittered(1000, () => 0.999999),
     1100,
   );
+});
+
+// skip_empty (contract 11.7.0): the reader's poll asks for it, the busy
+// window's older pages and the release's entries read never do.
+test("the poll asks the hub to skip an empty window; older pages do not", async () => {
+  const key = "skip-empty-editor";
+  state.setCursor(key, "2026-09-25T10:55:00.000Z");
+  const editor = {
+    key,
+    trigger: "events",
+    wake: ["member_joined", "returned"],
+    carry: ["badge_earned", "card_unlocked"],
+  };
+  const hub = fakeHub(busyHour, { pageSize: 3 });
+  await pollRoutine(editor, null, { call: hub.call, run: async () => ({ ok: true, skipped: true }) });
+  const [first, ...older] = hub.calls;
+  assert.equal(first.args.skip_empty, true);
+  assert.ok(first.args.reader);
+  assert.ok(older.length > 0);
+  for (const page of older) assert.equal(page.args.skip_empty, undefined);
+});
+
+test("a skipped window's entries are read again by no reader; a built one costs no call", async () => {
+  const editor = { key: "e", trigger: "events", wake: ["member_joined"], carry: ["badge_earned"] };
+  const hub = fakeHub([]);
+  const built = { entriesSkipped: false, entries: [{ kind: "clan" }], window: { to: "2026-09-25T12:00:00.000Z" } };
+  assert.deepEqual(await windowEntries(built, "2026-09-25T11:00:00.000Z", editor, { call: hub.call }), {
+    ok: true,
+    entries: [{ kind: "clan" }],
+  });
+  assert.equal(hub.calls.length, 0);
+
+  const skipped = { entriesSkipped: true, entries: [], window: { to: "2026-09-25T11:55:00.000Z" } };
+  const got = await windowEntries(skipped, "2026-09-25T11:00:00.000Z", editor, { call: hub.call });
+  assert.deepEqual(got, { ok: true, entries: [{ kind: "clan", subject_tag: "#CLAN" }] });
+  assert.equal(hub.calls.length, 1);
+  const { args } = hub.calls[0];
+  assert.equal(args.mark_read, false);
+  assert.equal(args.reader, undefined);
+  assert.equal(args.skip_empty, undefined);
+  assert.equal(args.from, "2026-09-25T11:00:00.000Z");
+  assert.equal(args.to, "2026-09-25T11:55:00.000Z");
+  assert.deepEqual(args.kinds, ["member_joined", "badge_earned"]);
 });

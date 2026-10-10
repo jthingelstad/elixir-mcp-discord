@@ -77,11 +77,24 @@ export function readerName(routineKey) {
 
 export async function read(
   from,
-  { sections = null, kinds = null, verbosity = "full", reader = null, to = null, call = callTool } = {},
+  {
+    sections = null,
+    kinds = null,
+    verbosity = "full",
+    reader = null,
+    to = null,
+    skipEmpty = false,
+    call = callTool,
+  } = {},
 ) {
   // A named reader marks its own pointer; a read with no reader (the seed,
   // the dry run, a busy window's older pages) never moves anything.
   const args = reader ? { reader, mark_read: true, verbosity } : { mark_read: false, verbosity };
+  // Since contract 11.7.0 a window with nothing these kinds could keep is
+  // answered without building the entries (`entries_skipped`): the poll
+  // that finds nothing costs the hub a few milliseconds instead of a full
+  // read. A window with any item reads exactly as without it.
+  if (skipEmpty) args.skip_empty = true;
   if (from) args.from = from;
   if (to) args.to = to;
   if (sections?.length) args.sections = sections;
@@ -99,6 +112,7 @@ export async function read(
     window: body.window ?? null,
     cursor: body.next_cursor ?? null,
     hasMore: body.has_more === true,
+    entriesSkipped: body.entries_skipped === true,
     more: Number(body.timeline_more) || 0,
     meta: body.meta ?? null,
   };
@@ -156,7 +170,7 @@ export async function readWindow(from, options = {}, { call = callTool, maxPages
     // cannot serve anything new: stop rather than loop.
     if (next === null || (to !== null && next >= to) || !(Date.parse(next) > floorMs)) break;
     to = next;
-    page = await read(windowFrom, { ...options, reader: null, to, call });
+    page = await read(windowFrom, { ...options, reader: null, to, skipEmpty: false, call });
     if (!page.ok) return page;
     pages += 1;
     items.push(...page.timeline);
@@ -306,6 +320,25 @@ export function failureHoldMs(n, { hard = false, pollMs = config.eventPollSecond
   return Math.min(FAILURE_HOLD_CAP_MS, pollMs * 2 ** (n - 1));
 }
 
+/**
+ * The entries a turn reads the clan from. A poll with `skip_empty` that
+ * found nothing (contract 11.7.0, `entries_skipped`) came back without
+ * them; a turn still runs from such a window when held items go out on the
+ * VOICE line's silence. Then the same window is read again for its
+ * entries, by no reader, so nothing moves. Every other read already has
+ * them and costs no call.
+ */
+export async function windowEntries(result, cursor, routine, { call = callTool } = {}) {
+  if (!result.entriesSkipped) return { ok: true, entries: result.entries };
+  const context = await read(cursor, {
+    sections: routine.sections,
+    kinds: subscribedKinds(routine),
+    to: result.window?.to ?? null,
+    call,
+  });
+  return context.ok ? { ok: true, entries: context.entries } : context;
+}
+
 /** Polls one routine. Returns `{ meta, items }`: the envelope of the first
  *  `elixir_timeline` response it read, so the tick can act on the hints
  *  without a call of its own, and how many timeline items that read held,
@@ -335,7 +368,7 @@ export async function pollRoutine(
 
   const result = await readWindow(
     cursor,
-    { sections: routine.sections, kinds: subscribedKinds(routine), reader: readerName(routine.key) },
+    { sections: routine.sections, kinds: subscribedKinds(routine), reader: readerName(routine.key), skipEmpty: true },
     { call },
   );
   if (!result.ok) {
@@ -384,9 +417,16 @@ export async function pollRoutine(
   }
   const items = oldestFirst([...held, ...wake, ...carry]);
 
+  const context = await windowEntries(result, cursor, routine, { call });
+  if (!context.ok) {
+    log.warn("events_poll_failed", { routine: routine.key, error: context.error, cursor, stage: "release_entries" });
+    return null;
+  }
+  const entries = context.entries;
+
   const run = await runTurn(routine, {
     channel,
-    events: { window: result.window, timeline: items, entries: result.entries },
+    events: { window: result.window, timeline: items, entries },
   });
   // Advance only after a successful turn, so a failure re-runs the window
   // rather than dropping it. A skip counts: the routine saw it and declined.
