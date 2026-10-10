@@ -104,6 +104,16 @@
   that has been quiet for hours can wait up to the cap. The loop is a
   `setTimeout` chain, so a long turn delays the next poll instead of
   overlapping it.
+- **The feed poll asks the hub to skip an empty window — since 2026-10-10.**
+  With `skip_empty` (contract 11.7.0) a window with nothing the editor's
+  kinds could keep is answered without building the entries: about 25 ms
+  and 7 queries in the hub's DB instead of about 270 ms and 27. A window
+  with any member battle still builds (a battle can make a standout or a
+  return), and a window with items reads exactly as before. Only the
+  reader's poll asks; a busy window's older pages never do. The one turn
+  that runs from a skipped window, a carry release on the VOICE line,
+  reads the same window again by no reader for its entries
+  (`windowEntries`).
 - **The ask lane answers in a thread per question — since 2026-09-13.**
   History used to be channel-wide, so one member's question arrived with
   another's context and the model once answered "same as above" to the
