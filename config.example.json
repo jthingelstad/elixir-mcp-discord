@@ -25,6 +25,7 @@
 
   "_feed": "How often the timeline is read. Every poll is a metered call and the feed is empty most of the time; 1800 is the hub's own advice, 300 posts joins within minutes.",
   "EVENT_POLL_SECONDS": "1800",
+  "_EVENT_POLL_MAX_SECONDS": "Default 3600. Once nothing has arrived for six polls, each empty poll doubles the wait up to this; the first item puts it back to EVENT_POLL_SECONDS.",
 
   "_commands": "Three bots on one server each register /run; a prefix keeps them apart (/pk-run).",
   "COMMAND_PREFIX": "",

@@ -120,8 +120,13 @@ export const SETTINGS = {
     check: (v) => (isTimezone(v) ? null : `"${v}" is not an IANA timezone (Region/City)`),
   },
   EVENT_POLL_SECONDS: {
-    about: "how often the timeline is read; every poll is a metered call (restart)",
+    about: "how often the timeline is read while the clan is active; every poll is a metered call (restart)",
     check: intAtLeast(60, "EVENT_POLL_SECONDS"),
+    restart: true,
+  },
+  EVENT_POLL_MAX_SECONDS: {
+    about: "the longest the timeline waits once the clan is quiet; empty polls double up to it (restart)",
+    check: intAtLeast(60, "EVENT_POLL_MAX_SECONDS"),
     restart: true,
   },
   STARTUP_MESSAGE: { about: "the one-line hello to the admins' DM on boot: on or off", check: onOff },
