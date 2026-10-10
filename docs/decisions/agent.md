@@ -79,6 +79,12 @@ response to match that subject.
 The runner calls `clans_context` with empty arguments and reads only its
 `context` projection. That private tool is disabled in every model lane on
 both the connector and direct-client paths, regardless of read annotations.
+Since 2026-10-10 it is disabled regardless of the catalog too: it used to
+be named only when `toolCatalog` listed it, so a failed `tools/list`, or
+an hour-old catalog taken before the hub published it, left it on for
+every model lane while the connector discovered it by itself. It is now
+always in the disabled set. The connector logs a warning, never an error,
+for a `configs` name the server does not publish, so the turn still runs.
 
 The core's versioned eight-field context is the complete allowed response:
 schema version, clan, known/unknown status and reason, explicit war intent,

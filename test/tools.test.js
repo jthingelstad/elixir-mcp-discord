@@ -30,6 +30,7 @@ test("every policy keeps every read and only the writes it names", () => {
       assert.ok(off.includes(write), `${policy}: ${write}`);
   }
   assert.deepEqual(disabledTools("rehearsal", annotated).sort(), [
+    POLICY_CONTEXT_TOOL,
     "collections_edit",
     "elixir_identify",
     "elixir_send_feedback",
@@ -37,18 +38,26 @@ test("every policy keeps every read and only the writes it names", () => {
   ]);
 });
 
-test("without annotations a live lane keeps everything but elixir_identify and a rehearsal loses the prompted writes; no catalog, nothing is named", () => {
+test("without annotations a live lane keeps everything but elixir_identify and a rehearsal loses the prompted writes; no catalog, only the private tool is named", () => {
   const bare = {
     ...annotated,
     annotated: false,
     tools: annotated.tools.map(({ name }) => ({ name, readOnly: false })),
   };
-  assert.deepEqual(disabledTools("ask", bare), ["elixir_identify"], "off in every lane, annotated or not");
-  assert.deepEqual(disabledTools("rehearsal", bare).sort(), ["elixir_identify", "elixir_send_feedback"]);
+  assert.deepEqual(
+    disabledTools("ask", bare),
+    [POLICY_CONTEXT_TOOL, "elixir_identify"],
+    "off in every lane, annotated or not",
+  );
+  assert.deepEqual(disabledTools("rehearsal", bare).sort(), [
+    POLICY_CONTEXT_TOOL,
+    "elixir_identify",
+    "elixir_send_feedback",
+  ]);
   assert.deepEqual(
     disabledTools("rehearsal", { ok: false, tools: [] }),
-    [],
-    "a name the server did not publish is never sent",
+    [POLICY_CONTEXT_TOOL],
+    "the private tool is the one name sent unpublished: the connector only warns on it",
   );
 });
 
@@ -87,6 +96,18 @@ test("private eligibility stays disabled in every model lane regardless of read 
         ],
       });
       assert.deepEqual(off, [POLICY_CONTEXT_TOOL]);
+    }
+  }
+});
+
+test("private eligibility stays disabled in every lane when the catalog is unavailable or was taken before it was published", () => {
+  const stale = { ok: true, annotated: true, tools: [{ name: "public_history", readOnly: true }] };
+  const staleBare = { ...stale, annotated: false };
+  for (const policy of [...Object.keys(POLICIES), "nonsense"]) {
+    for (const catalog of [undefined, null, { ok: false, tools: [] }, stale, staleBare]) {
+      const off = disabledTools(policy, catalog);
+      assert.ok(off.includes(POLICY_CONTEXT_TOOL), `${policy}, ${JSON.stringify(catalog)}`);
+      assert.equal(off.filter((name) => name === POLICY_CONTEXT_TOOL).length, 1, "named once");
     }
   }
 });

@@ -46,16 +46,29 @@ const PROMPTED_WRITES = ["elixir_send_feedback", "elixir_identify"];
 
 let warnedUnannotated = false;
 
-/** The published tool names to switch off for this kind of turn. */
+/**
+ * Private eligibility is runner plumbing (src/eligibility.js), never a
+ * model-facing read, so it is off in every lane WHATEVER the catalog says
+ * (since 2026-10-10). It used to be named only when the catalog listed it:
+ * a failed tools/list, or an hour-old catalog taken before the hub
+ * published it, left it on for every model lane while the connector
+ * discovered it on its own. The connector accepts a `configs` name the
+ * server does not publish (a warning on its side, never an error), and the
+ * direct-client path refuses by the same name.
+ */
+const ALWAYS_OFF = [POLICY_CONTEXT_TOOL];
+
+/** The tool names to switch off for this kind of turn. */
 export function disabledTools(policy, catalog) {
   const keep = new Set(POLICIES[policy] ?? POLICIES.rehearsal);
-  if (!catalog?.ok) return [];
-  // Private eligibility is runner plumbing, never a model-facing read.
-  const privateReads = catalog.tools.filter((t) => t.name === POLICY_CONTEXT_TOOL).map((t) => t.name);
+  if (!catalog?.ok) return [...ALWAYS_OFF];
   if (catalog.annotated)
-    return catalog.tools
-      .filter((t) => t.name === POLICY_CONTEXT_TOOL || (!t.readOnly && !keep.has(t.name)))
-      .map((t) => t.name);
+    return [
+      ...ALWAYS_OFF,
+      ...catalog.tools
+        .filter((t) => !ALWAYS_OFF.includes(t.name) && !t.readOnly && !keep.has(t.name))
+        .map((t) => t.name),
+    ];
   if (!warnedUnannotated) {
     warnedUnannotated = true;
     log.warn("tool_annotations_missing", {
@@ -69,8 +82,8 @@ export function disabledTools(policy, catalog) {
   // lane kept it).
   if (policy !== "rehearsal")
     return [
-      ...privateReads,
+      ...ALWAYS_OFF,
       ...(published.has("elixir_identify") && !keep.has("elixir_identify") ? ["elixir_identify"] : []),
     ];
-  return [...privateReads, ...PROMPTED_WRITES.filter((name) => published.has(name) && !keep.has(name))];
+  return [...ALWAYS_OFF, ...PROMPTED_WRITES.filter((name) => published.has(name) && !keep.has(name))];
 }
