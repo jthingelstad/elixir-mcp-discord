@@ -283,6 +283,12 @@ export function validPollSeconds(raw) {
   return Number.isInteger(seconds) && seconds >= POLL_SECONDS_MIN && seconds <= POLL_SECONDS_MAX ? seconds : null;
 }
 
+/** Why a poll setting is refused, or null: the DM and setup both ask this. */
+export const pollSecondsProblem = (what) => (value) =>
+  validPollSeconds(value) === null
+    ? `${what} must be a whole number of seconds from ${POLL_SECONDS_MIN} to ${POLL_SECONDS_MAX}, got "${value}"`
+    : null;
+
 function pollSeconds(name, fallback) {
   const raw = optional(name, fallback);
   const seconds = validPollSeconds(raw);
