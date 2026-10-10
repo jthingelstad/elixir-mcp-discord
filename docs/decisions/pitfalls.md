@@ -111,9 +111,11 @@
   have read the timeline back to back once the clan went quiet. At load a
   value that is not a whole number of seconds from 60 to 2,147,483 is the
   default, as a budget typo is, and the boot log warns (`config_resolved`,
-  source `INVALID`); the DM refuses the same values; and the loop arms
-  every paced poll through `pollDelayMs`, never sooner than a minute nor
-  past the ceiling.
+  source `INVALID`); the DM and `npm run setup` refuse the same values
+  (one check, `pollSecondsProblem` in `src/config.js`; setup does not offer
+  an invalid saved value as its default); and the loop arms every paced
+  poll through `pollDelayMs`, never sooner than a minute nor past the
+  ceiling.
 - **The feed poll asks the hub to skip an empty window — since 2026-10-10.**
   With `skip_empty` (contract 11.7.0) a window with nothing the editor's
   kinds could keep is answered without building the entries: about 25 ms
