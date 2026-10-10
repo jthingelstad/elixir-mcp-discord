@@ -21,7 +21,7 @@ import {
 } from "./config.js";
 import { handleAsk, isThreadOf } from "./ask.js";
 import { handleReaction } from "./reactions.js";
-import { startEventLoop } from "./events.js";
+import { startEventLoop, majorChanged } from "./events.js";
 import { startScheduler } from "./scheduler.js";
 import { startClockLane } from "./clock.js";
 import { startReview } from "./review.js";
@@ -212,11 +212,12 @@ async function boot(ready) {
         from: state.get("serverVersion"),
         to: handshake.version,
       });
-      await notify.notify(
-        "Elixir changed",
-        `contract ${state.get("serverVersion")} → ${handshake.version}. Tool schemas may have moved; the elixir_changelog tool says what.`,
-        { fingerprint: `contract:${handshake.version}` },
-      );
+      if (majorChanged(state.get("serverVersion"), handshake.version))
+        await notify.notify(
+          "Elixir changed",
+          `contract ${state.get("serverVersion")} → ${handshake.version}. Tool schemas may have moved; the elixir_changelog tool says what.`,
+          { fingerprint: `contract:${handshake.version}` },
+        );
     }
     state.set({ serverVersion: handshake.version });
     reportPrincipal(handshake);
