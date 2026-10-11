@@ -10,7 +10,7 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
   routines enabled, Elixir unreachable at boot, an unpriced model, unusable
   channels, a lane at its budget (daily), a routine or the ask lane
   failing, a feed routine crashing, the review failing, and Elixir's
-  maintainer answering a filing (still posted in the channel too). No
+  maintainer answering a filing (DM only since 2026-10-07). No
   model, no cost; one line, deduplicated by fingerprint for an hour;
   `notice_unsent` in the log when there is no client yet or no
   `ADMIN_USER_IDS`. A notice must never fail a turn — `notify` swallows.
@@ -139,6 +139,15 @@ and it is the one place the bot talks ABOUT itself. Three things live there:
   own upload, not the web, which was tried for the DM and pulled the same
   day (`web_fetch` needed a code-execution container across rounds, and a
   fetched page is not the operator's words the way a paste is).
+- **An answer can be a question — since 2026-10-11.** Hub 11.10.0 added
+  `needs_info`: the maintainer asks one question about a filing. Its DM
+  says so ("asked a question about feedback #N") and names the reply,
+  `elixir_send_feedback` with `follows_id` N; the operator replies, the bot
+  does not. One item can now be answered twice (the question, then the
+  outcome), so shown answers are keyed by id and `responded_at`, not id
+  alone, which hid the second. A bare id from before is honoured only for
+  an answer no newer than `answeredFeedbackCutoff`, stamped at the first
+  boot of this version, then upgraded; a newer answer is shown.
 - **What the DM never does:** post to a member channel. There is no
   `post_message` tool in the lane; `post it` sends only a rehearsal the
   operator has already read. The DM brief also refuses to remember game

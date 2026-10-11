@@ -458,6 +458,9 @@ still has the context that made the gap obvious, and via a post-turn sweep when
 a tool errored or an answer conceded a limit and nothing was filed. Maintainer
 replies come back to the operator's DM, never a member channel: the
 operator is the one who can act on them, and `feedback` in the DM lists them.
+An answer with status `needs_info` is the maintainer's question, and the DM
+says how to reply (`elixir_send_feedback` with `follows_id`); the answer that
+follows on the same item is shown too.
 
 Readers take part too: a 👎 on any post or answer sends the turn back for
 one reflection and at most one filing (reply to the message with what was
