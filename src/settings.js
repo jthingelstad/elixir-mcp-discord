@@ -131,6 +131,11 @@ export const SETTINGS = {
   },
   STARTUP_MESSAGE: { about: "the one-line hello to the admins' DM on boot: on or off", check: onOff },
   MAX_POSTS_PER_TURN: { about: "how many posts one routine turn may make", check: intAtLeast(1, "MAX_POSTS_PER_TURN") },
+  STANDOUTS_PER_MEMBER_PER_DAY: {
+    about:
+      "how many standout sittings (streaks, long sessions) of one member the editor may tell per local day; 0 = no cap",
+    check: intAtLeast(0, "STANDOUTS_PER_MEMBER_PER_DAY"),
+  },
   TOOL_SEARCH_LANES: {
     about:
       "lanes whose Elixir tools load on demand through tool search instead of riding every prompt: comma-separated routines, ask, review; empty = none",

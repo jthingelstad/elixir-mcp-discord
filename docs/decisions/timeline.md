@@ -2,6 +2,59 @@
 
 *Part of the decision ledger — dated, with the reason. [AGENTS.md](../../AGENTS.md) has the map and the rules. Read this before changing src/events.js, src/clock.js, agent/routines/editor.md.*
 
+## The storyteller: told stories are remembered — since 2026-10-11
+
+Jamie approved the plan of 2026-10-11 ("Let's implement it."). Elixir
+Clan's Discord activity channel now posts one line per timeline item, a
+deterministic ticker of record, so the editor stops being a second one and
+tells fewer, researched stories. The ledger of 09-27 to 10-11 is the
+evidence: 70 posts, 53 of them with no Elixir call ("No drilling" was the
+brief's word), "still going" in 25 of 77 posts, "1-0 win over X (+30)" in
+15, the 30-day stat block in 11, one member's streaks posted four times in
+29 hours, a race finish four times on 09-27, a departure twice, and a
+44-item catch-up told as a headed digest.
+
+- **Story memory** (`src/stories.js`, `state.stories`). Each post records
+  the timeline stories it told: `{ id, revision, kind, subjects, crossed,
+  at, toldAt, channel, gist }`, a week of them. `post_message` takes
+  `covers`, the ids the post tells; a post without it is matched by the
+  names it mentions. It is the bot's own output, the same class as recall,
+  never read back as a fact about the game. The framing's rule ("an id you
+  have posted before…") could not be kept before: recall held text, not
+  ids.
+- **The turn is shown the last 48 hours of it** (`storiesBlock`, in the user
+  turn, so the cached prefix is untouched), one line a story.
+- **A deterministic filter before every turn** (`untold`, in the live lane
+  and the dry run): an id told at the same or a higher revision is dropped;
+  a sitting already told is dropped unless it crossed a rung it had not
+  crossed when told; and `STANDOUTS_PER_MEMBER_PER_DAY` (default 1, 0 is no
+  cap) sittings per member per local day. A batch the filter empties starts
+  no turn; a told carried item no longer counts toward a release. Other
+  kinds told at a lower revision pass: their growth is the model's call,
+  with the told story beside it.
+- **The brief** (`agent/routines/editor.md`) is rewritten as a storyteller:
+  research with the item's `follow` before writing about a person and post
+  only what the research found; group connected items into one story; a
+  batch over about twelve hours is the one or two best stories, never a
+  digest; at most one historical comparison instead of a stat block; an
+  opponent named only when it means something; and the observed failures
+  named as prohibitions ("still going", "on a tear", "a 1-0 win over
+  <name> (+30)", the 30-day block, headed lists). It ships with `recall:
+  6`, as the live instance has run since 10-09, and carries the live
+  brief's later rules (`left_at`, the even sitting, HOW IT READS).
+- **`npm run replay`** replays story memory too: turns not replayed leave
+  their original posts' stories, replayed ones their replay's, and a
+  replayed batch passes the same filter (`--only` picks turns by id).
+
+### The suggested question is retired — since 2026-10-11
+
+The editor ended a post, when a moment invited it, with a question a member
+could paste into the ask channel (the 2026-09-16 decision below: all that
+survived of the capability spotlight). Sixteen posts carried one from 09-27
+to 10-11 and no member asked any of them. Jamie: "We should remove this. It
+doesn't work and is not useful." The brief now lists it among the things
+never to write; nothing in the code ever asked for it.
+
 ## Items say where they lead — since 2026-10-11
 
 Since Elixir 11.9.0, each item on a full read carries `follow`: the reads
@@ -117,7 +170,8 @@ yes to all six decisions the same day. What changed:
   normal 12 h, chatty 4 h. The poll passes `kinds` to the server (contract
   3.9.0) so the bot reads only what it subscribes to. The brief has four
   desks — news, scouting (`bracket_observed`), movers (`session_standout`),
-  recognition — plus texture and the pasteable-question habit that is all
+  recognition — plus texture and the pasteable-question habit (retired
+  2026-10-11, above) that is all
   that survives of the spotlight.
 - **`trigger: clock`** (`src/clock.js`): armed from one `game_clock`
   field plus an offset (`arm: war_day_closes_at`, `offset: -4h`), one

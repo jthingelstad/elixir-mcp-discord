@@ -68,14 +68,15 @@ A routine is one markdown file. The shipped editor:
 
 ```markdown
 ---
-description: The editor — turns the clan's timeline into posts, one turn per batch
+description: The storyteller — turns the clan's timeline into a few researched stories, one turn per batch
 trigger: events
 wake: member_joined, departure_classified, member_role_changed, race_finished, week_resolved, returned, session_standout, ranked_promotion, ...
 carry: member_left, badge_earned, collection_level_step, card_unlocked, quiet_crossed
 may_skip: true
 ---
-You have been handed a batch of timeline items ... You are the editor: decide
-whether any of it is worth a post, what to say, and where it goes.
+You have been handed a batch of timeline items ... You are the clan's
+storyteller, not its ticker: find the story in the batch, research it, and
+tell it.
 ```
 
 A `wake` kind starts a turn the moment the poll sees it; everything named
@@ -83,6 +84,15 @@ A `wake` kind starts a turn the moment the poll sees it; everything named
 the channels have been quiet past the `VOICE` line (`quiet` never, `normal`
 12h, `chatty` 4h). The batch is the unit of cost: a turn costs about the
 same whether it says one line or SKIP, so texture never buys one by itself.
+
+The editor never tells one story twice. Each post records the timeline
+stories it told (`post_message` takes `covers`, the ids of the items it
+tells), and the next turn is shown the last 48 hours of them. Before a turn
+starts, an item already told at the same or a higher revision is dropped,
+a standout sitting already told is dropped unless it crossed a new rung,
+and one member's sittings are told at most `STANDOUTS_PER_MEMBER_PER_DAY`
+times a local day (1; 0 is no cap). A batch the filter empties starts no
+turn. The record is the bot's own output in `state/`, like recall.
 
 Drop a file in your instance's `agent/routines/`, and it runs. Delete it and
 it stops. `once: true` on a scheduled routine fires at its next occurrence and
@@ -597,9 +607,13 @@ changed to an unpriced one later fails before the call, not after it.
   Discord's stamp from the item's `at_unix`.
 - **A routine can remember what it posted.** `recall: 3` hands the model
   that routine's last three posts, from its own ledger in `state/`, so a
-  recurring post you write can rotate instead of repeating itself. None of
-  the shipped routines use it — the editor is handed the news itself — but
-  the field is yours. It is the bot's own output, not game data.
+  recurring post you write can rotate instead of repeating itself. The
+  shipped editor recalls six, beside the stories it told. It is the bot's
+  own output, not game data.
+- **An error the next poll cannot fix is said once.** A usage cap, a
+  refused key or a missing model holds the editor's batch and retries it
+  hourly (or at a reset the provider named); you get one DM when the hold
+  begins and one when a turn succeeds again, not one an hour.
 - **Failed calls are visible under the post.** When a turn's tool calls
   errored, a one-line footer says which and how many, whether or not the
   routine shows a trace; a reply that states figures without having called a

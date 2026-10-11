@@ -21,6 +21,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { instanceDir } from "./config.js";
 import { log } from "./log.js";
+import { STORY_KEEP, STORY_KEEP_MS } from "./stories.js";
 
 // Relative to the INSTANCE directory, not the checkout. Several instances of
 // one checkout must never share a state file; see instanceDir in config.js.
@@ -104,6 +105,15 @@ const DEFAULTS = {
   // spotlight the feed's and the movers' posts as "what I said recently" and
   // never its own, so it demonstrated rival scouting three days out of five.
   lastPosts: {},
+  // { [routineKey]: story[] } — the timeline stories each routine's posts
+  // told: { id, revision, kind, subjects, crossed, at, toldAt, channel,
+  // gist }, oldest first, a week of them (src/stories.js). Own output, like
+  // lastPosts: what this bot said, never a fact about the game.
+  stories: {},
+  // { [routineKey]: iso } — when an event routine went on hold for an error
+  // the next poll cannot fix, so the operator hears about it once, and once
+  // more when it recovers (src/events.js).
+  hardHolds: {},
   // The last few hundred turns, keyed by turn id, plus which Discord messages
   // each one produced — so a reader's 👍 / 👎 on a post can be joined back to
   // the question, the tools called and the server's request ids. Own output
@@ -282,6 +292,36 @@ export function rememberPost(routineKey, text) {
 export function recentOwnPosts(routineKey, count) {
   if (!count) return [];
   return (read().lastPosts?.[routineKey] || []).slice(0, count);
+}
+
+/** Keep the stories a routine's post told, oldest first, a week and at most
+ *  STORY_KEEP of them. */
+export function rememberStories(routineKey, stories, now = new Date()) {
+  if (!stories?.length) return;
+  const state = read();
+  const since = now.getTime() - STORY_KEEP_MS;
+  const kept = [...(state.stories?.[routineKey] ?? []), ...stories]
+    .filter((s) => Date.parse(s.toldAt) >= since)
+    .slice(-STORY_KEEP);
+  write({ ...state, stories: { ...state.stories, [routineKey]: kept } });
+}
+
+/** The stories a routine told within `withinMs` of `now`, oldest first. */
+export function toldStories(routineKey, { withinMs = STORY_KEEP_MS, now = new Date() } = {}) {
+  const since = now.getTime() - withinMs;
+  return (read().stories?.[routineKey] ?? []).filter((s) => Date.parse(s.toldAt) >= since);
+}
+
+export function hardHoldFor(routineKey) {
+  return read().hardHolds?.[routineKey] ?? null;
+}
+
+export function setHardHold(routineKey, at) {
+  const state = read();
+  const hardHolds = { ...state.hardHolds };
+  if (at) hardHolds[routineKey] = at;
+  else delete hardHolds[routineKey];
+  write({ ...state, hardHolds });
 }
 
 /**

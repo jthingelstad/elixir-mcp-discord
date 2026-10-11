@@ -319,6 +319,13 @@
   at once. The hold is the same `retryAt` the named reset uses, the window
   is never dropped, and a successful turn clears the count. A named reset
   still wins.
+- **A hard hold is one notice, not one an hour — since 2026-10-11.** The
+  runner's "routine failed" DM is deduplicated for an hour, and a hard
+  error retries every hour, so a usage cap that lasted a night was a DM at
+  every retry. An event routine's hard error now says so once, when the
+  hold begins (`state.hardHolds`), and once more when a turn succeeds;
+  the runner leaves that case to the event lane. `hardError` also reads a
+  402 and a 400 naming a quota or a spend limit.
 - **A post is a post once Discord has it, and only then — since
   2026-09-25.** Every client-side tool result is followed by another API
   round, and when that round failed (a 529, a dropped stream) `ask()`

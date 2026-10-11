@@ -27,6 +27,7 @@ import * as state from "./state.js";
 import * as ledger from "./ledger.js";
 import { notify } from "./notify.js";
 import { policyGate, eligibilityRefusal } from "./eligibility.js";
+import { storiesFor, STORIES_SHOWN_MS } from "./stories.js";
 
 /**
  * THE POST TOOL. A scheduled or event turn posts by calling `post_message`
@@ -48,6 +49,12 @@ export const POST_TOOL = {
     properties: {
       channel_id: { type: "string", description: "The channel_id from the directory." },
       content: { type: "string", description: "The message, Discord markdown, up to the routine's length limit." },
+      covers: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "When the turn was handed a timeline: the `id` of every item this post tells. It is how this routine remembers which stories it has told, so pass them.",
+      },
     },
     required: ["channel_id", "content"],
     additionalProperties: false,
@@ -83,7 +90,7 @@ function postToolFor(routine) {
 function postTool({ routine, entries, dryRun, posts, resolve = resolveById }) {
   return {
     ...postToolFor(routine),
-    async handler({ channel_id, content }) {
+    async handler({ channel_id, content, covers }) {
       const entry = entries.find((e) => e.id === String(channel_id));
       if (!entry) {
         return {
@@ -123,7 +130,13 @@ function postTool({ routine, entries, dryRun, posts, resolve = resolveById }) {
           error: `content is ${text.length} characters, ${text.length - routine.maxChars} over this routine's limit of ${routine.maxChars}. Cut well past that — aim for about ${draftTarget(routine)} — and call post_message again.`,
         };
       }
-      const record = { channelId: entry.id, channelName: entry.name, text, messages: [] };
+      const record = {
+        channelId: entry.id,
+        channelName: entry.name,
+        text,
+        messages: [],
+        covers: Array.isArray(covers) ? covers.map(String).slice(0, 50) : null,
+      };
       if (dryRun) {
         posts.push(record);
         return { ok: true, body: { posted: true, channel: `#${entry.name}`, dry_run: true } };
@@ -337,8 +350,9 @@ export function turnRecord({ routine, lane, question, text, result, channelId })
  * @param {Array}  options.entries   the channel directory (default: live)
  * @param {object} options.overrides { identity, memory } text to run on instead of the files
  * @param {string} options.lane      which budget pays (default: the routine's own)
- * @param {object} options.replay    { recent, room, now }: a past turn's own recall,
- *   room tool and clock, so a replay sees what that turn saw (src/cli.js `replay`)
+ * @param {object} options.replay    { recent, room, now, stories }: a past turn's own
+ *   recall, room tool, clock and told stories, so a replay sees what that turn saw
+ *   (src/cli.js `replay`)
  */
 export async function runRoutine(routine, options = {}) {
   if (isStopping()) return { ok: false, error: "shutting_down" };
@@ -412,6 +426,13 @@ async function runRoutineNow(
   if (!replay && recent.length === 0 && channel && routine.recall) {
     recent = await recentPosts(channel, routine.recall);
   }
+  // The stories this routine told in the last two days (src/stories.js), for
+  // a turn handed a timeline: what the framing's "an id you have told" means.
+  const stories = events
+    ? replay
+      ? (replay.stories ?? [])
+      : state.toldStories(routine.key, { withinMs: STORIES_SHOWN_MS, now: new Date() })
+    : [];
   // The directory the model sees. The ask lane never gets it (src/ask.js has
   // its own path); a routine whose bound channel is not in the directory
   // still gets that channel as its default, so a legacy binding keeps working.
@@ -437,6 +458,7 @@ async function runRoutineNow(
           brief: routine.prompt,
           events: events ?? undefined,
           recent,
+          stories: stories.length ? stories : undefined,
           defaultChannelId: channel?.id ?? null,
         },
         output,
@@ -456,7 +478,10 @@ async function runRoutineNow(
   let result = await askFn({
     system,
     messages: [
-      { role: "user", content: userMessageFor(routine, { events, recent, withTool, now: replay?.now ?? new Date() }) },
+      {
+        role: "user",
+        content: userMessageFor(routine, { events, recent, stories, withTool, now: replay?.now ?? new Date() }),
+      },
     ],
     maxTokens: routine.maxTokens,
     model: routine.model,
@@ -493,7 +518,9 @@ async function runRoutineNow(
   if (!result.ok) {
     log.error("routine_failed", { routine: routine.key, error: result.error });
     record({ error: result.error });
-    if (!dryRun)
+    // An event routine's hard error is the event lane's to tell, once per
+    // hold (src/events.js): it retries hourly and would DM hourly here.
+    if (!dryRun && !(result.hard && routine.trigger === "events"))
       await notify("routine failed", `${routine.key}: ${String(result.error).slice(0, 300)}`, {
         fingerprint: `routine_failed:${routine.key}`,
       });
@@ -545,12 +572,20 @@ async function runRoutineNow(
   const skipped = posts.length === 0 && routine.maySkip && isSkip(text);
   const textPost = posts.length === 0 && !skipped && text ? text : null;
 
+  // The stories each post told, by its `covers` or the names it mentions.
+  const told = (p, now) =>
+    events?.timeline?.length
+      ? storiesFor(events.timeline, { text: p.text, covers: p.covers, channel: `#${p.channelName}`, now })
+      : [];
+
   if (dryRun) {
+    const at = replay?.now ?? new Date();
     return {
       ok: true,
       skipped,
       text,
-      posts: posts.map(({ channelName, text: t }) => ({ channel: `#${channelName}`, text: t })),
+      posts: posts.map(({ channelName, text: t, covers }) => ({ channel: `#${channelName}`, text: t, covers })),
+      stories: posts.flatMap((p) => told(p, at)),
       result,
     };
   }
@@ -618,6 +653,7 @@ async function runRoutineNow(
       posts.length > 1 || p.channelId !== channel?.id ? `[#${p.channelName}] ${p.text}` : p.text,
     );
     state.rememberPostAt(p.channelId, { name: p.channelName, routine: routine.key });
+    state.rememberStories(routine.key, told(p, new Date()));
   }
   const notes = [];
   const footers = [];
@@ -685,6 +721,7 @@ async function runRoutineNow(
       channelName: p.channelName,
       messageIds: p.messages.map((m) => m?.id).filter(Boolean),
       text: p.text,
+      ...(p.covers?.length ? { covers: p.covers } : {}),
     })),
     skipped: false,
     footers,

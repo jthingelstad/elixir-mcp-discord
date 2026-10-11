@@ -809,3 +809,60 @@ test("a replay runs on the past turn's recall, room and clock, not today's", asy
   assert.match(seen.messages[0].content, /\[now: \w+ 2026-10-01 /, "the prompt's clock is the turn's own");
   assert.ok(seen.localTools.includes(room), "the recorded room stands in for the live one");
 });
+
+test("a post remembers the stories it told, and the next turn is shown them with their ids", async () => {
+  const { POST_TOOL } = await import("../src/run.js");
+  const state = await import("../src/state.js");
+  const news = fakeChannel();
+  const entries = [{ id: "11", name: "news", topic: "", visibility: "everyone", threads: false, role: null }];
+  const editor = { ...routine({ trigger: "events", wake: "session_standout", may_skip: "true" }), key: "story-editor" };
+  const item = {
+    id: "tl_sit",
+    revision: 6,
+    kind: "session_standout",
+    subject_tag: "#CLAN",
+    subject_name: "Clan",
+    facts: { player_tag: "#A", name: "Aaqib", crossed: ["won_in_a_row>=5"], newly: ["won_in_a_row>=5"] },
+    text: "Aaqib won six in a row",
+  };
+  const seen = [];
+  const askFn = async ({ messages, localTools }) => {
+    seen.push(messages[0].content);
+    const tool = localTools.find((t) => t.name === POST_TOOL.name);
+    assert.ok(tool.input_schema.properties.covers, "post_message takes the ids a post tells");
+    await tool.handler({ channel_id: "11", content: "Six straight for Aaqib.", covers: ["tl_sit"] });
+    return answer("", { called: ["post_message"], trace: [] });
+  };
+  await runRoutine(editor, { events: { timeline: [item] }, entries, resolve: async () => news, askFn });
+  const [story] = state.toldStories("story-editor");
+  assert.equal(story.id, "tl_sit");
+  assert.equal(story.revision, 6);
+  assert.deepEqual(story.crossed, ["won_in_a_row>=5"]);
+  assert.equal(story.channel, "#news");
+  assert.doesNotMatch(seen[0], /STORIES YOU TOLD IN THE LAST/, "nothing told yet, no list");
+
+  const grown = { ...item, revision: 9, facts: { ...item.facts, crossed: ["won_in_a_row>=5", "won_in_a_row>=10"] } };
+  const dry = await runRoutine(editor, {
+    events: { timeline: [grown] },
+    entries,
+    dryRun: true,
+    askFn: async (args) => {
+      seen.push(args.messages[0].content);
+      await args.localTools
+        .find((t) => t.name === POST_TOOL.name)
+        .handler({ channel_id: "11", content: "Aaqib is at ten now." });
+      return answer("", { called: ["post_message"], trace: [] });
+    },
+  });
+  assert.match(seen[1], /STORIES YOU TOLD IN THE LAST 48 HOURS/);
+  assert.match(
+    seen[1],
+    /- tl_sit r6 session_standout · Aaqib · told \w{3} \d\d:\d\d, 0h ago in #news · "Six straight for Aaqib\."/,
+  );
+  assert.deepEqual(
+    dry.stories.map((s) => [s.id, s.revision]),
+    [["tl_sit", 9]],
+    "a post without covers is matched by the names it mentions",
+  );
+  assert.equal(state.toldStories("story-editor").length, 1, "a dry run remembers nothing");
+});
