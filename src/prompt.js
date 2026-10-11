@@ -466,13 +466,59 @@ export function nowLine(now = new Date(), timezone = config.timezone) {
   return `[now: ${get("weekday")} ${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")} ${timezone}]`;
 }
 
+/** "Sun 05:48, 7h ago" in the operator's zone: when a story was told. */
+function toldWhen(at, now, timezone) {
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return "at an unknown time";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(d);
+  const get = (type) => parts.find((p) => p.type === type)?.value;
+  const hours = Math.max(0, Math.round((now - d) / 3600000));
+  return `${get("weekday")} ${get("hour")}:${get("minute")}, ${hours}h ago`;
+}
+
+/**
+ * STORIES YOU TOLD. What this routine's posts covered in the last two days
+ * (src/stories.js), one line a story: the item's id and revision, its kind,
+ * who it was about, when it was told and where, and the post's first words.
+ * The framing's rule about an id told before is only keepable with this in
+ * front of the model; recall alone is text without ids.
+ */
+export function storiesBlock(stories, { now = new Date(), timezone = config.timezone } = {}) {
+  if (!stories?.length) return null;
+  const lines = stories.map((s) => {
+    const who =
+      (s.subjects ?? [])
+        .map((x) => x.name)
+        .filter(Boolean)
+        .join(", ") || "the clan";
+    const id = s.id ? `${s.id} r${s.revision}` : "(no id)";
+    const where = s.channel ? ` in ${s.channel}` : "";
+    return `- ${id} ${s.kind ?? "item"} · ${who} · told ${toldWhen(s.toldAt, now, timezone)}${where} · "${s.gist ?? ""}"`;
+  });
+  return `${STORIES_HEADER}\n\n${lines.join("\n")}`;
+}
+
+const STORIES_HEADER = `STORIES YOU TOLD IN THE LAST 48 HOURS, oldest first: the timeline items your
+posts covered. An item in this batch with one of these ids is a story you already
+told; it reached you only because it grew. Say the growth if it is news, or
+leave it out. A new item about someone listed here continues their story:
+connect it to what you told ("a second promotion since Friday"), never retell it.`;
+
 /** The routine's own prompt, plus whatever its trigger handed it. */
-export function userMessageFor(routine, { events, recent, withTool = false, now = new Date() } = {}) {
+export function userMessageFor(routine, { events, recent, stories = [], withTool = false, now = new Date() } = {}) {
   const parts = [nowLine(now), routine.prompt];
   if (events && (Array.isArray(events) ? events.length : true)) {
     parts.push(
-      `FROM THE ELIXIR MCP TIMELINE — \`timeline\` is what the record learned since your last turn, oldest first, one item per story: \`text\` is a sentence you may quote as it stands (in-game names, no time in it), \`facts\` its record, \`subjects\` everyone it is about. An item with \`late: true\` happened before this window and was only learned in it. An \`id\` you have posted before is the same story grown (a higher \`revision\`): mention it again only if the growth is news. To say when something happened, write Discord's own stamp from the item's \`at_unix\`, \`<t:AT_UNIX:R>\` (relative) or \`<t:AT_UNIX:f>\` (full), never a clock time of your own. \`entries\` is the latest window's context per subject, sections null when nothing happened. Each item's \`follow\` lists the reads that tell more of its story, a \`tool\` and the \`args\` to call it with as given. Facts, not a report: drill where it earns its place, starting there.\n\n${JSON.stringify(events, null, 2)}`,
+      `FROM THE ELIXIR MCP TIMELINE — \`timeline\` is what the record learned since your last turn, oldest first, one item per story: \`text\` is a sentence you may quote as it stands (in-game names, no time in it), \`facts\` its record, \`subjects\` everyone it is about. An item with \`late: true\` happened before this window and was only learned in it. An \`id\` listed under STORIES YOU TOLD is a story you already told, grown since (a higher \`revision\`): mention it again only if the growth is news. When you post, pass \`covers\`: the ids of the items the post tells. To say when something happened, write Discord's own stamp from the item's \`at_unix\`, \`<t:AT_UNIX:R>\` (relative) or \`<t:AT_UNIX:f>\` (full), never a clock time of your own. \`entries\` is the latest window's context per subject, sections null when nothing happened. Each item's \`follow\` lists the reads that tell more of its story, a \`tool\` and the \`args\` to call it with as given. Facts, not a report: when you research an item, start there.\n\n${JSON.stringify(events, null, 2)}`,
     );
+    const told = storiesBlock(stories, { now });
+    if (told) parts.push(told);
   }
   if (recent?.length) {
     parts.push(`${RECALL_HEADER}\n\n${recent.map((text) => `--- ${text}`).join("\n\n")}`);

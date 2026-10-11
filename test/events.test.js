@@ -604,3 +604,66 @@ test("a dry run hands over one item per story, its newest revision (Codex on #52
     ["rev9"],
   );
 });
+
+test("a story already told never starts a turn, rides in one, or is carried (story memory)", async () => {
+  const key = "told-editor";
+  const now = new Date("2026-09-25T12:00:00.000Z");
+  state.setCursor(key, "2026-09-25T10:55:00.000Z");
+  const raceTold = { ...moment("race_finished", "2026-09-25T09:00:00.000Z", undefined, "race"), id: "tl_race" };
+  state.rememberStories(
+    key,
+    [{ id: "tl_race", revision: 1, kind: "race_finished", subjects: [], toldAt: "2026-09-25T09:30:00.000Z" }],
+    now,
+  );
+  const editor = { key, trigger: "events", wake: ["race_finished", "member_joined"], carry: ["badge_earned"] };
+  const raceAgain = { ...raceTold, at: "2026-09-25T11:00:00.000Z", observed_at: "2026-09-25T11:00:00.000Z" };
+  const turns = [];
+  const run = async (_routine, { events }) => {
+    turns.push(events);
+    return { ok: true, skipped: true };
+  };
+  await pollRoutine(editor, null, { call: fakeHub([raceAgain]).call, run, now: () => now });
+  assert.equal(turns.length, 0, "the told race wakes nothing");
+  assert.equal(state.cursorFor(key), "2026-09-25T12:00:00.000Z", "and its window is consumed");
+
+  state.setCursor(key, "2026-09-25T10:55:00.000Z");
+  const joiner = { ...moment("member_joined", "2026-09-25T11:30:00.000Z", undefined, "joiner"), id: "tl_join" };
+  await pollRoutine(editor, null, { call: fakeHub([raceAgain, joiner]).call, run, now: () => now });
+  assert.deepEqual(
+    turns[0].timeline.map((i) => i.id),
+    ["tl_join"],
+    "a new story still goes, without the told one",
+  );
+});
+
+test("a hard error is said to the operator once when the hold begins and once when it lifts", async () => {
+  const key = "hard-notice-editor";
+  const cursor = "2026-09-25T10:55:00.000Z";
+  state.setCursor(key, cursor);
+  const editor = { key, trigger: "events", wake: ["member_joined"] };
+  const hub = fakeHub([moment("member_joined", "2026-09-25T11:00:00.000Z")]);
+  let clock = Date.parse("2026-09-28T00:00:00.000Z");
+  const notices = [];
+  const notice = async (kind, text) => notices.push({ kind, text });
+  let answer = { ok: false, error: "400 invalid_request_error: you have reached your usage limits", hard: true };
+  const run = async () => answer;
+  const poll = () => pollRoutine(editor, null, { call: hub.call, run, now: () => new Date(clock), notice });
+
+  for (let hour = 0; hour < 4; hour += 1) {
+    await poll();
+    clock += FAILURE_HOLD_CAP_MS + 1000;
+  }
+  assert.equal(notices.length, 1, "four failed hours, one notice");
+  assert.equal(notices[0].kind, "routine on hold");
+  assert.match(notices[0].text, /usage limits.*once an hour/s);
+  assert.equal(state.cursorFor(key), cursor, "the batch is kept");
+
+  answer = { ok: true, skipped: true };
+  await poll();
+  await poll();
+  assert.deepEqual(
+    notices.map((n) => n.kind),
+    ["routine on hold", "routine recovered"],
+  );
+  assert.equal(state.hardHoldFor(key), null);
+});

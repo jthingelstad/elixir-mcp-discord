@@ -15,7 +15,7 @@
  * A dry run costs a real model call and real tokens; it just does not touch
  * Discord. `--post` connects, posts, and exits.
  *
- *   npm run replay -- editor <ledger.jsonl>... [--model <id>] [--limit <n>] [--pause <s>]
+ *   npm run replay -- editor <ledger.jsonl>... [--model <id>] [--limit <n> | --only <turnId,...>] [--pause <s>]
  *
  * `replay` runs a routine again on batches it was really handed: each turn
  * record in the files, oldest first, with that turn's own recall and what
@@ -28,6 +28,13 @@
  * then; the Elixir tools still answer as of now. Every turn spends the
  * owner's hourly hub requests, shared with the live bots: `--pause` spaces
  * the turns so a long replay cannot starve them (it did on 2026-10-08).
+ *
+ * Story memory replays too (src/stories.js): every turn in the files that is
+ * not replayed leaves the stories its original posts told, and a replayed
+ * turn leaves the stories its replay posted. A replayed batch passes the
+ * same filter the live lane applies; a batch the filter empties prints
+ * `filtered` and costs nothing. `--only` picks turns by id, the rest of the
+ * files still feeding the memory.
  */
 
 import { config, provenance } from "./config.js";
@@ -41,12 +48,13 @@ import { renderTrace } from "./trace.js";
 import { skipReason } from "./skip.js";
 import fs from "node:fs";
 import { eventsForDryRun } from "./events.js";
+import { storiesFor, untold, STORIES_SHOWN_MS, STORY_KEEP_MS } from "./stories.js";
 import * as state from "./state.js";
 import { lastOccurrence, periodKey } from "./schedule.js";
 
 const [command, ...rest] = process.argv.slice(2);
 const flags = new Set(rest.filter((arg) => arg.startsWith("--")));
-const VALUED = new Set(["--model", "--limit", "--pause"]);
+const VALUED = new Set(["--model", "--limit", "--pause", "--only"]);
 const valueOf = (flag) => {
   const at = rest.indexOf(flag);
   return at >= 0 ? rest[at + 1] : undefined;
@@ -305,7 +313,9 @@ async function replayRoutine() {
   const { routines } = loadRoutines();
   const found = routines.find((entry) => entry.key === key);
   if (!found || files.length === 0) {
-    console.error("usage: cli.js replay <routine> <ledger.jsonl>... [--model <id>] [--limit <n>] [--pause <s>]");
+    console.error(
+      "usage: cli.js replay <routine> <ledger.jsonl>... [--model <id>] [--limit <n> | --only <turnId,...>] [--pause <s>]",
+    );
     process.exit(1);
   }
   const routine = valueOf("--model") ? { ...found, model: valueOf("--model") } : found;
@@ -315,33 +325,77 @@ async function replayRoutine() {
     .map((line) => JSON.parse(line))
     .filter((r) => r.kind === "turn" && r.routine === key && r.input?.events)
     .sort((a, b) => a.at.localeCompare(b.at));
+  const only = valueOf("--only") ? new Set(valueOf("--only").split(",")) : null;
   const limit = Number(valueOf("--limit")) || turns.length;
+  const chosen = new Set(only ? turns.filter((t) => only.has(t.turnId)) : turns.slice(-limit));
   const handshake = await initialize();
   if (handshake.ok && handshake.principal) state.set({ principal: handshake.principal });
   const entries = await loadDirectory(routines, routine);
-  console.error(`# replaying ${Math.min(limit, turns.length)} of ${turns.length} ${key} turns on ${routine.model}`);
+  console.error(`# replaying ${chosen.size} of ${turns.length} ${key} turns on ${routine.model}`);
 
   const pauseMs = (Number(valueOf("--pause")) || 0) * 1000;
-  for (const [index, turn] of turns.slice(-limit).entries()) {
-    if (index > 0 && pauseMs > 0) await new Promise((resolve) => setTimeout(resolve, pauseMs));
+  const wakes = (item) => !routine.wake || routine.wake.includes(item.kind);
+  const told = [];
+  let ran = 0;
+  for (const turn of turns) {
+    const items = turn.input.events.timeline || [];
+    const now = new Date(turn.at);
+    const posts = (turn.output?.posts || []).map((p) => ({ channel: `#${p.channelName}`, text: p.text }));
+    if (!chosen.has(turn)) {
+      for (const p of turn.output?.posts || [])
+        told.push(...storiesFor(items, { text: p.text, covers: p.covers, channel: `#${p.channelName}`, now }));
+      continue;
+    }
+    const within = (ms) => told.filter((s) => Date.parse(s.toldAt) <= now && now - Date.parse(s.toldAt) <= ms);
+    const fresh = untold(items, within(STORY_KEEP_MS), {
+      now,
+      timezone: config.timezone,
+      perMemberPerDay: config.standoutsPerMemberPerDay,
+    });
+    const original = {
+      model: turn.model,
+      usd: turn.usd,
+      ...decision({ posts, skipped: turn.output?.skipped, text: turn.output?.text }),
+    };
+    // The live lane starts no turn when the filter took every item that
+    // woke it (a carry release, with nothing woken, still runs).
+    if (fresh.keep.length === 0 || (items.some(wakes) && !fresh.keep.some(wakes))) {
+      const dropped = fresh.dropped.map((d) => ({ id: d.item.id ?? null, kind: d.item.kind, why: d.why }));
+      console.log(
+        JSON.stringify({
+          turnId: turn.turnId,
+          at: turn.at,
+          kinds: items.map((i) => i.kind),
+          original,
+          filtered: dropped,
+        }),
+      );
+      continue;
+    }
+    if (ran > 0 && pauseMs > 0) await new Promise((resolve) => setTimeout(resolve, pauseMs));
+    ran += 1;
     const run = await runRoutine(routine, {
-      events: turn.input.events,
+      events: { ...turn.input.events, timeline: fresh.keep },
       dryRun: true,
       entries,
-      replay: { recent: turn.input.recent ?? [], room: recordedRoom(turn), now: new Date(turn.at) },
+      replay: {
+        recent: turn.input.recent ?? [],
+        room: recordedRoom(turn),
+        now,
+        stories: within(STORIES_SHOWN_MS),
+      },
     });
-    const posts = (turn.output?.posts || []).map((p) => ({ channel: `#${p.channelName}`, text: p.text }));
+    told.push(...(run.stories ?? []));
     const trace = run.result?.trace || [];
     console.log(
       JSON.stringify({
         turnId: turn.turnId,
         at: turn.at,
-        kinds: (turn.input.events.timeline || []).map((i) => i.kind),
-        original: {
-          model: turn.model,
-          usd: turn.usd,
-          ...decision({ posts, skipped: turn.output?.skipped, text: turn.output?.text }),
-        },
+        kinds: items.map((i) => i.kind),
+        dropped: fresh.dropped.length
+          ? fresh.dropped.map((d) => ({ id: d.item.id ?? null, kind: d.item.kind, why: d.why }))
+          : undefined,
+        original,
         replay: run.ok
           ? {
               model: routine.model,
@@ -362,7 +416,7 @@ else if (command === "replay") await replayRoutine();
 else if (command === "review") await reviewDry();
 else {
   console.error(
-    "usage: cli.js list | try <routine> [--post] [--show-prompt] | replay <routine> <ledger.jsonl>... [--model <id>] [--limit <n>] [--pause <s>] | review",
+    "usage: cli.js list | try <routine> [--post] [--show-prompt] | replay <routine> <ledger.jsonl>... [--model <id>] [--limit <n> | --only <turnId,...>] [--pause <s>] | review",
   );
   process.exit(1);
 }

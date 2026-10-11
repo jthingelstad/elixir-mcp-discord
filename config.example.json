@@ -41,6 +41,7 @@
   "_misc": "MAX_POSTS_PER_TURN: how many post_message calls one routine turn may make (3). STARTUP_MESSAGE: the one-line hello to the admins' DM on boot (on); it never goes to a member channel. ROUTINES_DISABLED: comma-separated keys kept off; a routine's own enabled: false does the same.",
   "STARTUP_MESSAGE": "on",
   "MAX_POSTS_PER_TURN": "3",
+  "_STANDOUTS_PER_MEMBER_PER_DAY": "How many standout sittings (a streak, a long session) of one member the editor may tell per local day, in TIMEZONE. Default 1; 0 is no cap. A sitting already told is told again only when it crosses a new rung, and that counts too.",
 
   "_TOOL_SEARCH_LANES": "Lanes (routines, ask, review, comma-separated) whose Elixir tools load on demand through tool search instead of riding every prompt. Most of a turn's prompt is the server's tool schemas; deferred, a turn pays only for the few it searches up. It changes how the model finds tools, so turn it on one lane at a time and watch cost per post and what it posts. Empty (the default) is none.",
   "TOOL_SEARCH_LANES": "",

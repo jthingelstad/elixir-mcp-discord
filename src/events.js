@@ -35,6 +35,7 @@ import { log } from "./log.js";
 import { instanceName } from "./ledger.js";
 import { notify } from "./notify.js";
 import * as state from "./state.js";
+import { untold } from "./stories.js";
 
 /**
  * One read of the timeline from `from` (an ISO instant) to now, or to `to`.
@@ -246,12 +247,12 @@ export async function eventsForDryRun(routine, { call = callTool } = {}) {
   const filters = { sections: routine.sections, kinds: subscribedKinds(routine) };
   if (seeded) {
     const pending = await readWindow(cursor, filters, { call });
-    const items = pending.ok ? relevant(pending.timeline, routine) : [];
+    const items = pending.ok ? tellable(routine, relevant(pending.timeline, routine)).keep : [];
     if (items.length) return { events: payload(pending, items), count: items.length, note: `pending since ${cursor}` };
   }
   const day = await read(null, { ...filters, call });
   if (!day.ok) return { events: null, count: 0, note: `feed unreadable: ${day.error}` };
-  const items = relevant(day.timeline, routine);
+  const items = tellable(routine, relevant(day.timeline, routine)).keep;
   const why = seeded ? "nothing new since the cursor" : "no cursor yet (seeds on the first live poll)";
   return {
     events: payload(day, items),
@@ -260,6 +261,19 @@ export async function eventsForDryRun(routine, { call = callTool } = {}) {
       ? `${why} — showing the last 24 hours`
       : `${why}, and nothing this routine cares about in the last 24 hours either — the live lane would not have fired`,
   };
+}
+
+/**
+ * What is left to tell: `items` minus the stories this routine has already
+ * told (src/stories.js `untold`, with the instance's zone and per-member
+ * cap). `{ keep, dropped }`.
+ */
+export function tellable(routine, items, now = new Date()) {
+  return untold(items, state.toldStories(routine.key, { now }), {
+    now,
+    timezone: config.timezone,
+    perMemberPerDay: config.standoutsPerMemberPerDay,
+  });
 }
 
 export function relevant(timeline, { kinds = null, wake = null, carry = null, sections = null } = {}) {
@@ -405,7 +419,13 @@ export async function windowEntries(result, cursor, routine, { call = callTool }
 export async function pollRoutine(
   routine,
   channel,
-  { call = callTool, run: runTurn = runRoutine, now = () => new Date(), pollMs = config.eventPollSeconds * 1000 } = {},
+  {
+    call = callTool,
+    run: runTurn = runRoutine,
+    now = () => new Date(),
+    pollMs = config.eventPollSeconds * 1000,
+    notice = notify,
+  } = {},
 ) {
   const retryAt = state.retryAtFor(routine.key);
   if (retryAt && Date.parse(retryAt) > now().getTime()) {
@@ -440,7 +460,7 @@ export async function pollRoutine(
     // page holds: the hub counted them and nothing here can serve them.
     log.warn("events_unread", { routine: routine.key, unread: result.unread, pages: result.pages, cursor });
   }
-  const { wake, carry } = partition(result.timeline, routine);
+  const parts = partition(result.timeline, routine);
 
   // Contract drift is worth a log line even when nothing broke: the tool
   // surface moving is exactly what this project is meant to notice early.
@@ -460,7 +480,26 @@ export async function pollRoutine(
   // A carry written before the publication gate (a process older than
   // its hub) may hold an item that may not be published: it never reaches
   // a turn either.
-  const held = state.carried(routine.key).filter((item) => item.publishable !== false);
+  const carriedNow = state.carried(routine.key).filter((item) => item.publishable !== false);
+
+  // A story already told is not news again (src/stories.js): dropped here,
+  // before it can start a turn, ride in one, or count toward a release.
+  const fresh = tellable(routine, [...carriedNow, ...parts.wake, ...parts.carry], now());
+  if (fresh.dropped.length) {
+    log.info("events_already_told", {
+      routine: routine.key,
+      items: fresh.dropped.length,
+      why: [...new Set(fresh.dropped.map((d) => d.why))].join(","),
+      ids: fresh.dropped
+        .map((d) => d.item.id)
+        .filter(Boolean)
+        .join(","),
+    });
+  }
+  const keep = new Set(fresh.keep);
+  const held = carriedNow.filter((item) => keep.has(item));
+  const wake = parts.wake.filter((item) => keep.has(item));
+  const carry = parts.carry.filter((item) => keep.has(item));
   let release = false;
   if (wake.length === 0) {
     // Nothing that starts a turn. Carry what was named to carry, and let
@@ -496,6 +535,13 @@ export async function pollRoutine(
     if (result.cursor) state.setCursor(routine.key, result.cursor);
     state.clearCarry(routine.key);
     state.clearFailures(routine.key);
+    const heldSince = state.hardHoldFor(routine.key);
+    if (heldSince) {
+      state.setHardHold(routine.key, null);
+      await notice("routine recovered", `${routine.key} ran again after an error had held it since ${heldSince}.`, {
+        fingerprint: `hard_hold_over:${routine.key}:${heldSince}`,
+      });
+    }
     log.info("events_consumed", {
       routine: routine.key,
       items: items.length,
@@ -512,6 +558,19 @@ export async function pollRoutine(
     const named = run.retryAt && Date.parse(run.retryAt) > now().getTime() ? run.retryAt : null;
     const holdMs = failureHoldMs(failures, { hard: run.hard, pollMs });
     const until = named ?? (holdMs > 0 ? new Date(now().getTime() + holdMs).toISOString() : null);
+    // An error the next poll cannot fix (a usage cap, a revoked key) is
+    // said to the operator ONCE, when the hold begins, and once more when a
+    // turn succeeds again. The runner's per-failure notice stays quiet for
+    // it (src/run.js), so an hourly retry is not an hourly DM.
+    if (run.hard && !state.hardHoldFor(routine.key)) {
+      const since = now().toISOString();
+      state.setHardHold(routine.key, since);
+      await notice(
+        "routine on hold",
+        `${routine.key} hit an error the next poll cannot fix: ${String(run.error ?? "unknown").slice(0, 300)}. Its batch is kept and nothing is posted; it tries again ${named ? `after ${named}` : "once an hour"}. No more notices until it recovers.`,
+        { fingerprint: `hard_hold:${routine.key}:${since}` },
+      );
+    }
     if (until) {
       state.setRetryAt(routine.key, until);
       log.warn("events_backing_off", {

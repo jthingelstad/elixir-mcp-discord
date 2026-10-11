@@ -68,6 +68,12 @@ test("an auth, permission or missing-model error is hard; an overload is not", a
   assert.equal((await fail(null, "403 permission_error")).hard, true, "the status is read off the message");
   assert.equal((await fail(404, "404 model not found")).hard, true);
   assert.equal((await fail(400, "400 Your credit balance is too low")).hard, true);
+  assert.equal((await fail(402, "402 payment required")).hard, true);
+  assert.equal(
+    (await fail(400, "400 invalid_request_error: This request would exceed your organization's quota")).hard,
+    true,
+    "a quota is not fixed by the next poll",
+  );
   assert.equal((await fail(529, "529 overloaded_error")).hard, false);
   assert.equal((await fail(400, "400 messages: text content blocks must be non-empty")).hard, false);
 });

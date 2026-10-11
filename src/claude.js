@@ -55,8 +55,8 @@ function workspaceLimitRetryAt(message) {
 
 /**
  * A provider error that the next poll cannot fix: authentication or
- * permission refused, a model that does not exist, or a billing or usage
- * limit. A 529 or a dropped stream is worth the next poll; these are worth
+ * permission refused, payment required, a model that does not exist, or a
+ * 400 naming a billing, quota, spend or usage limit. A 529 or a dropped stream is worth the next poll; these are worth
  * a long wait and the operator's attention (2026-09-28: 137 identical failed
  * turns in eleven hours, issue #22). The status is the SDK's, or the leading
  * code of the message the SDK builds from it.
@@ -64,8 +64,8 @@ function workspaceLimitRetryAt(message) {
 function hardError(error) {
   const message = String(error?.message ?? "");
   const status = Number(error?.status ?? message.match(/^(\d{3})\b/)?.[1]);
-  if ([401, 403, 404].includes(status)) return true;
-  return status === 400 && /usage limits|credit balance|billing/i.test(message);
+  if ([401, 402, 403, 404].includes(status)) return true;
+  return status === 400 && /usage limits?|spend(ing)? limit|quota|credit balance|billing/i.test(message);
 }
 
 const mcpServers = [

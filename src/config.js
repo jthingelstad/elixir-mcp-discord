@@ -433,6 +433,13 @@ export const config = {
   get maxPostsPerTurn() {
     return num("MAX_POSTS_PER_TURN", "3");
   },
+  // How many standout sittings of one member the editor may tell per local
+  // day (src/stories.js `untold`); 0 is no cap. One sitting told and grown
+  // is still one.
+  get standoutsPerMemberPerDay() {
+    const n = num("STANDOUTS_PER_MEMBER_PER_DAY", "1");
+    return Number.isInteger(n) && n >= 0 ? n : 1;
+  },
   // Lanes whose Elixir tools load on demand through tool search instead of
   // riding every prompt (src/claude.js). Empty, the default, is none.
   get toolSearchLanes() {
