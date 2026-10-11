@@ -587,6 +587,11 @@ changed to an unpriced one later fails before the call, not after it.
   window (the same `from`, `to` at the cut, `mark_read: false`), up to four
   more pages, so a join under an hour of badges is still posted. What the
   bound leaves unread is an `events_unread` warning in the log.
+- **What a turn is handed.** Every read is `basis: "observed"`, which
+  means what the record learned since the cursor. Items the hub marks
+  `publishable: false` are dropped. A story appears once, at its highest
+  `revision`, oldest first by `sort_at`. A post that says when uses
+  Discord's stamp from the item's `at_unix`.
 - **A routine can remember what it posted.** `recall: 3` hands the model
   that routine's last three posts, from its own ledger in `state/`, so a
   recurring post you write can rotate instead of repeating itself. None of

@@ -27,6 +27,8 @@ import {
   pollDelayMs,
   windowEntries,
   majorChanged,
+  latestRevisions,
+  oldestFirst,
 } from "../src/events.js";
 import * as state from "../src/state.js";
 
@@ -254,12 +256,14 @@ test("a busy window is read to its start: older pages by the same from, to at th
   assert.equal(first.mark_read, true);
   assert.equal(first.from, cursor);
   assert.equal(first.to, undefined);
+  assert.equal(first.basis, "observed", "a poller reads what the record learned (11.8.0)");
   assert.equal(older.length, 2, "8 items at 3 a page is two more pages");
   for (const args of older) {
     assert.equal(args.mark_read, false);
     assert.equal(args.reader, undefined, "a continuation names no reader");
     assert.equal(args.from, cursor, "the same from");
     assert.deepEqual(args.kinds, first.kinds, "the same kinds");
+    assert.equal(args.basis, "observed", "a reader-less continuation would otherwise read as occurred");
   }
   assert.ok(older[0].to > older[1].to, "each page reaches further back");
 
@@ -522,4 +526,41 @@ test("only a new major contract is worth a DM", () => {
   assert.equal(majorChanged(null, "12.0.0"), false, "a first version is no change");
   assert.equal(majorChanged(undefined, "12.0.0"), false);
   assert.equal(majorChanged("nonsense", "12.0.0"), false);
+});
+
+test("an item that may not be published never reaches a routine (contract 11.8.0)", () => {
+  const items = [
+    { id: "a", kind: "member_joined", publishable: true },
+    { id: "b", kind: "account_connected", publishable: false },
+    { id: "c", kind: "member_left" },
+  ];
+  assert.deepEqual(
+    relevant(items, {}).map((i) => i.id),
+    ["a", "c"],
+    "publishable false is dropped; an older hub's item without the field passes",
+  );
+});
+
+test("one story is one item: the highest revision of an id wins, oldest first by sort_at", () => {
+  const sitting = (revision, sortAt) => ({
+    id: "s1",
+    revision,
+    kind: "session_standout",
+    at: "2026-10-10T20:00:00Z",
+    sort_at: sortAt,
+  });
+  const join = { id: "j1", revision: 1, kind: "member_joined", at: "2026-10-10T21:00:00Z" };
+  const legacy = { kind: "badge_earned", at: "2026-10-10T19:00:00Z" };
+  const out = oldestFirst(
+    latestRevisions([sitting(3, "2026-10-10T21:30:00Z"), join, legacy, sitting(5, "2026-10-10T22:00:00Z")]),
+  );
+  assert.deepEqual(
+    out.map((i) => [i.kind, i.revision ?? null]),
+    [
+      ["badge_earned", null],
+      ["member_joined", 1],
+      ["session_standout", 5],
+    ],
+    "the grown sitting sorts by when it ended, after the join",
+  );
 });

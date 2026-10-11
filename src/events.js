@@ -91,6 +91,13 @@ export async function read(
   // A named reader marks its own pointer; a read with no reader (the seed,
   // the dry run, a busy window's older pages) never moves anything.
   const args = reader ? { reader, mark_read: true, verbosity } : { mark_read: false, verbosity };
+  // Since contract 11.8.0 a window has a basis: `observed` selects what the
+  // record LEARNED in it, `occurred` what happened in it. This lane is a
+  // poller: its cursor walks what the record learned, so every read (the
+  // seed and a busy window's older pages included, which name no reader and
+  // would otherwise read as occurred) says observed. An item that happened
+  // before the window arrives with `late: true`.
+  args.basis = "observed";
   // Since contract 11.7.0 a window with nothing these kinds could keep is
   // answered without building the entries (`entries_skipped`): the poll
   // that finds nothing costs the hub a few milliseconds instead of a full
@@ -119,9 +126,34 @@ export async function read(
   };
 }
 
-/** Items in the order a turn reads them: oldest `at` first. */
+/** Items in the order a turn reads them: oldest first, by the hub's own
+ *  newsfeed order (`sort_at`, contract 11.8.0: a sitting's last battle),
+ *  else `at`. */
 export function oldestFirst(items) {
-  return [...(items ?? [])].sort((a, b) => String(a.at ?? "").localeCompare(String(b.at ?? "")));
+  const key = (it) => String(it?.sort_at ?? it?.at ?? "");
+  return [...(items ?? [])].sort((a, b) => key(a).localeCompare(key(b)));
+}
+
+/**
+ * One item per story. Since contract 11.8.0 an item's `id` is its story,
+ * the same in every read, and `revision` is how far it has grown: a sitting
+ * that kept going comes back under the same id at a higher revision. A
+ * batch that holds two revisions of one story (a carried item and its
+ * growth) keeps the higher, so the model is never handed one story twice.
+ * Items without an id (an older hub) pass through.
+ */
+export function latestRevisions(items) {
+  const best = new Map();
+  const out = [];
+  for (const it of items ?? []) {
+    if (!it?.id) {
+      out.push(it);
+      continue;
+    }
+    const have = best.get(it.id);
+    if (!have || (Number(it.revision) || 0) > (Number(have.revision) || 0)) best.set(it.id, it);
+  }
+  return [...out, ...best.values()];
 }
 
 /**
@@ -176,7 +208,7 @@ export async function readWindow(from, options = {}, { call = callTool, maxPages
     pages += 1;
     items.push(...page.timeline);
   }
-  return { ...first, timeline: oldestFirst(items), pages, unread: page.more };
+  return { ...first, timeline: oldestFirst(latestRevisions(items)), pages, unread: page.more };
 }
 
 /**
@@ -228,6 +260,10 @@ export async function eventsForDryRun(routine, { call = callTool } = {}) {
 export function relevant(timeline, { kinds = null, wake = null, carry = null, sections = null } = {}) {
   const named = wake ? [...wake, ...(carry ?? [])] : kinds;
   return (timeline ?? []).filter((item) => {
+    // Since contract 11.8.0 every item says whether it may be published;
+    // one that may not (the account's own administration, leaders-only
+    // items) never reaches a routine that posts.
+    if (item.publishable === false) return false;
     if (named?.length && !named.includes(item.kind)) return false;
     if (sections?.length && item.section && !sections.includes(item.section)) return false;
     return true;
@@ -431,7 +467,7 @@ export async function pollRoutine(
       return { meta: result.meta, items: result.timeline.length };
     }
   }
-  const items = oldestFirst([...held, ...wake, ...carry]);
+  const items = oldestFirst(latestRevisions([...held, ...wake, ...carry]));
 
   const context = await windowEntries(result, cursor, routine, { call });
   if (!context.ok) {
