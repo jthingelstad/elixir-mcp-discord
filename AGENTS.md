@@ -16,9 +16,9 @@ levels up); a clone does not have them and does not need them.
 ## What this is
 
 A public reference implementation: a Discord bot for a Clash Royale clan powered
-entirely by Elixir MCP. It runs three clans' channels on the POAP KINGS
-Discord server as three instances (docs/decisions/instances.md),
-and it is simultaneously a working preview for clan members and an example
+entirely by Elixir MCP. It runs on the POAP KINGS Discord server as one
+instance (one checkout can run several: docs/decisions/instances.md), and it
+is simultaneously a working preview for clan members and an example
 anyone can install.
 
 The preview began with one question: **is Elixir MCP good enough to
