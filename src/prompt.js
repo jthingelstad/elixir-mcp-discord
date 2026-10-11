@@ -484,31 +484,30 @@ function toldWhen(at, now, timezone) {
 
 /**
  * STORIES YOU TOLD. What this routine's posts covered in the last two days
- * (src/stories.js), one line a story: the item's id and revision, its kind,
- * who it was about, when it was told and where, and the post's first words.
+ * (src/stories.js), one line a story: the item's id and revision, when and
+ * where it was told, and the first line of the post that told it. Nothing
+ * from the old timeline item: no name, kind or fact rides along, so a fact
+ * the model writes comes from this turn's calls (AGENTS.md, no local data).
  * The framing's rule about an id told before is only keepable with this in
  * front of the model; recall alone is text without ids.
  */
 export function storiesBlock(stories, { now = new Date(), timezone = config.timezone } = {}) {
   if (!stories?.length) return null;
   const lines = stories.map((s) => {
-    const who =
-      (s.subjects ?? [])
-        .map((x) => x.name)
-        .filter(Boolean)
-        .join(", ") || "the clan";
     const id = s.id ? `${s.id} r${s.revision}` : "(no id)";
     const where = s.channel ? ` in ${s.channel}` : "";
-    return `- ${id} ${s.kind ?? "item"} · ${who} · told ${toldWhen(s.toldAt, now, timezone)}${where} · "${s.gist ?? ""}"`;
+    return `- ${id} · told ${toldWhen(s.toldAt, now, timezone)}${where} · "${s.gist ?? ""}"`;
   });
   return `${STORIES_HEADER}\n\n${lines.join("\n")}`;
 }
 
-const STORIES_HEADER = `STORIES YOU TOLD IN THE LAST 48 HOURS, oldest first: the timeline items your
-posts covered. An item in this batch with one of these ids is a story you already
-told; it reached you only because it grew. Say the growth if it is news, or
-leave it out. A new item about someone listed here continues their story:
-connect it to what you told ("a second promotion since Friday"), never retell it.`;
+const STORIES_HEADER = `STORIES YOU TOLD IN THE LAST 48 HOURS, oldest first: the ids of the timeline
+items your posts covered, and each post's first line. It is what you said, not
+a record: a fact you write still comes from this turn's items and calls. An item
+in this batch with one of these ids is a story you already told; it reached you
+only because it grew. Say the growth if it is news, or leave it out. A new item
+about someone you told of here continues their story: connect it to what you
+told ("a second promotion since Friday"), never retell it.`;
 
 /** The routine's own prompt, plus whatever its trigger handed it. */
 export function userMessageFor(routine, { events, recent, stories = [], withTool = false, now = new Date() } = {}) {

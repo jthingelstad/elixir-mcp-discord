@@ -139,7 +139,9 @@ test asserts no shipped routine contains a CR tag. Do not reintroduce one.
 **No local data. None.** No database, no roster cache, no nickname table, no
 Clash Royale API key, no memory across restarts beyond cursors, a run ledger, a
 spend counter, each routine's own last few posts and the turns it produced (so a
-reaction can find them). Every fact in a reply came from an MCP tool call in that
+reaction can find them), and the ids of the timeline stories the editor told
+(with player tags for its per-member cap, never names; the turn sees only
+ids and its own first lines). Every fact in a reply came from an MCP tool call in that
 turn. A local shortcut makes the demo *flatter* than reality, and we would
 conclude MCP is ready when something else was quietly propping it up.
 

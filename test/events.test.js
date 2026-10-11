@@ -612,7 +612,7 @@ test("a story already told never starts a turn, rides in one, or is carried (sto
   const raceTold = { ...moment("race_finished", "2026-09-25T09:00:00.000Z", undefined, "race"), id: "tl_race" };
   state.rememberStories(
     key,
-    [{ id: "tl_race", revision: 1, kind: "race_finished", subjects: [], toldAt: "2026-09-25T09:30:00.000Z" }],
+    [{ id: "tl_race", revision: 1, kind: "race_finished", tags: [], toldAt: "2026-09-25T09:30:00.000Z" }],
     now,
   );
   const editor = { key, trigger: "events", wake: ["race_finished", "member_joined"], carry: ["badge_earned"] };
