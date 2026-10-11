@@ -2,6 +2,14 @@
 
 *Part of the decision ledger — dated, with the reason. [AGENTS.md](../../AGENTS.md) has the map and the rules. Read this before changing src/events.js, src/clock.js, agent/routines/editor.md.*
 
+## Items say where they lead — since 2026-10-11
+
+Since Elixir 11.9.0, each item on a full read carries `follow`: the reads
+that tell more of its story, a tool and the arguments to call it with. The
+timeline framing tells the model to start there when it drills, instead of
+working out which tool holds the story. The hub owns these addresses; the
+bot builds none of its own.
+
 ## Publication-grade items: observed, publishable, one per story — since 2026-10-11
 
 Elixir 11.8.0 (feedback #373-#376) moved the guardrails this bot's
