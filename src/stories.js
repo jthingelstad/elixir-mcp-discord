@@ -40,6 +40,11 @@ export const STORY_KEEP = 300;
 /** What the turn is shown. */
 export const STORIES_SHOWN_MS = 48 * 60 * 60 * 1000;
 const GIST_CHARS = 90;
+/** A move the record proves after the fact (contract 11.11.0): an arena, a
+ *  league or a best-trophy band. A late proof comes back under the same id at
+ *  a higher revision, carrying its battle; the move itself was already told,
+ *  so once told it is never a new story (issue #58). */
+const MOVES = new Set(["arena_changed", "ranked_promotion", "best_trophies_band"]);
 
 /** The people an item is about, as `{ tag, name }`; its clan when it is
  *  about no one person. */
@@ -143,7 +148,9 @@ export function localDay(instant, timezone) {
  * THE FILTER. `items` minus what has been told: `{ keep, dropped }`, each
  * dropped item with why (`told`, `no_new_rung`, `member_cap`).
  *
- *   - an id told at the same or a higher revision is the same story;
+ *   - an id told at the same or a higher revision is the same story, and so
+ *     is a move (arena, league, best trophies) told at any revision: a
+ *     higher one is the same move proved late;
  *   - a sitting told before, at a lower revision, is news only if it has
  *     crossed a rung it had not crossed when it was told (a streak of five
  *     becoming ten, not five battles more);
@@ -183,7 +190,7 @@ export function untold(items, stories, { now = new Date(), timezone = "UTC", per
   const dropped = [];
   for (const item of items ?? []) {
     const story = item?.id ? told.get(item.id) : null;
-    if (story && (Number(item.revision) || 0) <= story.revision) {
+    if (story && ((Number(item.revision) || 0) <= story.revision || MOVES.has(item.kind))) {
       dropped.push({ item, why: "told" });
       continue;
     }

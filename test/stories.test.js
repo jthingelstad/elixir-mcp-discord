@@ -25,19 +25,35 @@ const told = (item, toldAt, extra = {}) => ({
   ...extra,
 });
 
-test("an id told at the same or a higher revision is not news; another kind's growth passes", () => {
+test("an id told at the same or a higher revision is not news; a move proved late is the same move; another kind's growth passes", () => {
   const join = { id: "tl_join", revision: 1, kind: "member_joined", subject_tag: "#P", subject_name: "New", facts: {} };
+  // Hub 11.11.0: a late-proved arena move is re-served under its id at revision 2, carrying its battle.
   const arena = { id: "tl_arena", revision: 2, kind: "arena_changed", facts: { player_tag: "#Q", name: "Mover" } };
-  const stories = [told(join, "2026-10-11T10:00:00Z"), told({ ...arena, revision: 1 }, "2026-10-11T10:00:00Z")];
-  const { keep, dropped } = untold([join, arena], stories, { now: new Date("2026-10-11T12:00:00Z") });
+  const week = {
+    id: "tl_week",
+    revision: 2,
+    kind: "week_resolved",
+    subject_tag: "#C",
+    subject_name: "Clan",
+    facts: {},
+  };
+  const stories = [
+    told(join, "2026-10-11T10:00:00Z"),
+    told({ ...arena, revision: 1 }, "2026-10-11T10:00:00Z"),
+    told({ ...week, revision: 1 }, "2026-10-11T10:00:00Z"),
+  ];
+  const { keep, dropped } = untold([join, arena, week], stories, { now: new Date("2026-10-11T12:00:00Z") });
   assert.deepEqual(
     keep.map((i) => i.id),
-    ["tl_arena"],
-    "an arena move that grew (it now carries its battle) is the model's call",
+    ["tl_week"],
+    "a week that grew is the model's call, with the told story beside it",
   );
   assert.deepEqual(
     dropped.map((d) => [d.item.id, d.why]),
-    [["tl_join", "told"]],
+    [
+      ["tl_join", "told"],
+      ["tl_arena", "told"],
+    ],
   );
 });
 
