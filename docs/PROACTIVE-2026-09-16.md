@@ -21,7 +21,8 @@ ask.
 
 1. **Retire `capability-spotlight`** (manufactured: a weekday rotation of
    demos). Its one real function — showing a question a member could paste —
-   becomes a habit of the editor: end a post with the pasteable question when
+   becomes a habit of the editor (retired 2026-10-11: sixteen uses, no
+   member ever asked one; see docs/decisions/timeline.md): end a post with the pasteable question when
    a moment naturally invites one. Yes/no.
 2. **Retire `notable-movers` and `pilot-spotlight` as slots**; their
    functions become desks of the editor, fed by timeline moments. Movers
@@ -153,7 +154,8 @@ already read like this, they just lacked the items:
   one moment, a little deeper — `players_summary` or `battles_performance`
   on that member only — recognition, not ranking. This is what
   pilot-spotlight was for, fired by the record instead of Friday.
-- **The pasteable question**: when a moment invites one, end with the
+- **The pasteable question** (retired 2026-10-11, Jamie: "We should remove
+  this. It doesn't work and is not useful."): when a moment invites one, end with the
   question a member could paste into the ask channel, real names in it, in
   backticks. Never a template, never "you can ask". This is all that
   survives of the spotlight.
