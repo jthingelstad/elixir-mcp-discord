@@ -76,6 +76,24 @@ test("one standout sitting per member per local day, in the operator's zone; 0 i
   assert.equal(localDay("2026-10-11T04:00:00Z", timezone), "2026-10-10");
 });
 
+test("two sittings of one member in one batch are one story today; a sitting told today still grows", () => {
+  const now = new Date("2026-10-11T12:00:00Z");
+  const a = sitting("tl_a1", 2, "#A", "Aaqib", ["won_in_a_row>=5"]);
+  const b = sitting("tl_a2", 2, "#A", "Aaqib", ["battles>=20"]);
+  const { keep, dropped } = untold([a, b], [], { now });
+  assert.deepEqual(
+    keep.map((i) => i.id),
+    ["tl_a1"],
+  );
+  assert.deepEqual(
+    dropped.map((d) => [d.item.id, d.why]),
+    [["tl_a2", "member_cap"]],
+  );
+  const stories = [told(a, "2026-10-11T10:00:00Z")];
+  const grown = sitting("tl_a1", 6, "#A", "Aaqib", ["won_in_a_row>=5", "won_in_a_row>=10"]);
+  assert.deepEqual(untold([grown], stories, { now }).keep, [grown], "its own new rung is not a second sitting");
+});
+
 test("a post's covers name the items it told; without them, the names it mentions do", () => {
   const items = [
     sitting("tl_ak", 4, "#AK", "Ak", ["won_in_a_row>=5"]),
@@ -116,9 +134,8 @@ test("a story record is the bot's own output: id, revision, kind, who, rungs, wh
     id: "tl_s",
     revision: 7,
     kind: "session_standout",
-    subjects: [{ tag: "#A", name: "Aaqib" }],
+    tags: ["#A"],
     crossed: ["won_in_a_row>=5"],
-    at: "2026-10-11T10:25:28.000Z",
     toldAt: "2026-10-11T12:00:00.000Z",
     channel: "#updates",
     gist: "Aaqib has won seven straight, the longest run in the clan this week.",

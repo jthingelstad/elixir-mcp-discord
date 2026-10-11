@@ -11,9 +11,11 @@
  * in six, a race finish four times on one day and a departure twice.
  *
  * So each post now leaves a record of the stories it told: `{ id, revision,
- * kind, subjects, crossed, at, toldAt, gist }`. It is the bot's own output,
- * the same class as recall, not game data: nothing here is read back as a
- * fact about the game. Two things read it:
+ * kind, tags, crossed, toldAt, channel, gist }`. It is bookkeeping about the
+ * bot's own output, the same class as recall, not game data: it keeps player
+ * TAGS (for the per-member cap) and never names, never when the item
+ * happened, and nothing here is read back to the model as a fact about the
+ * game. Two things read it:
  *
  *   - `untold`, a deterministic filter in front of every turn: an item whose
  *     id was told at the same or a higher revision is dropped; a sitting
@@ -22,8 +24,9 @@
  *     STANDOUTS_PER_MEMBER_PER_DAY sittings per member are told per local
  *     day. A batch the filter empties never starts a turn.
  *   - the turn itself, which is handed the stories told in the last 48 hours
- *     (src/prompt.js `storiesBlock`), so the model can connect a new moment
- *     to the last one instead of repeating it.
+ *     (src/prompt.js `storiesBlock`) as ids, revisions and the first line of
+ *     its own post, so it can connect a new moment to the last one instead
+ *     of repeating it. Any fact it then writes comes from that turn's calls.
  *
  * Which items a post told is the model's word first: post_message takes
  * `covers`, the ids it is telling. A post without it is matched by the names
@@ -114,9 +117,10 @@ export function storiesFor(items, { text, covers = null, channel = null, now = n
     id: it.id ?? null,
     revision: Number(it.revision) || 0,
     kind: it.kind ?? null,
-    subjects: subjectsOf(it),
+    tags: subjectsOf(it)
+      .map((s) => s.tag)
+      .filter(Boolean),
     ...(it.kind === "session_standout" ? { crossed: rungsOf(it) } : {}),
-    at: it.at ?? null,
     toldAt,
     channel,
     gist,
@@ -144,7 +148,8 @@ export function localDay(instant, timezone) {
  *     crossed a rung it had not crossed when it was told (a streak of five
  *     becoming ten, not five battles more);
  *   - `perMemberPerDay` sittings per member per local day, the sitting's own
- *     earlier telling included; 0 is no cap.
+ *     earlier telling and the sittings this batch keeps included; 0 is no
+ *     cap.
  *
  * Any other kind told at a lower revision passes: its growth is for the
  * model to judge, with the told story beside it.
@@ -163,10 +168,13 @@ export function untold(items, stories, { now = new Date(), timezone = "UTC", per
   const sittingsToday = new Map();
   for (const s of stories ?? []) {
     if (s?.kind !== "session_standout" || localDay(s.toldAt, timezone) !== today) continue;
-    for (const { tag } of s.subjects ?? []) {
+    count(s.tags ?? [], s.id ?? s.toldAt);
+  }
+  function count(tags, key) {
+    for (const tag of tags) {
       if (!tag) continue;
       const set = sittingsToday.get(tag) ?? new Set();
-      set.add(s.id ?? s.toldAt);
+      set.add(key);
       sittingsToday.set(tag, set);
     }
   }
@@ -185,10 +193,17 @@ export function untold(items, stories, { now = new Date(), timezone = "UTC", per
     }
     if (item?.kind === "session_standout" && perMemberPerDay > 0) {
       const tags = subjectsOf(item).map((s) => s.tag);
-      if (tags.some((tag) => (sittingsToday.get(tag)?.size ?? 0) >= perMemberPerDay)) {
+      // A sitting told today counts once, however it grew.
+      const over = (tag) => {
+        const seen = sittingsToday.get(tag);
+        return (seen?.size ?? 0) >= perMemberPerDay && !seen.has(item.id);
+      };
+      if (tags.some(over)) {
         dropped.push({ item, why: "member_cap" });
         continue;
       }
+      // Two sittings of one member in one batch: the second waits for tomorrow.
+      count(tags, item.id ?? `batch:${keep.length}`);
     }
     keep.push(item);
   }

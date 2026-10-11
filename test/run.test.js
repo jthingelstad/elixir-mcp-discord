@@ -855,9 +855,11 @@ test("a post remembers the stories it told, and the next turn is shown them with
     },
   });
   assert.match(seen[1], /STORIES YOU TOLD IN THE LAST 48 HOURS/);
-  assert.match(
-    seen[1],
-    /- tl_sit r6 session_standout · Aaqib · told \w{3} \d\d:\d\d, 0h ago in #news · "Six straight for Aaqib\."/,
+  assert.match(seen[1], /- tl_sit r6 · told \w{3} \d\d:\d\d, 0h ago in #news · "Six straight for Aaqib\."/);
+  assert.doesNotMatch(
+    seen[1].split("STORIES YOU TOLD IN THE LAST")[1],
+    /session_standout|won_in_a_row/,
+    "the list is the bot's own words and ids, never the old item's facts",
   );
   assert.deepEqual(
     dry.stories.map((s) => [s.id, s.revision]),

@@ -106,7 +106,7 @@ const DEFAULTS = {
   // never its own, so it demonstrated rival scouting three days out of five.
   lastPosts: {},
   // { [routineKey]: story[] } — the timeline stories each routine's posts
-  // told: { id, revision, kind, subjects, crossed, at, toldAt, channel,
+  // told: { id, revision, kind, tags, crossed, toldAt, channel,
   // gist }, oldest first, a week of them (src/stories.js). Own output, like
   // lastPosts: what this bot said, never a fact about the game.
   stories: {},

@@ -15,15 +15,20 @@ brief's word), "still going" in 25 of 77 posts, "1-0 win over X (+30)" in
 44-item catch-up told as a headed digest.
 
 - **Story memory** (`src/stories.js`, `state.stories`). Each post records
-  the timeline stories it told: `{ id, revision, kind, subjects, crossed,
-  at, toldAt, channel, gist }`, a week of them. `post_message` takes
+  the timeline stories it told: `{ id, revision, kind, tags, crossed,
+  toldAt, channel, gist }`, a week of them: player tags for the cap, never
+  names or when the item happened. `post_message` takes
   `covers`, the ids the post tells; a post without it is matched by the
   names it mentions. It is the bot's own output, the same class as recall,
   never read back as a fact about the game. The framing's rule ("an id you
   have posted before…") could not be kept before: recall held text, not
   ids.
 - **The turn is shown the last 48 hours of it** (`storiesBlock`, in the user
-  turn, so the cached prefix is untouched), one line a story.
+  turn, so the cached prefix is untouched), one line a story: the id and
+  revision, when and where it was told, and the post's own first line.
+  Nothing from the old item rides along (Codex on #57: a name or kind kept
+  from an earlier timeline would be a fact the turn did not read), so a
+  fact the post writes still comes from this turn.
 - **A deterministic filter before every turn** (`untold`, in the live lane
   and the dry run): an id told at the same or a higher revision is dropped;
   a sitting already told is dropped unless it crossed a rung it had not
