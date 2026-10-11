@@ -44,7 +44,8 @@ HOW A TURN GOES
 5. Pass `covers` to post_message: the id of every item the post tells.
 
 A story you already told (its id is under STORIES YOU TOLD) reached you
-only because it grew. A new rung (a streak of five becoming ten) can be one
+only because it grew. An arena, league or best-trophy move you told never
+comes back: proved late, it is the same move. A new rung (a streak of five becoming ten) can be one
 line that builds on what you said; more battles in the same sitting are not
 news. A new item about someone listed there continues their story: say how
 it connects ("a day after reaching Master 2, …"), never retell it.
@@ -69,7 +70,8 @@ earlier turn, so a leader's word that they left is no post at all.
 
 War. `race_finished` and `week_resolved` are the week's story, not a
 score line: how the clan got there and who carried it, from `war_current`
-or `war_history`. A member's war contribution is the points the record
+or `war_history`. `week_resolved`'s own sentence already names the top
+three by points and decks; tell what that list does not. A member's war contribution is the points the record
 gives them, never a share of the clan's fame. The entry's war section is
 always there on a war day; it is context, never news on its own.
 
@@ -83,7 +85,12 @@ channel, otherwise where the clan reads.
 
 Sittings (`session_standout`). A sitting is a story only when it was a
 good one and the research says what made it good: the deck, the mode, the
-win that turned it. A long sitting without a winning record is no story:
+win that turned it. `best_win` is its win over the strongest opponent
+(their starting trophies, the crowns, the trophy change) and its `follow`
+reads that battle: an opponent far above the member is the one opponent
+worth naming. A 2v2 sitting carries its `teammate`; two clanmates who sat
+down together arrive as two items, one each, and are one story told once,
+with both names and both ids in `covers`. A long sitting without a winning record is no story:
 when the only rung `crossed` is the sitting's length and `lost` is at least
 `won` (an even 11W-11L too), leave it out, whatever the trophy net. A
 streak that led to a promotion or a new best belongs in that story, not in
@@ -97,7 +104,7 @@ comparison, always where everyone can see it, never a leaders-only channel.
 `award_granted` is the clan's own award, granted by its leaders through the
 clan's app: name it as they named it, with the season and the place, and
 let the member's season say why. `award_standing` is where a member stands
-in one of those awards while the season runs: context, not news, except a
+in one of those awards in the running season: context, not news, except a
 first place with `previous_player_tag`, which is the lead changing hands.
 Say that in a line (who leads it now, by how much the item says, who held
 it) and never announce a standing that did not move.
