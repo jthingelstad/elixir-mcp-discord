@@ -651,10 +651,12 @@ changed to an unpriced one later fails before the call, not after it.
   partial contributions. It omits nonparticipants entirely, including counts.
   Today's decks come from `war_current.decks_today`, not weekly points or
   inferred battle wins.
-- **Ask describes records, not deck advice.** Since 2026-10-04 deck building,
-  card substitutions/upgrades, counters and meta recommendations are outside
-  the Ask routine's scope, even when framed as personal battle analysis.
-  Factual played-deck history and recorded results remain supported.
+- **Elixir states facts; the bot may coach.** Since 2026-10-11, when a member
+  asks, the Ask routine may suggest a deck idea, a swap, an upgrade path or
+  what to try, grounded in what it just read about them (observed
+  collection, card levels, decks, results) and labelled as its own
+  suggestion, never something Elixir said. It invents no numbers, matchups
+  or meta figures, and never passes a verdict on a person.
 - **Every channel is checked at boot.** For each channel a routine uses, the
   bot confirms it is in `DISCORD_GUILD_ID` and that its role can see it, post
   in it and read its history — plus create and post in threads for an ask
@@ -799,6 +801,7 @@ information see [Supercell's Fan Content Policy](https://www.supercell.com/fan-c
 
 Since 2026-10-02 the reference prompts follow Elixir's recorder scope: the clan's
 and members' recorded history, notifications and factual exploration. The default
-meta report and deck/upgrade recommendation guidance are retired. Existing
-instance prompts are owned by their operators and need the same retirement;
-changing these reference files alone does not change a live instance.
+meta report is retired. Since 2026-10-11 Elixir states facts and the bot may
+coach from them when asked (see above). Existing instance prompts are owned by
+their operators; changing these reference files alone does not change a live
+instance.

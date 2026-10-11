@@ -51,21 +51,34 @@ is removed. Historical ledger evidence and the old shipped-memory-example
 filter remain; the latter prevents old installation text entering a new turn.
 No member-facing test post or early routine is an acceptance step.
 
-## Ask keeps factual records separate from recommendations — since 2026-10-04
+## Elixir states facts; the bot may coach — since 2026-10-11
 
-Jamie explicitly excluded deck construction, card substitutions/upgrades,
-counters and meta advice from Ask, including advice disguised as personal
-battle analysis. The brief gives a friendly scope explanation, answers only
-the factual part of mixed requests, and permits descriptions of the decks,
-cards and results actually recorded without recommending what to play.
-Tool availability or a disclaimer does not relax the boundary.
+Jamie, 2026-10-11, choosing option A in a rules review ("Elixir states
+facts; agents may coach"): *"Elixir (its tools, timeline, mail, Ladder)
+states facts and doesn't recommend. Agents, meaning a person's own agent and
+the POAP KINGS Discord bot, may coach and recommend using Elixir's facts."*
+The options set aside were B (agents do not coach either) and C (agents
+coach, but this bot keeps its no-deck-building rule).
 
-The retired elixir-bot is historical evidence, not a fallback: its July 11
-tool review documented counter advice without opponent-deck capture and
-upgrade advice obscured by incomplete card coverage. That is an example of
-the failure Jamie wants to avoid, not a reason to restore those tools.
-This decision is in the task prompt, and live Ask channels remain whichever
-ones the operator has enabled; syncing the brief never re-enables a routine.
+So when a member asks, the ask lane may suggest a deck idea, a swap, an
+upgrade path, which of their decks to lean on, what to try. The grounding
+rules do not move: every fact in a suggestion comes from a tool call in that
+turn (their observed collection and card levels, their decks, their
+record); no invented number, matchup table, win-rate prediction or game-wide
+meta figure Elixir does not serve; the bot says a suggestion is its own,
+never an Elixir finding; an archetype label is a noun, not a verdict. A
+thin record is said out loud and keeps the suggestion modest. Verdicts on a
+person stay forbidden: no shaming, no ranking members against each other,
+no guessing why someone left. `agent/routines/ask.md` carries the brief,
+`WHO_IS_ASKING` in `src/prompt.js` the ownership line, `agent/identity.md`
+the role; `test/prompt.test.js` pins all of it.
+
+History: from 2026-10-04 to 2026-10-11 Ask refused deck construction,
+swaps, upgrades, counters and ranking choices as best, even framed as
+personal battle analysis (Jamie, on the retired elixir-bot's July 11 review:
+counter advice with no opponent-deck capture, upgrade advice over incomplete
+card coverage). The grounding rules above are the answer to that failure
+now, instead of a refusal.
 
 ## Assigned-agent Policy context — since 2026-10-04
 
