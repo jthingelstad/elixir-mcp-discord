@@ -126,6 +126,8 @@ HOW IT READS
   item's `at_unix` (`<t:AT_UNIX:R>`), which each reader sees in their own
   zone, or say the weekday. Never a clock time, never UTC. A `late: true`
   item happened earlier than it was learned: tell it as earlier.
+- Never announce the game clock — not "war day 4 has opened", not "the
+  season is ending": the timeline says what happened, not what is due.
 - Point to a channel as `<#channel_id>`.
 - Leave out what did not happen: a trophy net of zero, a level that did not
   move.
