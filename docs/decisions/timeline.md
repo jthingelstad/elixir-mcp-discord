@@ -34,9 +34,12 @@ brief's word), "still going" in 25 of 77 posts, "1-0 win over X (+30)" in
   a sitting already told is dropped unless it crossed a rung it had not
   crossed when told; and `STANDOUTS_PER_MEMBER_PER_DAY` (default 1, 0 is no
   cap) sittings per member per local day. A batch the filter empties starts
-  no turn; a told carried item no longer counts toward a release. Other
-  kinds told at a lower revision pass: their growth is the model's call,
-  with the told story beside it.
+  no turn; a told carried item no longer counts toward a release. A move
+  (arena, league, best trophies) once told is dropped at any revision: from
+  hub 11.11.0 a move proved late comes back under its id at a higher
+  revision, and it is the same move (issue #58; on 10-09 one arena move was
+  posted twice). Other kinds told at a lower revision pass: their growth is
+  the model's call, with the told story beside it.
 - **The brief** (`agent/routines/editor.md`) is rewritten as a storyteller:
   research with the item's `follow` before writing about a person and post
   only what the research found; group connected items into one story; a
