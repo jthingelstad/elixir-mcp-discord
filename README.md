@@ -92,7 +92,9 @@ rate over a window are never the story.
 The editor never tells one story twice. Each post records the timeline
 stories it told (`post_message` takes `covers`, the ids of the items it
 tells), and the next turn is shown the last 48 hours of them. Before a turn
-starts, an item already told at the same or a higher revision is dropped,
+starts, an item already told at the same or a higher revision is dropped
+(a told arena, league or best-trophy move at any revision: proved late, it
+is the same move),
 a standout sitting already told is dropped unless it crossed a new rung,
 and one member's sittings are told at most `STANDOUTS_PER_MEMBER_PER_DAY`
 times a local day (1; 0 is no cap). A batch the filter empties starts no
