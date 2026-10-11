@@ -178,6 +178,7 @@ test("no lean and no silence line reach a turn; the timeline framing explains a 
   assert.doesNotMatch(user, /\[silence/);
   assert.match(user, /since your last turn[^\n]*`late: true` happened before this window/);
   assert.match(user, /<t:AT_UNIX:R>/, "a time is Discord's stamp from at_unix, never one the model computes");
+  assert.match(user, /`follow` lists the reads/, "an item says where its story continues; the model starts there");
   // The routine's length limit rides DELIVER, so the model has the number in
   // the turn and not only in the tool's description (2026-09-21).
   assert.match(
