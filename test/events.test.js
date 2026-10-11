@@ -564,3 +564,43 @@ test("one story is one item: the highest revision of an id wins, oldest first by
     "the grown sitting sorts by when it ended, after the join",
   );
 });
+
+test("a carried item that may not be published never reaches a turn (Codex on #52)", async () => {
+  const key = "carry-gate-editor";
+  state.setCursor(key, "2026-09-25T10:55:00.000Z");
+  state.addCarry(key, [
+    { ...moment("badge_earned", "2026-09-25T10:00:00.000Z", undefined, "held"), id: "tl_held", publishable: false },
+    { ...moment("badge_earned", "2026-09-25T10:01:00.000Z", undefined, "kept"), id: "tl_kept", publishable: true },
+  ]);
+  const editor = { key, trigger: "events", wake: ["member_joined"], carry: ["badge_earned"] };
+  const hub = fakeHub([moment("member_joined", "2026-09-25T11:00:00.000Z", undefined, "joiner")]);
+  const turns = [];
+  await pollRoutine(editor, null, {
+    call: hub.call,
+    run: async (_routine, { events }) => {
+      turns.push(events);
+      return { ok: true, skipped: false };
+    },
+  });
+  assert.deepEqual(
+    turns[0].timeline.map((i) => i.subject_name),
+    ["kept", "joiner"],
+  );
+});
+
+test("a dry run hands over one item per story, its newest revision (Codex on #52)", async () => {
+  const editor = { key: "dry-run-revision-editor", wake: ["session_standout"] };
+  const sitting = (revision, observedAt) => ({
+    ...moment("session_standout", "2026-09-25T11:00:00.000Z", observedAt, `rev${revision}`),
+    id: "tl_sitting",
+    revision,
+  });
+  const hub = fakeHub([sitting(5, "2026-09-25T11:10:00.000Z"), sitting(9, "2026-09-25T11:40:00.000Z")], {
+    pageSize: 50,
+  });
+  const found = await eventsForDryRun(editor, { call: hub.call });
+  assert.deepEqual(
+    found.events.timeline.map((i) => i.subject_name),
+    ["rev9"],
+  );
+});
