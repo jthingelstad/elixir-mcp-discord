@@ -85,6 +85,10 @@ the channels have been quiet past the `VOICE` line (`quiet` never, `normal`
 12h, `chatty` 4h). The batch is the unit of cost: a turn costs about the
 same whether it says one line or SKIP, so texture never buys one by itself.
 
+A moment about a member (a promotion, a best, a sitting) is posted only
+when the turn researched it; the deciding battle's score line and a win
+rate over a window are never the story.
+
 The editor never tells one story twice. Each post records the timeline
 stories it told (`post_message` takes `covers`, the ids of the items it
 tells), and the next turn is shown the last 48 hours of them. Before a turn
