@@ -29,7 +29,7 @@ import path from "node:path";
 import { callTool } from "./mcp.js";
 import { config, instanceDir, POLL_SECONDS_MIN, POLL_SECONDS_MAX } from "./config.js";
 import { runRoutine } from "./run.js";
-import { markFeedbackShown, newFeedbackResponses } from "./feedback.js";
+import { markFeedbackShown, newFeedbackResponses, stampAnswerCutoff } from "./feedback.js";
 import { directory, postable } from "./directory.js";
 import { log } from "./log.js";
 import { instanceName } from "./ledger.js";
@@ -654,6 +654,7 @@ export function jittered(ms, random = Math.random) {
  * @returns {{ stop: Function }}
  */
 export function startEventLoop(routinesFn, resolveChannel, { now = () => Date.now(), random = Math.random } = {}) {
+  stampAnswerCutoff();
   let seeded = state.get("cursors") && Object.keys(state.get("cursors")).length > 0;
 
   const run = async () => {

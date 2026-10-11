@@ -248,3 +248,27 @@ test("a needs_info answer reaches the DM as a question with how to reply", () =>
   assert.match(done, /^\*\*Elixir MCP answered feedback this agent filed\*\* \(shipped in 11\.10\.0\)/);
   assert.doesNotMatch(done, /follows_id/);
 });
+
+test("a bare id from the old ledger does not hide an answer newer than the cutoff (Codex on #55)", () => {
+  const cutoff = "2026-10-11T13:30:00Z";
+  const answered = (respondedAt) => ({
+    feedback_id: "12",
+    message: "m",
+    response: "r",
+    status: "needs_info",
+    responded_at: respondedAt,
+  });
+  // The old code showed #12's answer: it is older than the cutoff, so the
+  // bare id covers it and is upgraded.
+  const older = selectFreshResponses([answered("2026-10-10T09:00:00Z")], ["12"], { legacyCutoff: cutoff });
+  assert.deepEqual(older.fresh, []);
+  assert.deepEqual(older.ledger, ["12@2026-10-10T09:00:00Z"]);
+  // #12 was answered again after this version booted, before the first read:
+  // new, and the bare id is not upgraded onto it.
+  const newer = selectFreshResponses([answered("2026-10-11T14:00:00Z")], ["12"], { legacyCutoff: cutoff });
+  assert.deepEqual(
+    newer.fresh.map((f) => f.key),
+    ["12@2026-10-11T14:00:00Z"],
+  );
+  assert.deepEqual(newer.ledger, []);
+});

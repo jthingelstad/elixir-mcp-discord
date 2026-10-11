@@ -419,26 +419,37 @@ export async function readFeedbackPages(readPage = (args) => callTool("elixir_my
  * An answer is keyed by its item AND its responded_at, because one item can
  * now be answered twice: a needs_info question, then the outcome once the
  * operator replies. Keyed by id alone, the second answer was never shown.
- * A bare id in the ledger is the old key, from before 11.10.0: it means the
- * answer the item holds now was shown, and it is upgraded to the new key in
- * place, so a later answer to that item still reaches the DM.
+ *
+ * A bare id in the ledger is the old key, written before this version first
+ * booted. It proves only that an answer from before then was shown, so it
+ * covers the item's current answer only when that answer is no newer than
+ * the cutoff stamped at that boot (stampAnswerCutoff); then it is upgraded
+ * to the answer's key. A newer answer is new. The ledger is read only when
+ * an answer is pending, so a later answer is exactly when the upgrade runs.
  */
 export function answerKey(id, respondedAt) {
   return respondedAt ? `${id}@${respondedAt}` : String(id);
 }
 
-export function selectFreshResponses(items, ledger, { seedOnly = false } = {}) {
+export function selectFreshResponses(items, ledger, { seedOnly = false, legacyCutoff = null } = {}) {
   const seen = new Set(ledger.map(String));
   const answered = [];
+  const kept = [];
   const fresh = [];
 
   for (const item of items) {
     const id = item.feedback_id ?? item.id;
     const response = item.response ?? item.maintainer_response;
     if (id === undefined || !response) continue;
-    const key = answerKey(id, item.responded_at ?? null);
+    const respondedAt = item.responded_at ?? null;
+    const key = answerKey(id, respondedAt);
     answered.push(key);
-    if (seen.has(key) || seen.has(String(id))) continue;
+    const legacyShown =
+      seen.has(String(id)) && (!legacyCutoff || !respondedAt || Date.parse(respondedAt) <= Date.parse(legacyCutoff));
+    if (seen.has(key) || legacyShown) {
+      kept.push(key);
+      continue;
+    }
     fresh.push({
       id,
       key,
@@ -458,11 +469,14 @@ export function selectFreshResponses(items, ledger, { seedOnly = false } = {}) {
   // so a send that fails is retried, not lost; and the ledger forgets only
   // answers the server no longer returns, so it is bounded by what the server
   // holds and never drops one it still does (a slice of the last 500 would,
-  // and the reader walks every page). An old bare id still shown becomes its
-  // answer's key.
-  const freshKeys = new Set(fresh.map((f) => f.key));
-  const kept = answered.filter((key) => seen.has(key) || (!freshKeys.has(key) && seen.has(key.split("@")[0])));
+  // and the reader walks every page).
   return { fresh, ledger: kept };
+}
+
+/** Called once at boot: the moment bare-id ledger entries stop being
+ *  written. Stamped once and kept, so a later boot cannot move it. */
+export function stampAnswerCutoff(at = new Date().toISOString()) {
+  if (!state.get("answeredFeedbackCutoff")) state.set({ answeredFeedbackCutoff: at });
 }
 
 export async function newFeedbackResponses({ seedOnly = false } = {}) {
@@ -472,7 +486,10 @@ export async function newFeedbackResponses({ seedOnly = false } = {}) {
     return [];
   }
   const before = state.get("answeredFeedbackIds") || [];
-  const { fresh, ledger } = selectFreshResponses(result.items, before, { seedOnly });
+  const { fresh, ledger } = selectFreshResponses(result.items, before, {
+    seedOnly,
+    legacyCutoff: state.get("answeredFeedbackCutoff") || null,
+  });
   if (ledger.length !== before.length || ledger.some((key, i) => key !== String(before[i])))
     state.set({ answeredFeedbackIds: ledger });
   return fresh;

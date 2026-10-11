@@ -74,6 +74,9 @@ const DEFAULTS = {
   // a log line rather than a channel quietly reporting on strangers.
   principal: null,
   answeredFeedbackIds: [],
+  // When this version first booted (hub 11.10.0 keying): a bare id in
+  // answeredFeedbackIds covers only an answer no newer than this.
+  answeredFeedbackCutoff: null,
   // { [channelId]: { at, name, routine, seeded } } — when the bot last posted
   // in each channel (the silence clock), and when it first saw one it never
   // posted in.
