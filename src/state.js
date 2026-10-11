@@ -237,22 +237,27 @@ export function carried(routineKey) {
 }
 
 /** One timeline item, whoever re-read it: a release turn that fails leaves
- *  the cursor where it was, and the next poll carries the same items again. */
-const itemId = (item) => [item?.kind, item?.subject_tag, item?.at, item?.observed_at, item?.text].join("|");
+ *  the cursor where it was, and the next poll carries the same items again.
+ *  Since contract 11.8.0 the hub's `id` is the story, so a story carried
+ *  again at a higher `revision` replaces the copy held; an item without an
+ *  id (an older hub) is keyed by what it says. */
+const itemId = (item) =>
+  item?.id ? `id:${item.id}` : [item?.kind, item?.subject_tag, item?.at, item?.observed_at, item?.text].join("|");
+const revisionOf = (item) => Number(item?.revision) || 0;
 
 export function addCarry(routineKey, items) {
   if (!items?.length) return;
   const state = read();
-  const held = state.carry?.[routineKey] ?? [];
-  const seen = new Set(held.map(itemId));
-  const fresh = [];
-  for (const item of items) {
+  const byId = new Map();
+  for (const item of [...(state.carry?.[routineKey] ?? []), ...items]) {
     const id = itemId(item);
-    if (seen.has(id)) continue;
-    seen.add(id);
-    fresh.push(item);
+    const have = byId.get(id);
+    if (have && revisionOf(item) <= revisionOf(have)) continue;
+    // A higher revision takes the story's place at the end: it is news again.
+    byId.delete(id);
+    byId.set(id, item);
   }
-  const kept = [...held, ...fresh].slice(-CARRY_CAP);
+  const kept = [...byId.values()].slice(-CARRY_CAP);
   write({ ...state, carry: { ...state.carry, [routineKey]: kept } });
 }
 

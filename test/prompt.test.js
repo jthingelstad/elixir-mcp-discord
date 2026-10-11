@@ -167,7 +167,7 @@ test("the skip rule asks for one line of why, kept out of the channel", () => {
  * record decides when a proactive turn fires and VOICE is the editor's
  * carry release. Nothing in the system block or the user turn leans on
  * the skip decision, and the timeline framing says a batch may carry
- * items older than the window.
+ * items that happened before the window (`late`, contract 11.8.0).
  */
 test("no lean and no silence line reach a turn; the timeline framing explains a batch", () => {
   const entries = [{ id: "11", name: "news", topic: "", visibility: "everyone", threads: false, role: null }];
@@ -176,7 +176,8 @@ test("no lean and no silence line reach a turn; the timeline framing explains a 
   assert.match(systemFor(may, { entries }), /SILENCE IS A VALID OUTPUT/, "SKIP itself stays");
   const user = userMessageFor(may, { events: { timeline: [{ kind: "member_joined" }] }, withTool: true });
   assert.doesNotMatch(user, /\[silence/);
-  assert.match(user, /since your last turn[^\n]*waited for this batch/);
+  assert.match(user, /since your last turn[^\n]*`late: true` happened before this window/);
+  assert.match(user, /<t:AT_UNIX:R>/, "a time is Discord's stamp from at_unix, never one the model computes");
   // The routine's length limit rides DELIVER, so the model has the number in
   // the turn and not only in the tool's description (2026-09-21).
   assert.match(

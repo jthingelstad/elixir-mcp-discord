@@ -2,6 +2,36 @@
 
 *Part of the decision ledger — dated, with the reason. [AGENTS.md](../../AGENTS.md) has the map and the rules. Read this before changing src/events.js, src/clock.js, agent/routines/editor.md.*
 
+## Publication-grade items: observed, publishable, one per story — since 2026-10-11
+
+Elixir 11.8.0 (feedback #373-#376) moved the guardrails this bot's
+prompts carried into the hub's output. An item's `text` has no time in
+it and names people by their in-game names. Each item carries `at_unix`
+and `late`, plus `sort_at` for ordering. One story is one item under a
+stable `id` that grows by `revision`. Each item also says whether it is
+`publishable`.
+
+- **Every read says `basis: "observed"`.** This lane walks what the
+  record learned since its cursor. The seed read and a busy window's
+  older pages name no reader, so without the argument the hub would
+  read them as `occurred` (what happened in the window).
+- **An item with `publishable: false` never reaches a routine.**
+  `relevant` drops it before anything else.
+- **One story, one item.** A batch keeps the highest revision of each
+  `id`, and the carry holds one copy per id. A grown story moves to the
+  end as news again. Items without an id, from an older hub, are keyed
+  as before.
+- **Oldest first by `sort_at`.** That is the hub's newsfeed order, so a
+  sitting sorts by when it ended.
+- **The turn's framing** says `text` may be quoted as it stands, `late`
+  means learned now and happened earlier, and an `id` posted before is
+  news only if its growth is. When a post says when, it uses Discord's
+  stamp from `at_unix` (`<t:AT_UNIX:R>` or `:f`), never a clock time
+  the model computed.
+
+Rollout order: the hub first (an older hub refuses the unknown `basis`
+argument), then each instance rebuilt.
+
 ## War participation recognizes contributions — since 2026-10-04
 
 Jamie corrected a `war-deck-check` post that named nonplayers and partial

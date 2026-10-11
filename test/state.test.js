@@ -37,6 +37,16 @@ test("the same timeline item carried twice is held once", () => {
   assert.deepEqual(state.carried("editor"), [badge, card]);
 });
 
+test("a story carried again at a higher revision replaces the copy held (contract 11.8.0)", () => {
+  const story = (revision) => ({ id: "s1", revision, kind: "session_standout", text: `rev ${revision}` });
+  const badge = { id: "b1", revision: 1, kind: "badge_earned", text: "A earned a badge" };
+  state.addCarry("editor", [story(2), badge]);
+  state.addCarry("editor", [story(1)]);
+  assert.deepEqual(state.carried("editor"), [story(2), badge], "an older revision changes nothing");
+  state.addCarry("editor", [story(4)]);
+  assert.deepEqual(state.carried("editor"), [badge, story(4)], "the grown story is held once, as news again");
+});
+
 test("a missing file is a fresh install, read as the defaults", () => {
   assert.equal(state.get("runs"), null);
   assert.deepEqual(state.get("cursors"), {});

@@ -471,7 +471,7 @@ export function userMessageFor(routine, { events, recent, withTool = false, now 
   const parts = [nowLine(now), routine.prompt];
   if (events && (Array.isArray(events) ? events.length : true)) {
     parts.push(
-      `FROM THE ELIXIR MCP TIMELINE — \`timeline\` is what happened since your last turn, oldest first, one item each with a sentence and its facts (an item may be older than the window: it waited for this batch); \`entries\` is the latest window's context per subject, sections null when nothing happened. Facts with their own timestamps, not a report: drill with the tools where it earns its place, and never announce the time from them.\n\n${JSON.stringify(events, null, 2)}`,
+      `FROM THE ELIXIR MCP TIMELINE — \`timeline\` is what the record learned since your last turn, oldest first, one item per story: \`text\` is a sentence you may quote as it stands (in-game names, no time in it), \`facts\` its record, \`subjects\` everyone it is about. An item with \`late: true\` happened before this window and was only learned in it. An \`id\` you have posted before is the same story grown (a higher \`revision\`): mention it again only if the growth is news. To say when something happened, write Discord's own stamp from the item's \`at_unix\`, \`<t:AT_UNIX:R>\` (relative) or \`<t:AT_UNIX:f>\` (full), never a clock time of your own. \`entries\` is the latest window's context per subject, sections null when nothing happened. Facts, not a report: drill with the tools where it earns its place.\n\n${JSON.stringify(events, null, 2)}`,
     );
   }
   if (recent?.length) {
