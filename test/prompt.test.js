@@ -44,19 +44,26 @@ test("the shipped war clock brief recognizes contributors without exposing nonpa
   assert.doesNotMatch(brief, /nudge naming who is untouched/);
 });
 
-test("the shipped Ask boundary reaches the cached prompt while factual history stays supported", () => {
+test("the shipped Ask brief lets the bot coach, grounded in what it just read, and never judge a person", () => {
   const ask = shipped("ask");
   const system = systemFor(ask, { identity: null, includePrompt: true });
-  assert.match(system, /Deck and card advice is outside this Ask channel's scope/);
-  assert.match(system, /Do not construct,\s+optimize or recommend decks/);
-  assert.match(system, /card substitutions, upgrades or cards\s+to use/);
-  assert.match(system, /recommend counters/);
-  assert.match(system, /give meta advice/);
-  assert.match(system, /disguised as personal battle\s+analysis/);
-  assert.match(system, /Do not call tools to work around this boundary/);
-  assert.match(system, /offer the recommendation indirectly after declining it/);
-  assert.match(system, /For a mixed request, decline the advice and answer only its factual part/);
-  assert.match(system, /fine to describe the decks and cards actually played, their recorded\s+results and coverage/);
+  // Jamie, 2026-10-11: Elixir states facts; agents may coach.
+  assert.match(system, /When a member asks for advice, you may coach/);
+  assert.match(system, /a card swap,\s+which cards to upgrade next/);
+  assert.match(system, /Elixir states facts and does not recommend, so a suggestion is yours/);
+  assert.match(system, /never "Elixir says"/);
+  assert.match(system, /Read before you suggest/);
+  assert.match(system, /A swap names a card their observed collection\s+holds/);
+  assert.match(system, /it never supplies a\s+fact/);
+  assert.match(system, /Never invent a number, a matchup table, a win-rate prediction/);
+  assert.match(system, /An archetype label is a noun,\s+not a verdict/);
+  assert.match(system, /never a verdict on a person/);
+  assert.match(system, /rank members against each other, or guess why someone left/);
+  // The 2026-10-04 refusal is gone, not merely softened.
+  assert.doesNotMatch(system, /Deck and card advice is outside this Ask channel's scope/);
+  assert.doesNotMatch(system, /recommend counters/);
+  assert.doesNotMatch(system, /recommendation tools have retired/);
+  assert.match(system, /the suggestion is yours, built on facts you\s+read in this turn/);
 });
 
 test("every prompt carries the rules a routine is not allowed to get wrong", () => {

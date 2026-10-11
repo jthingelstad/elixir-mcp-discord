@@ -32,7 +32,7 @@ export function deckLinkTool({ resolve = callTool } = {}) {
   return {
     name: "deck_link",
     description:
-      "Read a Clash Royale deck link (link.clashroyale.com/deck/... or clashroyale://copyDeck?deck=...) that someone pasted: the eight cards by name, the tower troop, and who shared it. A link never says which cards are evolved. Use the descriptive archetype vocabulary to name it and the selected recorded history to describe actual play. A deck link does not establish performance or recommend changes.",
+      "Read a Clash Royale deck link (link.clashroyale.com/deck/... or clashroyale://copyDeck?deck=...) that someone pasted: the eight cards by name, the tower troop, and who shared it. A link never says which cards are evolved. Use the descriptive archetype vocabulary to name it and the selected recorded history to describe actual play. A link establishes no performance: how the deck has done comes from the record, and any change you suggest is your own suggestion.",
     input_schema: {
       type: "object",
       properties: { link: { type: "string", description: "the link, or the whole message containing it" } },
