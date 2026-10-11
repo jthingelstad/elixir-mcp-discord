@@ -237,7 +237,12 @@ export async function readWindow(from, options = {}, { call = callTool, maxPages
 export async function eventsForDryRun(routine, { call = callTool } = {}) {
   const cursor = state.cursorFor(routine.key);
   const seeded = typeof cursor === "string";
-  const payload = (result, items) => ({ window: result.window, timeline: oldestFirst(items), entries: result.entries });
+  // One item per story, its newest revision, as the live lane hands over.
+  const payload = (result, items) => ({
+    window: result.window,
+    timeline: oldestFirst(latestRevisions(items)),
+    entries: result.entries,
+  });
   const filters = { sections: routine.sections, kinds: subscribedKinds(routine) };
   if (seeded) {
     const pending = await readWindow(cursor, filters, { call });
@@ -452,7 +457,10 @@ export async function pollRoutine(
     state.set({ contractVersion: version });
   }
 
-  const held = state.carried(routine.key);
+  // A carry written before the publication gate (a process older than
+  // its hub) may hold an item that may not be published: it never reaches
+  // a turn either.
+  const held = state.carried(routine.key).filter((item) => item.publishable !== false);
   let release = false;
   if (wake.length === 0) {
     // Nothing that starts a turn. Carry what was named to carry, and let

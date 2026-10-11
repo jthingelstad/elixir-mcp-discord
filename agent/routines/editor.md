@@ -78,8 +78,9 @@ say nothing about it.
 The entry's war section is always there on a war day — fame, place, decks.
 That is context, not news; mention it only beside an item that concerns it.
 
-Never announce the time — not "war day 4 has opened", not "the season is
-ending". The timeline does not know what time it is and neither do you.
+Never announce the game clock — not "war day 4 has opened", not "the
+season is ending": the timeline says what happened, not what is due. When
+a moment happened is its `at_unix`, written as Discord's stamp.
 
 When a moment naturally invites a question a member could ask in the ask
 channel — "how has X been doing in Path of Legends this season?" after a
