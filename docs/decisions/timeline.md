@@ -51,6 +51,22 @@ brief's word), "still going" in 25 of 77 posts, "1-0 win over X (+30)" in
   their original posts' stories, replayed ones their replay's, and a
   replayed batch passes the same filter (`--only` picks turns by id).
 
+### A member's moment needs a call; no score line, no windowed record — since 2026-10-11
+
+A 15-turn replay of the worst editor turns from 10-03 to 10-11 on Sonnet 5
+with the storyteller brief lost the digest, every repeated streak and every
+"still going" ($0.58 against $1.49 originally). It still posted four
+promotions from the item alone, with no Elixir call, as "closing it out 1-0
+over <stranger> for +30", and kept a 30-day record as "122-90 over the last
+30 days". So the brief now makes a post about a member's moment (a
+promotion, a new best, a sitting, a milestone) with no call made that turn
+a SKIP; roster news (a join, a departure, a role change) is still told
+without research. Its never-write list names the deciding battle's score
+line however it is worded, and any win-loss record or win rate over a
+window in place of the 30-day block. The one historical comparison stays:
+"their best run this season" is history; "122-90 over 30 days" is a stat
+line. The replayed items predate `follow` (contract 11.9.0); live ones carry it.
+
 ### The suggested question is retired — since 2026-10-11
 
 The editor ended a post, when a moment invited it, with a question a member
