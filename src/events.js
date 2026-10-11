@@ -570,17 +570,30 @@ export function shouldReadFeedback({ seeded, pending }) {
  */
 export async function deliverFeedbackResponses({ seedOnly = false } = {}) {
   for (const item of await newFeedbackResponses({ seedOnly })) {
-    const shipped = item.shippedIn ? ` (shipped in ${item.shippedIn})` : "";
-    const text = [
-      `**Elixir MCP answered feedback this agent filed**${shipped}`,
-      `> ${item.message.slice(0, 400).replace(/\n/g, "\n> ")}`,
-      "",
-      item.response.slice(0, 1200),
-    ].join("\n");
-    await notify("Elixir answered", text, { fingerprint: `feedback_response:${item.id}` });
-    markFeedbackShown(item.id);
-    log.info("feedback_response_delivered", { id: item.id });
+    await notify(item.status === "needs_info" ? "Elixir asked" : "Elixir answered", feedbackResponseText(item), {
+      fingerprint: `feedback_response:${item.key}`,
+    });
+    markFeedbackShown(item.key);
+    log.info("feedback_response_delivered", { id: item.id, status: item.status });
   }
+}
+
+/** The DM for one answer. needs_info (hub 11.10.0) is a question for the
+ *  operator, not an answer: it says so, and says how to reply. */
+export function feedbackResponseText(item) {
+  const asking = item.status === "needs_info";
+  const shipped = item.shippedIn ? ` (shipped in ${item.shippedIn})` : "";
+  return [
+    asking
+      ? `**Elixir MCP asked a question about feedback #${item.id} this agent filed**`
+      : `**Elixir MCP answered feedback this agent filed**${shipped}`,
+    `> ${item.message.slice(0, 400).replace(/\n/g, "\n> ")}`,
+    "",
+    item.response.slice(0, 1200),
+    ...(asking
+      ? ["", `Reply with elixir_send_feedback, follows_id ${item.id}: the answer files as a reply to #${item.id}.`]
+      : []),
+  ].join("\n");
 }
 
 /**

@@ -6,8 +6,8 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { claimsFiling, detectFriction, readFeedbackPages } from "../src/feedback.js";
-import { shouldReadFeedback } from "../src/events.js";
+import { claimsFiling, detectFriction, readFeedbackPages, selectFreshResponses } from "../src/feedback.js";
+import { feedbackResponseText, shouldReadFeedback } from "../src/events.js";
 
 const turn = (errors, text = "Here is the answer.") => ({
   text,
@@ -194,4 +194,57 @@ test("a reply that says it filed, with no elixir_send_feedback call, is friction
   assert.equal(claimsFiling("Your win rate this week is 54% over 31 battles."), false);
   assert.equal(claimsFiling("I'll file that with the maintainer now."), true);
   assert.equal(claimsFiling("Feedback has been submitted."), true);
+});
+
+test("a needs_info question and the answer after it are both shown; an old bare id is upgraded in place (hub 11.10.0)", () => {
+  const asked = {
+    feedback_id: "12",
+    message: "The war tool rounds fame.",
+    response: "Which week did you read?",
+    status: "needs_info",
+    responded_at: "2026-10-11T18:00:00Z",
+  };
+  const old = {
+    feedback_id: "7",
+    message: "Old",
+    response: "Fixed.",
+    status: "done",
+    responded_at: "2026-10-01T00:00:00Z",
+  };
+
+  // The ledger from before 11.10.0 holds bare ids: 7 was shown, 12 is new.
+  const first = selectFreshResponses([asked, old], [7]);
+  assert.deepEqual(
+    first.fresh.map((f) => [f.id, f.key, f.status]),
+    [["12", "12@2026-10-11T18:00:00Z", "needs_info"]],
+  );
+  assert.deepEqual(first.ledger, ["7@2026-10-01T00:00:00Z"], "7 upgraded; 12 waits until delivered");
+
+  // Delivered, then answered again on the same item: the outcome is new.
+  const ledger = [...first.ledger, "12@2026-10-11T18:00:00Z"];
+  assert.deepEqual(selectFreshResponses([asked, old], ledger).fresh, []);
+  const closed = { ...asked, status: "done", response: "Fixed in 11.11.0.", responded_at: "2026-10-12T15:00:00Z" };
+  assert.deepEqual(
+    selectFreshResponses([closed, old], ledger).fresh.map((f) => f.key),
+    ["12@2026-10-12T15:00:00Z"],
+  );
+  assert.deepEqual(selectFreshResponses([closed, old], [], { seedOnly: true }), {
+    fresh: [],
+    ledger: ["12@2026-10-12T15:00:00Z", "7@2026-10-01T00:00:00Z"],
+  });
+});
+
+test("a needs_info answer reaches the DM as a question with how to reply", () => {
+  const text = feedbackResponseText({
+    id: "12",
+    message: "The war tool rounds fame.",
+    response: "Which week did you read?",
+    shippedIn: null,
+    status: "needs_info",
+  });
+  assert.match(text, /^\*\*Elixir MCP asked a question about feedback #12/);
+  assert.match(text, /follows_id 12/);
+  const done = feedbackResponseText({ id: "12", message: "m", response: "r", shippedIn: "11.10.0", status: "done" });
+  assert.match(done, /^\*\*Elixir MCP answered feedback this agent filed\*\* \(shipped in 11\.10\.0\)/);
+  assert.doesNotMatch(done, /follows_id/);
 });
