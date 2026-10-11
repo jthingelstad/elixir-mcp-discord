@@ -413,26 +413,35 @@ export async function readFeedbackPages(readPage = (args) => callTool("elixir_my
   }
 }
 
-export async function newFeedbackResponses({ seedOnly = false } = {}) {
-  const result = await readFeedbackPages();
-  if (!result.ok) {
-    log.warn("feedback_read_failed", { error: result.error });
-    return [];
-  }
+/**
+ * Which answers are new, as a pure step over the ledger (hub 11.10.0).
+ *
+ * An answer is keyed by its item AND its responded_at, because one item can
+ * now be answered twice: a needs_info question, then the outcome once the
+ * operator replies. Keyed by id alone, the second answer was never shown.
+ * A bare id in the ledger is the old key, from before 11.10.0: it means the
+ * answer the item holds now was shown, and it is upgraded to the new key in
+ * place, so a later answer to that item still reaches the DM.
+ */
+export function answerKey(id, respondedAt) {
+  return respondedAt ? `${id}@${respondedAt}` : String(id);
+}
 
-  const items = result.items;
-  const seen = new Set(state.get("answeredFeedbackIds") || []);
-  const answered = new Set();
+export function selectFreshResponses(items, ledger, { seedOnly = false } = {}) {
+  const seen = new Set(ledger.map(String));
+  const answered = [];
   const fresh = [];
 
   for (const item of items) {
     const id = item.feedback_id ?? item.id;
     const response = item.response ?? item.maintainer_response;
     if (id === undefined || !response) continue;
-    answered.add(id);
-    if (seen.has(id)) continue;
+    const key = answerKey(id, item.responded_at ?? null);
+    answered.push(key);
+    if (seen.has(key) || seen.has(String(id))) continue;
     fresh.push({
       id,
+      key,
       message: item.message || "",
       response,
       shippedIn: item.shipped_in ?? item.shippedIn ?? null,
@@ -444,22 +453,33 @@ export async function newFeedbackResponses({ seedOnly = false } = {}) {
   // Same rule as the event cursor: seed, never drain. An empty ledger meeting a
   // year of answered feedback is a channel full of old news, which is a worse
   // first impression than silence — and it happened, once, on 2026-09-08.
-  if (seedOnly) {
-    state.set({ answeredFeedbackIds: [...answered] });
+  if (seedOnly) return { fresh: [], ledger: answered };
+  // An answer is marked shown only once it was delivered (markFeedbackShown),
+  // so a send that fails is retried, not lost; and the ledger forgets only
+  // answers the server no longer returns, so it is bounded by what the server
+  // holds and never drops one it still does (a slice of the last 500 would,
+  // and the reader walks every page). An old bare id still shown becomes its
+  // answer's key.
+  const freshKeys = new Set(fresh.map((f) => f.key));
+  const kept = answered.filter((key) => seen.has(key) || (!freshKeys.has(key) && seen.has(key.split("@")[0])));
+  return { fresh, ledger: kept };
+}
+
+export async function newFeedbackResponses({ seedOnly = false } = {}) {
+  const result = await readFeedbackPages();
+  if (!result.ok) {
+    log.warn("feedback_read_failed", { error: result.error });
     return [];
   }
-  // An id is marked shown only once it was delivered (markFeedbackShown), so
-  // a send that fails is retried, not lost; and the list forgets only ids the
-  // server no longer returns, so it is bounded by what the server holds and
-  // never drops one it still does (a slice of the last 500 would, and the
-  // reader walks every page).
-  const kept = [...seen].filter((id) => answered.has(id));
-  if (kept.length !== seen.size) state.set({ answeredFeedbackIds: kept });
+  const before = state.get("answeredFeedbackIds") || [];
+  const { fresh, ledger } = selectFreshResponses(result.items, before, { seedOnly });
+  if (ledger.length !== before.length || ledger.some((key, i) => key !== String(before[i])))
+    state.set({ answeredFeedbackIds: ledger });
   return fresh;
 }
 
-/** One answer delivered: never shown again. */
-export function markFeedbackShown(id) {
+/** One answer delivered: never shown again (its answerKey). */
+export function markFeedbackShown(key) {
   const seen = state.get("answeredFeedbackIds") || [];
-  if (!seen.includes(id)) state.set({ answeredFeedbackIds: [...seen, id] });
+  if (!seen.includes(key)) state.set({ answeredFeedbackIds: [...seen, key] });
 }
