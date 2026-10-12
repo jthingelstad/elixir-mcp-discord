@@ -23,9 +23,11 @@ anyone can install.
 
 The preview began with one question: **is Elixir MCP good enough to
 replace elixir-bot's native Clash Royale data?** It was: elixir-bot retired on
-2026-09-26 and this agent took its place. The long-term direction is that
-Ask Elixir goes away and members connect Elixir MCP to their own agent, on their
-own tokens. This repo is how we find out whether that lands.
+2026-09-26 and this agent took its place. It is the conversational product for any
+clan that wants conversation in Discord, run by the clan on its own tokens: the agent
+converses, and Elixir Clan posts a clan's Actions and stories through its own webhooks
+(Jamie, 2026-10-12, elixir-mcp's docs/product/timeline.md; the old "Ask Elixir goes away"
+direction is retired). A person's own agent is for the person's own questions.
 
 ## The architecture, in one line
 
