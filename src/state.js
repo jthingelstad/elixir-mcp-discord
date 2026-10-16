@@ -175,12 +175,17 @@ function read() {
  * is atomic, so a reader — this process or `npm run try` beside the service —
  * sees the old state or the new one and never half a file, and a crash or a
  * full disk mid-write leaves the previous state where it was.
+ *
+ * The file is the owner's alone (0600, its directory 0700), like `.env`: the
+ * rename replaces the file each write, so the mode is set on the temporary
+ * file every time rather than once on the live one.
  */
 function write(state) {
-  fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
+  fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true, mode: 0o700 });
   const tmp = `${STATE_PATH}.tmp-${process.pid}`;
-  const fd = fs.openSync(tmp, "w");
+  const fd = fs.openSync(tmp, "w", 0o600);
   try {
+    fs.fchmodSync(fd, 0o600);
     fs.writeSync(fd, `${JSON.stringify(state, null, 2)}\n`);
     fs.fsyncSync(fd);
   } finally {

@@ -28,6 +28,14 @@ test("a write lands whole and leaves no temporary file behind", () => {
   assert.deepEqual(siblings(), []);
 });
 
+test("every write leaves the state file readable by its owner only", () => {
+  state.set({ spendUsd: 1 });
+  assert.equal(fs.statSync(STATE).mode & 0o777, 0o600);
+  fs.chmodSync(STATE, 0o644);
+  state.set({ spendUsd: 2 });
+  assert.equal(fs.statSync(STATE).mode & 0o777, 0o600);
+});
+
 test("the same timeline item carried twice is held once", () => {
   const badge = { kind: "badge_earned", subject_tag: "#A", at: "2026-09-25T10:00:00Z", text: "A earned a badge" };
   const card = { kind: "card_unlocked", subject_tag: "#B", at: "2026-09-25T10:05:00Z", text: "B unlocked a card" };
