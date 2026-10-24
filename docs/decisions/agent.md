@@ -41,6 +41,25 @@ Since contract 0.37.0 the connection describes itself as data:
 warns at boot if the key is not an agent. Do not go back to regexing the English
 in `instructions` — the wording is tuned for the model and changes often.
 
+## Connect Discord is how a member is known — since 2026-10-24
+
+Jamie approved building Discord linking in Elixir (elixir-mcp #531, MCP
+11.14.0), then: "Approved: update elixir-mcp-discord to send unlinked members
+to Connect Discord". A member connects Discord on their Elixir profile, or
+signs in with it; the hub resolves `on_behalf_of: "discord:<id>"` through
+that link (only to a current member of a clan on this agent's connection) and
+falls back to the old `elixir_identify` mapping. Each answer's `meta.asker`
+says which (`via: "discord_link"` or `"agent_mapping"`) and whether it is
+verified.
+
+So `WHO_IS_ASKING` now answers a `no_subject` by sending the member to Connect
+Discord (Profile) or Continue with Discord (sign-in, a free account), linked at
+the hub this instance talks to. `link_me` stays only as the fallback for
+someone who says they would rather not have an account. The bot used to link
+on a whole-name match without asking; now it asks first, because a connection
+the member makes is proven and a name match is not. Elixir removes
+`elixir_identify` and `link_me` in a later MCP major (elixir-mcp #648).
+
 ## 2026-10-02: Elixir is a recorder
 
 Jamie retired global leaderboards, game-wide meta statistics, named Collections

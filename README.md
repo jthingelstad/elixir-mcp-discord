@@ -455,13 +455,19 @@ without them it answers in the channel and says so in the log.
 ### It does not know who you are
 
 A member connecting their own agent has added their own player, so their agent
-knows them. This one has no such link and does not fake one with a local
-nickname table: it passes `on_behalf_of` with the Discord id, and the first
-time somebody is not recognised it asks which player they are and links them
-once. From then on the server remembers — for them, and for everyone who asks
-later. The link is always to whoever sent the message: the model names a
-player, and the bot supplies who is asking from Discord itself, so nobody can
-type their way into linking someone else.
+knows them. This one does not fake that with a local nickname table: it passes
+`on_behalf_of` with the Discord id, and Elixir knows the member once they have
+connected Discord to their Elixir account (Profile ▸ Connect Discord, or
+Continue with Discord at sign-in, which opens a free account). The first time
+somebody is not recognised, the bot sends them there, with links to the hub it
+talks to. A connection only the member can make is one nobody can fake.
+
+For someone who would rather not have an Elixir account, the bot can still
+link them once, on a whole-name single match or the tag they give (`link_me`).
+That link is always to whoever sent the message: the model names a player, and
+the bot supplies who is asking from Discord itself, so nobody can type their
+way into linking someone else. Elixir plans to retire this fallback once
+members have connected Discord.
 
 ### Feedback is a feature, not an afterthought
 
