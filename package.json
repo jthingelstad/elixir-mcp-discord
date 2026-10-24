@@ -28,11 +28,11 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
     "discord.js": "^14.16.3",
-    "dotenv": "^18.0.4"
+    "dotenv": "^18.0.8"
   },
   "devDependencies": {
-    "knip": "^6.38.0",
-    "oxlint": "^1.85.0",
-    "prettier": "^3.9.9"
+    "knip": "^6.42.1",
+    "oxlint": "^1.89.0",
+    "prettier": "^3.9.10"
   }
 }
