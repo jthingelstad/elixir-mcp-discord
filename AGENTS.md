@@ -197,6 +197,15 @@ handler's `elixir_identify`, a tool the prompts named already. The
 Elixir-side alternative — the connection carrying the asker per turn — is
 the cleaner end state and a hub decision.
 
+**Since 2026-10-24 that end state exists** (Jamie, elixir-mcp #531): a member
+connects Discord to their own Elixir account, and the hub resolves
+`on_behalf_of: "discord:<id>"` through that link, a current clan member's
+primary player first. `WHO_IS_ASKING` (`whoIsAsking` in `src/prompt.js`)
+sends an unknown member to Connect Discord, with links built from
+`ELIXIR_MCP_URL`'s origin, and keeps `link_me` only for someone who would
+rather not have an account. Elixir retires `elixir_identify` and `link_me`
+together in an MCP major (elixir-mcp #648); until then both paths resolve.
+
 **Public repo, no secrets.** `.env`, `.env.*`, `/config.json` and `state/`
 are gitignored. Check `git ls-files` before assuming something is untracked. Since
 2026-09-13 an instance keeps nothing in the checkout at all — see

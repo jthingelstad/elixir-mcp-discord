@@ -107,6 +107,28 @@ test("only a message routine is told how to work out who is asking", () => {
   );
 });
 
+test("an unknown member is sent to connect Discord, at the hub this instance talks to", () => {
+  // Since 2026-10-24 the hub resolves discord:<id> through a Discord the
+  // member connected themselves (elixir-mcp #531); link_me is the fallback
+  // for someone who would rather not have an account.
+  const ask = systemFor(routine({ trigger: "message", channel: "ask" }), {
+    identity: null,
+    origin: "https://elixir.example",
+  });
+  assert.match(ask, /Connect Discord on their profile, https:\/\/elixir\.example\/console\/account\/profile\./);
+  assert.match(ask, /Continue with Discord at https:\/\/elixir\.example\/console\/signin/);
+  assert.match(
+    ask,
+    /link_me is the fallback, only for someone who says they would rather not\s+have an Elixir account/,
+  );
+  // The deck and archetype rules still ride with it.
+  assert.match(ask, /call deck_link to read the eight cards/);
+  // No hub configured: the words still say where, without a link.
+  const bare = systemFor(routine({ trigger: "message", channel: "ask" }), { identity: null, origin: null });
+  assert.match(bare, /Connect Discord on their profile, their Elixir profile\./);
+  assert.doesNotMatch(bare, /undefined|null\/console/);
+});
+
 test("a message routine's brief rides in the cached system block", () => {
   const system = systemFor(routine({ trigger: "message", channel: "ask" }, "Answer war questions."), {
     identity: null,
