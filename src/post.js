@@ -22,7 +22,7 @@ export function chunk(text, limit = DISCORD_LIMIT) {
  *  sent, never pinging its author; a failure is a log line, not an error. */
 export async function replyUnder(message, content, what) {
   if (!message || !content) return null;
-  return message.reply({ content, allowedMentions: { repliedUser: false } }).catch((error) => {
+  return message.reply({ content, allowedMentions: { parse: [], repliedUser: false } }).catch((error) => {
     log.warn(`${what}_post_failed`, { error: error.message });
     return null;
   });

@@ -747,7 +747,7 @@ async function runRoutineNow(
       await last
         .reply({
           content: `-# 📮 Filed with Elixir MCP: ${summary}`,
-          allowedMentions: { repliedUser: false },
+          allowedMentions: { parse: [], repliedUser: false },
         })
         .catch(() => {});
     }
