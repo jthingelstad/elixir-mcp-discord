@@ -582,12 +582,12 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
       if (summary && sent) {
         await sent.reply({
           content: `-# 📮 Filed with Elixir MCP: ${summary}`,
-          allowedMentions: { repliedUser: false },
+          allowedMentions: { parse: [], repliedUser: false },
         });
       } else if (friction.reason === "claimed_filing" && sent) {
         // The reply said it filed; nothing did, and the sweep declined to.
         // The reader gets the fact under the claim rather than the claim.
-        await sent.reply({ content: UNFILED_FOOTER, allowedMentions: { repliedUser: false } });
+        await sent.reply({ content: UNFILED_FOOTER, allowedMentions: { parse: [], repliedUser: false } });
       }
     }
   } catch (error) {

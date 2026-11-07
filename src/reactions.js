@@ -186,7 +186,7 @@ export async function handleReaction(reaction, user, { sweepFn = sweepReaction, 
 
   const respond = (content) =>
     message
-      .reply({ content, allowedMentions: { repliedUser: false } })
+      .reply({ content, allowedMentions: { parse: [], repliedUser: false } })
       .catch((error) => log.warn("reaction_reply_failed", { error: error.message }));
 
   if (kind === "up") {
