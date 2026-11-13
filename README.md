@@ -425,12 +425,11 @@ Almost everything Elixir MCP offers only reads. Six tools write something
 — feedback, identity links, nicknames, tracked clans and players,
 collections — and the server marks which. Each kind of turn gets every
 read and only the writes it needs: a routine and the weekly review may
-file feedback; a member's question and your DM may also link who is
-asking; a rehearsal (`npm run try`, `try` in the DM, a proposal's **Try
+file feedback; a rehearsal (`npm run try`, `try` in the DM, a proposal's **Try
 it**, `npm run review`) writes nothing at all. Nothing the bot does can
-track a clan or player on your account. One read is withheld too:
-`clans_context`, the private Clan policy context the runner reads for
-itself, is switched off in every model lane always, even when the tool
+follow a clan or player on your account. One read is withheld too:
+`clans_directory`, which the runner reads for itself to learn the clan's
+Clan Wars intent, is switched off in every model lane always, even when the tool
 list could not be read or predates it. `npm run probe` prints the
 split. For belt and braces, untick `recordings:write` and
 `collections:write` on your agent's page in Elixir; the hub enforces that
@@ -462,12 +461,10 @@ Continue with Discord at sign-in, which opens a free account). The first time
 somebody is not recognised, the bot sends them there, with links to the hub it
 talks to. A connection only the member can make is one nobody can fake.
 
-For someone who would rather not have an Elixir account, the bot can still
-link them once, on a whole-name single match or the tag they give (`link_me`).
-That link is always to whoever sent the message: the model names a player, and
-the bot supplies who is asking from Discord itself, so nobody can type their
-way into linking someone else. Elixir plans to retire this fallback once
-members have connected Discord.
+For someone who would rather not have an Elixir account, the bot answers by
+player tag for that one question, on a whole-name single match or the tag they
+give, and remembers nothing: next time it asks again. (The old `link_me`
+mapping retired with Elixir MCP 12.0.0.)
 
 ### Feedback is a feature, not an afterthought
 

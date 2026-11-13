@@ -1,8 +1,13 @@
 /**
- * Private policy context is permission for a dependent routine, never a
+ * Clan policy context is permission for a dependent routine, never a
  * fallback fact source or model input. A failed refresh discards permission.
  * Schema ownership stays in Elixir MCP; this consumer checks the small result
  * it uses, without carrying a tool declaration or selecting a clan in a call.
+ *
+ * Since hub 12.0.0 the context comes from `clans_directory`, the policy's
+ * public part (the private `clans_context` read retired): the runner finds
+ * its own clan's tile and turns it into the same checked context it always
+ * gated on. The save instant stands in for the policy version.
  */
 import { callTool } from "./mcp.js";
 import { log } from "./log.js";
@@ -10,8 +15,8 @@ import { notify } from "./notify.js";
 import * as state from "./state.js";
 
 export const CONTEXT_MAX_AGE_MS = 60_000;
-// Core issue 283 transport; no caller-supplied clan or private context input.
-export const POLICY_CONTEXT_TOOL = "clans_context";
+// Read with no arguments; the runner never names a clan in the call.
+export const POLICY_CONTEXT_TOOL = "clans_directory";
 const FUTURE_SKEW_MS = 5_000;
 const KEYS = [
   "schema_version",
@@ -41,11 +46,52 @@ function coherent(context) {
     : context.reason === "war_intent_unspecified" && version;
 }
 
+const INTENTS = new Set(["participating", "not_participating"]);
+
+/**
+ * The directory's tile for the bound clan as the checked context: no tile is
+ * no policy (unless the directory was cut short, which proves nothing), a
+ * tile without an explicit intent is unspecified. Anything malformed is null,
+ * which the gate refuses.
+ */
+export function contextFromDirectory(body, clanTag) {
+  if (!clanTag || !body || typeof body !== "object" || !Array.isArray(body.clans)) return null;
+  const readAt = body.meta?.as_of;
+  const tile = body.clans.find((clan) => clan?.clan_tag === clanTag);
+  if (!tile) {
+    if (body.truncated !== false) return null;
+    return {
+      schema_version: 1,
+      clan_tag: clanTag,
+      status: "unknown",
+      reason: "no_policy",
+      war_intent: "unknown",
+      policy_version: null,
+      policy_saved_at: null,
+      read_at: readAt,
+    };
+  }
+  const savedAt = tile.policy?.saved_at;
+  const version = typeof savedAt === "string" ? Date.parse(savedAt) : NaN;
+  if (!Number.isSafeInteger(version) || version < 1) return null;
+  const known = INTENTS.has(tile.policy?.war_intent);
+  return {
+    schema_version: 1,
+    clan_tag: clanTag,
+    status: known ? "known" : "unknown",
+    reason: known ? null : "war_intent_unspecified",
+    war_intent: known ? tile.policy.war_intent : "unknown",
+    policy_version: version,
+    policy_saved_at: savedAt,
+    read_at: readAt,
+  };
+}
+
 /** Every refresh is an authenticated current read. No cached allow on error. */
 export function createPolicyGate({
-  read = async () => {
+  read = async ({ clanTag } = {}) => {
     const result = await callTool(POLICY_CONTEXT_TOOL, {});
-    return { ...result, body: result.body?.context };
+    return { ...result, body: contextFromDirectory(result.body, clanTag) };
   },
   principal = () => state.get("principal"),
   now = Date.now,
@@ -72,7 +118,7 @@ export function createPolicyGate({
     cached = null;
     let result;
     try {
-      result = await read();
+      result = await read({ clanTag: principal()?.subject?.tag ?? null });
     } catch {
       result = { ok: false };
     }

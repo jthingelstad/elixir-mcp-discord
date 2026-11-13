@@ -169,7 +169,7 @@ Claude API's MCP connector. The one place tool names are read is
 not a mirror. Never hand-write a schema here.
 
 **It does not know who Discord users are.** Resolving a member to a player tag
-via anything but `on_behalf_of` + `elixir_identify` (or `players_search`) is the
+via anything but `on_behalf_of` (or `players_search`) is the
 leak that would make this demo lie. Since 2026-09-13 the first-contact rule
 in `WHO_IS_ASKING` is: link on a whole-name single match, otherwise ask; the
 match is the server's now (a `no_subject` refusal carries `candidates[]`,
@@ -205,6 +205,13 @@ sends an unknown member to Connect Discord, with links built from
 `ELIXIR_MCP_URL`'s origin, and keeps `link_me` only for someone who would
 rather not have an account. Elixir retires `elixir_identify` and `link_me`
 together in an MCP major (elixir-mcp #648); until then both paths resolve.
+
+**Since hub 12.0.0 (2026-11-13) `elixir_identify` and `link_me` are gone.**
+A member is known only through the Discord they connected; someone who
+would rather not have an account is answered by `player_tag` for that one
+question (a whole-name single candidate, or the tag they give), and nothing
+is remembered. Mappings made before 12.0.0 still resolve on the hub
+(`via: "agent_mapping"`). The paragraphs above are the history.
 
 **Public repo, no secrets.** `.env`, `.env.*`, `/config.json` and `state/`
 are gitignored. Check `git ls-files` before assuming something is untracked. Since

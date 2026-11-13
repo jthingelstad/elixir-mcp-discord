@@ -31,7 +31,6 @@ import * as state from "./state.js";
 import * as ledger from "./ledger.js";
 import { notify } from "./notify.js";
 import { deckLinkTool } from "./deck-link.js";
-import { linkMeTool } from "./link.js";
 
 /**
  * ONE THREAD PER QUESTION.
@@ -479,12 +478,11 @@ async function handleAskNow(message, routine, { askFn = ask } = {}) {
         },
       ],
       // The local tools a member's turn gets: reading a pasted deck link
-      // (text, not the web), passing a request to the operator, and linking
-      // the asker — the author Discord says sent this, never an id from the
-      // conversation (src/link.js).
+      // (text, not the web) and passing a request to the operator. Who is
+      // asking is their connected Discord, resolved by the hub (link_me
+      // retired with elixir_identify in hub 12.0.0).
       localTools: [
         deckLinkTool(),
-        linkMeTool({ authorId: message.author.id }),
         tellOperatorTool({
           message,
           channelName: message.channel?.isThread?.() ? message.channel.parent?.name : message.channel?.name,

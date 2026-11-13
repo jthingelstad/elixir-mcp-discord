@@ -16,8 +16,7 @@ const annotated = {
     { name: "players_summary", readOnly: true },
     { name: "elixir_timeline", readOnly: true },
     { name: "elixir_send_feedback", readOnly: false },
-    { name: "elixir_identify", readOnly: false },
-    { name: "elixir_track_clan", readOnly: false },
+    { name: "elixir_follow_clan", readOnly: false },
     { name: "collections_edit", readOnly: false },
   ],
 };
@@ -26,34 +25,25 @@ test("every policy keeps every read and only the writes it names", () => {
   for (const policy of Object.keys(POLICIES)) {
     const off = disabledTools(policy, annotated);
     assert.ok(!off.includes("players_summary") && !off.includes("elixir_timeline"), `${policy} keeps the reads`);
-    for (const write of ["elixir_track_clan", "collections_edit"])
+    for (const write of ["elixir_follow_clan", "collections_edit"])
       assert.ok(off.includes(write), `${policy}: ${write}`);
   }
   assert.deepEqual(disabledTools("rehearsal", annotated).sort(), [
     POLICY_CONTEXT_TOOL,
     "collections_edit",
-    "elixir_identify",
+    "elixir_follow_clan",
     "elixir_send_feedback",
-    "elixir_track_clan",
   ]);
 });
 
-test("without annotations a live lane keeps everything but elixir_identify and a rehearsal loses the prompted writes; no catalog, only the private tool is named", () => {
+test("without annotations a live lane keeps everything and a rehearsal loses the prompted writes; no catalog, only the private tool is named", () => {
   const bare = {
     ...annotated,
     annotated: false,
     tools: annotated.tools.map(({ name }) => ({ name, readOnly: false })),
   };
-  assert.deepEqual(
-    disabledTools("ask", bare),
-    [POLICY_CONTEXT_TOOL, "elixir_identify"],
-    "off in every lane, annotated or not",
-  );
-  assert.deepEqual(disabledTools("rehearsal", bare).sort(), [
-    POLICY_CONTEXT_TOOL,
-    "elixir_identify",
-    "elixir_send_feedback",
-  ]);
+  assert.deepEqual(disabledTools("ask", bare), [POLICY_CONTEXT_TOOL], "off in every lane, annotated or not");
+  assert.deepEqual(disabledTools("rehearsal", bare).sort(), [POLICY_CONTEXT_TOOL, "elixir_send_feedback"]);
   assert.deepEqual(
     disabledTools("rehearsal", { ok: false, tools: [] }),
     [POLICY_CONTEXT_TOOL],

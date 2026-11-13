@@ -19,8 +19,7 @@ const CATALOG = async () => ({
     { name: "players_summary", readOnly: true },
     { name: "battles_meta_decks", readOnly: true },
     { name: "elixir_send_feedback", readOnly: false },
-    { name: "elixir_identify", readOnly: false },
-    { name: "elixir_track_clan", readOnly: false },
+    { name: "elixir_follow_clan", readOnly: false },
   ],
 });
 
@@ -274,23 +273,18 @@ test("the toolset switches off the writes a kind of turn may not make; a rehears
     const toolset = requests[0].tools.find((t) => t.type === "mcp_toolset");
     return Object.keys(toolset.configs ?? {}).sort();
   };
-  assert.deepEqual(await configsFor("rehearsal"), [
-    "clans_context",
-    "elixir_identify",
-    "elixir_send_feedback",
-    "elixir_track_clan",
-  ]);
-  assert.deepEqual(await configsFor("routines"), ["clans_context", "elixir_identify", "elixir_track_clan"]);
+  assert.deepEqual(await configsFor("rehearsal"), ["clans_directory", "elixir_follow_clan", "elixir_send_feedback"]);
+  assert.deepEqual(await configsFor("routines"), ["clans_directory", "elixir_follow_clan"]);
   assert.deepEqual(
     await configsFor("ask"),
-    ["clans_context", "elixir_identify", "elixir_track_clan"],
-    "no member steers the bot into tracking a clan, or links anyone the runner did not name (link_me)",
+    ["clans_directory", "elixir_follow_clan"],
+    "no member steers the bot into following a clan",
   );
   assert.deepEqual(await configsFor("nonsense"), await configsFor("rehearsal"), "an unknown kind is the strictest");
 });
 
 test("a switched-off tool the API hands back to run is refused on the direct path too", async () => {
-  const handedBack = { type: "tool_use", id: "toolu_1", name: "elixir-mcp_track_clan", input: { clan_tag: "#X" } };
+  const handedBack = { type: "tool_use", id: "toolu_1", name: "elixir-mcp_follow_clan", input: { clan_tag: "#X" } };
   const { stream, requests } = playing([
     { content: [handedBack], stop_reason: "tool_use", usage },
     { content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage },
@@ -308,7 +302,7 @@ test("a switched-off tool the API hands back to run is refused on the direct pat
   assert.match(result.content, /not available in this turn/);
 });
 
-test("the private policy context is off in every lane even when the catalog is unavailable or predates it", async () => {
+test("the eligibility read is off in every lane even when the catalog is unavailable or predates it", async () => {
   const done = { content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage };
   const unavailable = async () => ({ ok: false, error: "timeout", tools: [], annotated: false });
   for (const catalogFn of [unavailable, CATALOG]) {
@@ -316,12 +310,16 @@ test("the private policy context is off in every lane even when the catalog is u
       const { stream, requests } = playing([done]);
       await ask({ system: "s", messages: [{ role: "user", content: "go" }], policy, stream, catalogFn });
       const toolset = requests[0].tools.find((t) => t.type === "mcp_toolset");
-      assert.deepEqual(toolset.configs?.clans_context, { enabled: false }, `${policy}: the connector never offers it`);
+      assert.deepEqual(
+        toolset.configs?.clans_directory,
+        { enabled: false },
+        `${policy}: the connector never offers it`,
+      );
     }
   }
   // A catalog taken before the hub published it: the API hands the tool back
   // to run, and the direct client refuses it by name.
-  const handedBack = { type: "tool_use", id: "toolu_1", name: "elixir-mcp_clans_context", input: {} };
+  const handedBack = { type: "tool_use", id: "toolu_1", name: "elixir-mcp_clans_directory", input: {} };
   const { stream, requests } = playing([
     { content: [handedBack], stop_reason: "tool_use", usage },
     { content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage },
@@ -336,7 +334,7 @@ test("the private policy context is off in every lane even when the catalog is u
   assert.equal(out.ok, true);
   const result = requests[1].messages.at(-1).content[0];
   assert.equal(result.is_error, true);
-  assert.match(result.content, /clans_context is not available in this turn/);
+  assert.match(result.content, /clans_directory is not available in this turn/);
 });
 
 test("three cache breakpoints: the toolset, the system block, and the automatic one that follows the conversation", async () => {
@@ -386,7 +384,7 @@ test("a lane with tool search defers the toolset, keeps its switched-off writes,
   const toolset = tools.find((t) => t.type === "mcp_toolset");
   assert.deepEqual(toolset.default_config, { defer_loading: true });
   assert.equal(toolset.cache_control, undefined, "the API refuses cache_control on a deferred tool");
-  assert.deepEqual(Object.keys(toolset.configs).sort(), ["clans_context", "elixir_identify", "elixir_track_clan"]);
+  assert.deepEqual(Object.keys(toolset.configs).sort(), ["clans_directory", "elixir_follow_clan"]);
   const search = tools.find((t) => t.type === "tool_search_tool_regex_20251119");
   assert.equal(search.name, "tool_search_tool_regex");
   assert.ok(search.cache_control, "the search tool holds the tools breakpoint instead");

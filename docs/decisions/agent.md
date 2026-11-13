@@ -14,7 +14,8 @@ still absent from an agent door *and* refused on call. **So do not add it
 to a prompt.**
 
 **Since hub 7.1.0 an agent door publishes `elixir_track_clan` and
-`elixir_track_player`** (an agent may watch a rival, and every
+`elixir_track_player`** (renamed `elixir_follow_clan` and
+`elixir_follow_player` in hub 12.0.0) (an agent may watch a rival, and every
 track spends the OWNER's recording slots). The line above used to name
 them as absent; it was stale for a week, and in that week any lane — a
 member's question included — could have tracked a clan on Jamie's slots.
@@ -48,7 +49,8 @@ Jamie approved building Discord linking in Elixir (elixir-mcp #531, MCP
 to Connect Discord". A member connects Discord on their Elixir profile, or
 signs in with it; the hub resolves `on_behalf_of: "discord:<id>"` through
 that link (only to a current member of a clan on this agent's connection) and
-falls back to the old `elixir_identify` mapping. Each answer's `meta.asker`
+falls back to the old `elixir_identify` mapping (hub 12.0.0 retired the
+tool; a mapping made before still resolves). Each answer's `meta.asker`
 says which (`via: "discord_link"` or `"agent_mapping"`) and whether it is
 verified.
 
@@ -59,6 +61,11 @@ someone who says they would rather not have an account. The bot used to link
 on a whole-name match without asking; now it asks first, because a connection
 the member makes is proven and a name match is not. Elixir removes
 `elixir_identify` and `link_me` in a later MCP major (elixir-mcp #648).
+
+**Since 2026-11-13 (hub 12.0.0) they are removed.** `src/link.js` is gone;
+someone who would rather not have an account is answered by `player_tag`
+for that one question, from the `no_subject` refusal's single whole-name
+candidate or the tag they give, and nothing is remembered.
 
 ## 2026-10-02: Elixir is a recorder
 
@@ -109,7 +116,16 @@ This consumer selects no clan, creates no grants and changes no credentials.
 It requires the initialize principal to be an assigned clan agent and the
 response to match that subject.
 The runner calls `clans_context` with empty arguments and reads only its
-`context` projection. That private tool is disabled in every model lane on
+`context` projection. **Since 2026-11-13 (hub 12.0.0, which retired
+`clans_context`) it calls `clans_directory`** with empty arguments, finds
+the tile whose `clan_tag` is the bound subject's, and builds the same
+checked context from it (`contextFromDirectory` in `src/eligibility.js`):
+no tile in a complete directory is `no_policy`, a cut-short directory
+without the clan defers, a tile without an explicit intent is
+`war_intent_unspecified`, the save instant stands in for the policy
+version, and `meta.as_of` is the read time. The gate itself, and every
+fail-closed rule below, is unchanged; the read is now the policy's public
+part rather than a private grant. The rest of this section is history. That private tool is disabled in every model lane on
 both the connector and direct-client paths, regardless of read annotations.
 Since 2026-10-10 it is disabled regardless of the catalog too: it used to
 be named only when `toolCatalog` listed it, so a failed `tools/list`, or

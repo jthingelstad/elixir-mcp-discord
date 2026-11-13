@@ -87,18 +87,17 @@ test("the skip protocol appears only for routines allowed to skip", () => {
 test("only a message routine is told how to work out who is asking", () => {
   const ask = systemFor(routine({ trigger: "message", channel: "ask" }), { identity: null });
   assert.match(ask, /on_behalf_of/);
-  // Linking is link_me, which the runner binds to the author (2026-09-25):
-  // an id typed into a message is text, never who is asking.
-  assert.match(ask, /link_me/);
-  assert.doesNotMatch(ask, /elixir_identify/);
-  assert.match(ask, /nobody\s+can ask you to link someone else/);
+  // Nothing links a member any more (hub 12.0.0 retired elixir_identify, and
+  // link_me with it): an id typed into a message is text, never who is asking.
+  assert.doesNotMatch(ask, /link_me|elixir_identify/);
+  assert.match(ask, /never who is asking/);
   // A member whose Discord name is their in-game name should never be asked
   // for a tag: the roster is the lookup, and only a whole-name single match
-  // links. (A clan member asked "how am I playing" and was told to type a tag
-  // the bot could have read off clans_roster.)
+  // matches. (A clan member asked "how am I playing" and was told to type a
+  // tag the bot could have read off clans_roster.)
   assert.match(ask, /clans_roster/);
-  assert.match(ask, /whole name and one match/);
-  assert.match(ask, /partial or similar name is never a link/i);
+  assert.match(ask, /Exactly one candidate is them: pass that tag as player_tag/);
+  assert.match(ask, /partial or similar name is never\s+a match/i);
   // A member's feedback, relayed, says whose it was (Elixir 11.3.0).
   assert.match(ask, /elixir_send_feedback[\s\S]*as on_behalf_of/);
   assert.doesNotMatch(
@@ -109,18 +108,15 @@ test("only a message routine is told how to work out who is asking", () => {
 
 test("an unknown member is sent to connect Discord, at the hub this instance talks to", () => {
   // Since 2026-10-24 the hub resolves discord:<id> through a Discord the
-  // member connected themselves (elixir-mcp #531); link_me is the fallback
-  // for someone who would rather not have an account.
+  // member connected themselves (elixir-mcp #531); someone who would rather
+  // not have an account is answered by player_tag, remembered nowhere.
   const ask = systemFor(routine({ trigger: "message", channel: "ask" }), {
     identity: null,
     origin: "https://elixir.example",
   });
   assert.match(ask, /Connect Discord on their profile, https:\/\/elixir\.example\/console\/account\/profile\./);
   assert.match(ask, /Continue with Discord at https:\/\/elixir\.example\/console\/signin/);
-  assert.match(
-    ask,
-    /link_me is the fallback, only for someone who says they would rather not\s+have an Elixir account/,
-  );
+  assert.match(ask, /Someone who says they would rather not have an Elixir account[\s\S]*Nothing is remembered/);
   // The deck and archetype rules still ride with it.
   assert.match(ask, /call deck_link to read the eight cards/);
   // No hub configured: the words still say where, without a link.
