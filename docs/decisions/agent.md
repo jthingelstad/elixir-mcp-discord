@@ -33,7 +33,7 @@ fence until now. `npm run probe` prints the writes each kind of turn keeps;
 without annotations (`tool_annotations_missing`) live lanes keep
 everything and rehearsals lose the two prompted writes. Belt and braces
 for an operator: an agent key's capabilities can be narrowed on its page in
-Elixir (untick `recordings:write`), which the hub
+Elixir (untick `follows:write`, the scope's name since contract 12.1.0), which the hub
 enforces on the next call.
 
 Since contract 0.37.0 the connection describes itself as data:

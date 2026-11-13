@@ -431,9 +431,8 @@ follow a clan or player on your account. One read is withheld too:
 `clans_directory`, which the runner reads for itself to learn the clan's
 Clan Wars intent, is switched off in every model lane always, even when the tool
 list could not be read or predates it. `npm run probe` prints the
-split. For belt and braces, untick `recordings:write` and
-`collections:write` on your agent's page in Elixir; the hub enforces that
-on the next call.
+split. For belt and braces, untick `follows:write` on your agent's page
+in Elixir; the hub enforces that on the next call.
 
 ### No fallback, on purpose
 
