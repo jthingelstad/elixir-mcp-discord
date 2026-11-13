@@ -56,7 +56,6 @@ import { buildId } from "./build.js";
 import { callTool } from "./mcp.js";
 import * as budget from "./budget.js";
 import { deckLinkTool } from "./deck-link.js";
-import { linkMeTool } from "./link.js";
 import { planEdit, proposalMessage, toComponents, readAgentFiles } from "./review.js";
 import { isConversational } from "./ask.js";
 import { detectFriction, sweepFriction } from "./feedback.js";
@@ -897,7 +896,6 @@ async function converse(message, options = {}) {
       statusTool(),
       estimateTool(),
       deckLinkTool(),
-      linkMeTool({ authorId: message.author.id }),
     ],
     maxRounds: 8,
   });

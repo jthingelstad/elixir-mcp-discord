@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { test } from "node:test";
-import { createPolicyGate, CONTEXT_MAX_AGE_MS, POLICY_CONTEXT_TOOL } from "../src/eligibility.js";
+import { createPolicyGate, contextFromDirectory, CONTEXT_MAX_AGE_MS, POLICY_CONTEXT_TOOL } from "../src/eligibility.js";
 
 // Exact synthetic core handoff, not a local tool/schema mirror:
 // elixir-mcp@2d1b618e/packages/contracts/test/fixtures/clan-policy-context.json
 const fixtures = JSON.parse(fs.readFileSync(new URL("./fixtures/clan-policy-context.json", import.meta.url), "utf8"));
-// Exact public MCP-envelope handoff from elixir-mcp@599ff6d6.
-const mcpFixtures = JSON.parse(fs.readFileSync(new URL("./fixtures/clans-context-mcp.json", import.meta.url), "utf8"));
+// Synthetic clans_directory envelopes (hub 12.0.0), built on the same clan
+// and instants as the core handoff above.
+const mcpFixtures = JSON.parse(
+  fs.readFileSync(new URL("./fixtures/clans-directory-mcp.json", import.meta.url), "utf8"),
+);
 const base = fixtures.find((f) => f.case === "participating").context;
 const at = Date.parse(base.read_at);
 const principal = () => ({ kind: "agent", subject: { type: "clan", tag: base.clan_tag } });
@@ -15,7 +18,7 @@ const routine = { key: "dependent", requires: { field: "war_intent", value: "par
 const gateFor = (read, extras = {}) =>
   createPolicyGate({ read, principal, now: () => at, notice: async () => {}, ...extras });
 
-test("the MCP transport reads the assigned context with no clan argument and unwraps the core result", async () => {
+test("the MCP transport reads clans_directory with no clan argument and gates on the bound clan's tile", async () => {
   const original = globalThis.fetch;
   const calls = [];
   let fixture;
@@ -45,6 +48,7 @@ test("the MCP transport reads the assigned context with no clan argument and unw
           : "defer";
       assert.equal((await gate.check(routine)).disposition, expected, fixture.case);
     }
+    assert.equal(calls.length, mcpFixtures.length);
     assert.equal(calls[0].method, "tools/call");
     for (const call of calls) assert.deepEqual(call.params, { name: POLICY_CONTEXT_TOOL, arguments: {} });
   } finally {
@@ -178,4 +182,28 @@ test("operator diagnostics contain a bounded reason, never raw errors or the pri
   await gate.report(routine, decision, "fire");
   assert.match(notices[0][1], /context_unavailable/);
   assert.doesNotMatch(JSON.stringify(notices), /credential|private notes/);
+});
+
+test("a directory tile becomes the checked context; a cut-short directory without the clan proves nothing", () => {
+  const body = (clans, truncated = false) => ({ clans, truncated, meta: { as_of: base.read_at } });
+  const tile = (war_intent, saved_at = base.policy_saved_at) => ({
+    clan_tag: base.clan_tag,
+    policy: { war_intent, saved_at },
+  });
+  assert.deepEqual(contextFromDirectory(body([tile("participating")]), base.clan_tag), {
+    schema_version: 1,
+    clan_tag: base.clan_tag,
+    status: "known",
+    reason: null,
+    war_intent: "participating",
+    policy_version: Date.parse(base.policy_saved_at),
+    policy_saved_at: base.policy_saved_at,
+    read_at: base.read_at,
+  });
+  assert.equal(contextFromDirectory(body([]), base.clan_tag).reason, "no_policy");
+  assert.equal(contextFromDirectory(body([], true), base.clan_tag), null);
+  assert.equal(contextFromDirectory(body([tile("unknown")]), base.clan_tag).reason, "war_intent_unspecified");
+  assert.equal(contextFromDirectory(body([tile("participating", null)]), base.clan_tag), null);
+  assert.equal(contextFromDirectory(body([tile("participating")]), null), null);
+  assert.equal(contextFromDirectory({ context: base }, base.clan_tag), null, "the retired clans_context shape");
 });

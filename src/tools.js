@@ -6,7 +6,8 @@
  * run try`, the DM's `try`, a proposal's Try it, `npm run review` — could
  * file real feedback with Elixir's maintainer (the first dry-run review did,
  * and a prompt line was the only fence after that), and since hub 7.1.0 an
- * agent door also publishes elixir_track_clan and elixir_track_player,
+ * agent door also publishes elixir_follow_clan and elixir_follow_player
+ * (elixir_track_* until hub 12.0.0),
  * which spend the owner's recording slots: a member's question could steer
  * the ask lane into tracking a clan.
  *
@@ -27,12 +28,12 @@ export const POLICIES = {
   rehearsal: [],
   // Filing what it wanted to do and could not is the job (src/feedback.js).
   routines: ["elixir_send_feedback"],
-  // A member's turn files friction. Linking who is asking is link_me
-  // (src/link.js), where the runner — not the model — says who that is.
+  // A member's turn files friction. Who is asking is the hub's to resolve,
+  // through the member's connected Discord.
   ask: ["elixir_send_feedback"],
   // The weekly review files what belongs to the hub.
   review: ["elixir_send_feedback"],
-  // The operator's console files; it links the operator through link_me too.
+  // The operator's console files.
   dm: ["elixir_send_feedback"],
 };
 
@@ -42,13 +43,14 @@ export const POLICIES = {
  * off is today's behaviour. So a live lane keeps everything and says so, and
  * a rehearsal switches off the writes the prompts themselves can drive.
  */
-const PROMPTED_WRITES = ["elixir_send_feedback", "elixir_identify"];
+const PROMPTED_WRITES = ["elixir_send_feedback"];
 
 let warnedUnannotated = false;
 
 /**
- * Private eligibility is runner plumbing (src/eligibility.js), never a
- * model-facing read, so it is off in every lane WHATEVER the catalog says
+ * The eligibility read is runner plumbing (src/eligibility.js), never a
+ * model-facing read (since hub 12.0.0 it is clans_directory; before, the
+ * private clans_context), so it is off in every lane WHATEVER the catalog says
  * (since 2026-10-10). It used to be named only when the catalog listed it:
  * a failed tools/list, or an hour-old catalog taken before the hub
  * published it, left it on for every model lane while the connector
@@ -76,14 +78,6 @@ export function disabledTools(policy, catalog) {
     });
   }
   const published = new Set(catalog.tools.map((t) => t.name));
-  // elixir_identify is off in every lane whatever the annotations say (D2,
-  // 2026-09-25: only link_me's handler calls it); the catalog names it, so
-  // it can be switched off by name (2026-09-26 review: unannotated, a live
-  // lane kept it).
-  if (policy !== "rehearsal")
-    return [
-      ...ALWAYS_OFF,
-      ...(published.has("elixir_identify") && !keep.has("elixir_identify") ? ["elixir_identify"] : []),
-    ];
+  if (policy !== "rehearsal") return [...ALWAYS_OFF];
   return [...ALWAYS_OFF, ...PROMPTED_WRITES.filter((name) => published.has(name) && !keep.has(name))];
 }

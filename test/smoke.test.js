@@ -429,10 +429,7 @@ test("a member's request reaches the operator once, three a day, and the cap sto
     askFn: async ({ localTools }) => {
       tool = localTools.find((t) => t.name === "tell_operator");
       assert.ok(tool, "the ask lane offers tell_operator");
-      assert.ok(
-        localTools.find((t) => t.name === "link_me"),
-        "and link_me, bound to the author — elixir_identify is not the model's to address",
-      );
+      assert.ok(!localTools.find((t) => t.name === "link_me"), "link_me retired with elixir_identify (hub 12.0.0)");
       return RESULT;
     },
   });
