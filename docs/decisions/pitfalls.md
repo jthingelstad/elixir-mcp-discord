@@ -34,7 +34,14 @@
   fabricated data". The maintainer's reply (#33) asked the preview for a
   consumer-side guard. `errorFooter` in `src/trace.js` is it, and the prompt
   now says stop after two identical failures. Do not make the footer
-  conditional on `trace`.
+  conditional on `trace`. **Since 2026-11-14 a failure the model recovered
+  is neither footer nor friction:** a later call of the same tool with the
+  same arguments that is answered marks the failure `recovered` (it stays in
+  `errors` and the ledger). On 2026-11-13 the connector dropped a
+  `players_summary` ("Connection closed"), the retry answered in a second
+  and the post used it, yet the post carried "figures may be missing or
+  wrong" and the sweep filed Elixir feedback 389 against a hub that had
+  answered every request it received.
 - **A reply with figures and no tool call is caveated.** "How am I playing?"
   was once answered from the previous exchange with zero calls. `looksUngrounded`
   is the check; events handed to a routine count as a source. Do not file it

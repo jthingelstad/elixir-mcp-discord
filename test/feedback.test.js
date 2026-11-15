@@ -272,3 +272,14 @@ test("a bare id from the old ledger does not hide an answer newer than the cutof
   );
   assert.deepEqual(newer.ledger, []);
 });
+
+test("a recovered failure is no friction and puts no warning under the post", async () => {
+  const { errorFooter } = await import("../src/trace.js");
+  const errors = [{ name: "players_summary", code: null, detail: "Connection closed", recovered: true }];
+  const called = ["players_summary", "players_summary", "post_message"];
+  assert.equal(detectFriction({ text: "A good sitting.", called, errors }), null);
+  assert.equal(errorFooter({ errors, called }), null);
+  const unrecovered = [{ ...errors[0], recovered: false }];
+  assert.equal(detectFriction({ text: "A good sitting.", called, errors: unrecovered }).reason, "tool_error");
+  assert.match(errorFooter({ errors: unrecovered, called }), /1 of 3 tool calls failed/);
+});
