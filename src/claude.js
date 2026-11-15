@@ -292,7 +292,12 @@ function outcomeOfCall(call) {
  * or from a local handler, all through the same door.
  */
 function newActivity() {
-  return { called: [], errors: [], trace: [], envelopes: [], byId: new Map() };
+  return { called: [], errors: [], trace: [], envelopes: [], byId: new Map(), failedSteps: new Map() };
+}
+
+/** One call's identity for retry matching: the tool and its arguments. */
+function callKey(name, input) {
+  return `${name} ${JSON.stringify(input ?? null)}`;
 }
 
 function use(activity, block) {
@@ -315,8 +320,26 @@ function settle(activity, { step, name, result, ms }) {
       requestId: result.requestId,
     };
     activity.errors.push(failure);
+    if (step) activity.failedSteps.set(failure, callKey(name, step.input));
     activity.trace.push({ kind: "error", ...failure, result: result.raw });
     return;
+  }
+  // A success clears every earlier failure of the very same call (same tool,
+  // same arguments): the model retried and got its answer, so nothing in the
+  // post rests on the failure. On 2026-11-13 a players_summary dropped by the
+  // connector ("Connection closed") was retried and answered in a second, the
+  // post used the retry, and still went out with "1 of 3 tool calls failed …
+  // figures may be missing or wrong" under it, and the sweep filed Elixir
+  // feedback 389 against a hub that had answered every request it received.
+  // The failure stays in `errors` (the ledger keeps it), marked recovered.
+  if (step) {
+    const key = callKey(name, step.input);
+    for (const [failure, failedKey] of activity.failedSteps) {
+      if (failedKey === key) {
+        failure.recovered = true;
+        activity.failedSteps.delete(failure);
+      }
+    }
   }
   if (step) {
     step.shape = describeShape(result.body);

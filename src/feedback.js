@@ -221,10 +221,16 @@ const LOCAL_TOOLS = new Set([
   "report_mechanics",
 ]);
 
-/** The errors worth a reader's or the maintainer's attention. */
+/** The errors worth a reader's or the maintainer's attention. A failure the
+ *  model recovered by repeating the same call (src/claude.js marks it
+ *  `recovered`) is neither: the post rests on the answer, not the failure. */
 export function unexpectedErrors(errors) {
   return (errors || []).filter(
-    (e) => !EXPECTED_ERROR_CODES.has(e.code) && !EXPECTED_ERROR_CLASSES.has(e.class) && !LOCAL_TOOLS.has(e.name),
+    (e) =>
+      !e.recovered &&
+      !EXPECTED_ERROR_CODES.has(e.code) &&
+      !EXPECTED_ERROR_CLASSES.has(e.class) &&
+      !LOCAL_TOOLS.has(e.name),
   );
 }
 

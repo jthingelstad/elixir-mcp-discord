@@ -624,7 +624,8 @@ changed to an unpriced one later fails before the call, not after it.
   begins and one when a turn succeeds again, not one an hour.
 - **Failed calls are visible under the post.** When a turn's tool calls
   errored, a one-line footer says which and how many, whether or not the
-  routine shows a trace; a reply that states figures without having called a
+  routine shows a trace (a failure the model fixed by repeating the same call
+  and getting an answer is left out); a reply that states figures without having called a
   tool gets a footer saying so. The footers name the server's `request_id`
   so a screenshot can be joined to the exact call.
 - **Maintainer replies are read on the server's hint.** Every Elixir MCP

@@ -440,3 +440,38 @@ test("a tool search is traced as a search, never counted as a call, and echoed b
     "a server tool's id is never answered with a tool_result",
   );
 });
+
+test("a failed call the model repeats and gets answered is marked recovered; a different call's failure is not", async () => {
+  const call = (id, input) => ({ type: "mcp_tool_use", id, name: "players_summary", server_name: "elixir-mcp", input });
+  const closed = (id) => ({
+    type: "mcp_tool_result",
+    tool_use_id: id,
+    is_error: true,
+    content: [{ type: "text", text: "An error occurred while executing the MCP tool: Connection closed" }],
+  });
+  const answered = (id) => ({
+    type: "mcp_tool_result",
+    tool_use_id: id,
+    is_error: false,
+    content: [{ type: "text", text: "{}" }],
+  });
+  const { stream } = playing([
+    {
+      content: [
+        call("mcptoolu_a", { player_tag: "#AAA" }),
+        closed("mcptoolu_a"),
+        call("mcptoolu_b", { player_tag: "#BBB" }),
+        closed("mcptoolu_b"),
+        call("mcptoolu_c", { player_tag: "#AAA" }),
+        answered("mcptoolu_c"),
+        { type: "text", text: "Done." },
+      ],
+      stop_reason: "end_turn",
+      usage,
+    },
+  ]);
+  const out = await ask({ system: "s", messages: [{ role: "user", content: "go" }], stream, catalogFn: CATALOG });
+  assert.equal(out.errors.length, 2, "both failures stay on the record");
+  assert.equal(out.errors[0].recovered, true, "#AAA was retried and answered");
+  assert.equal(out.errors[1].recovered, undefined, "#BBB was never answered");
+});
