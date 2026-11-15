@@ -458,11 +458,11 @@ test("a failed call the model repeats and gets answered is marked recovered; a d
   const { stream } = playing([
     {
       content: [
-        call("mcptoolu_a", { player_tag: "#AAA" }),
+        call("mcptoolu_a", { player_tag: "#AAA", on_behalf_of: null }),
         closed("mcptoolu_a"),
         call("mcptoolu_b", { player_tag: "#BBB" }),
         closed("mcptoolu_b"),
-        call("mcptoolu_c", { player_tag: "#AAA" }),
+        call("mcptoolu_c", { on_behalf_of: null, player_tag: "#AAA" }),
         answered("mcptoolu_c"),
         { type: "text", text: "Done." },
       ],
@@ -472,6 +472,6 @@ test("a failed call the model repeats and gets answered is marked recovered; a d
   ]);
   const out = await ask({ system: "s", messages: [{ role: "user", content: "go" }], stream, catalogFn: CATALOG });
   assert.equal(out.errors.length, 2, "both failures stay on the record");
-  assert.equal(out.errors[0].recovered, true, "#AAA was retried and answered");
+  assert.equal(out.errors[0].recovered, true, "#AAA was retried and answered, its arguments in another order");
   assert.equal(out.errors[1].recovered, undefined, "#BBB was never answered");
 });

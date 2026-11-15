@@ -295,9 +295,21 @@ function newActivity() {
   return { called: [], errors: [], trace: [], envelopes: [], byId: new Map(), failedSteps: new Map() };
 }
 
-/** One call's identity for retry matching: the tool and its arguments. */
+/** One call's identity for retry matching: the tool and its arguments, with
+ *  object keys sorted so a retry that lists the same arguments in another
+ *  order is still the same call. */
 function callKey(name, input) {
-  return `${name} ${JSON.stringify(input ?? null)}`;
+  const canonical = (value) =>
+    Array.isArray(value)
+      ? value.map(canonical)
+      : value && typeof value === "object"
+        ? Object.fromEntries(
+            Object.keys(value)
+              .sort()
+              .map((k) => [k, canonical(value[k])]),
+          )
+        : value;
+  return `${name} ${JSON.stringify(canonical(input ?? null))}`;
 }
 
 function use(activity, block) {
