@@ -3,33 +3,17 @@
     "case": "no_policy",
     "isError": false,
     "response": {
-      "clans": [
-        {
-          "clan_tag": "#0P",
-          "name": "Synthetic",
-          "type": "open",
-          "description": null,
-          "members": 20,
-          "required_trophies": 0,
-          "yours": true,
-          "policy": {
-            "war_intent": "participating",
-            "posture": null,
-            "together": false,
-            "counted": [],
-            "removal_day": null,
-            "saved_at": "2026-10-04T17:00:00.000Z"
-          }
-        }
-      ],
+      "clans": [],
       "truncated": false,
-      "applied": {},
+      "applied": {
+        "clan_tag": "#028"
+      },
       "notes": [],
       "docs": "clan-directory#agents-and-apps",
       "meta": {
         "as_of": "2026-10-04T17:05:00.000Z",
         "contract_version": "12.0.0",
-        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell’s Fan Content Policy: www.supercell.com/fan-content-policy."
+        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell\u2019s Fan Content Policy: www.supercell.com/fan-content-policy."
       }
     }
   },
@@ -52,18 +36,21 @@
             "together": false,
             "counted": [],
             "removal_day": null,
-            "saved_at": "2026-10-04T17:00:00.000Z"
+            "saved_at": "2026-10-04T17:00:00.000Z",
+            "version": 1
           }
         }
       ],
       "truncated": false,
-      "applied": {},
+      "applied": {
+        "clan_tag": "#028"
+      },
       "notes": [],
       "docs": "clan-directory#agents-and-apps",
       "meta": {
         "as_of": "2026-10-04T17:05:00.000Z",
         "contract_version": "12.0.0",
-        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell’s Fan Content Policy: www.supercell.com/fan-content-policy."
+        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell\u2019s Fan Content Policy: www.supercell.com/fan-content-policy."
       }
     }
   },
@@ -72,23 +59,6 @@
     "isError": false,
     "response": {
       "clans": [
-        {
-          "clan_tag": "#0P",
-          "name": "Synthetic",
-          "type": "open",
-          "description": null,
-          "members": 20,
-          "required_trophies": 0,
-          "yours": true,
-          "policy": {
-            "war_intent": "participating",
-            "posture": null,
-            "together": false,
-            "counted": [],
-            "removal_day": null,
-            "saved_at": "2026-10-04T17:00:00.000Z"
-          }
-        },
         {
           "clan_tag": "#028",
           "name": "Synthetic",
@@ -103,18 +73,21 @@
             "together": false,
             "counted": [],
             "removal_day": null,
-            "saved_at": "2026-10-04T17:00:00.000Z"
+            "saved_at": "2026-10-04T17:00:00.000Z",
+            "version": 1
           }
         }
       ],
       "truncated": false,
-      "applied": {},
+      "applied": {
+        "clan_tag": "#028"
+      },
       "notes": [],
       "docs": "clan-directory#agents-and-apps",
       "meta": {
         "as_of": "2026-10-04T17:05:00.000Z",
         "contract_version": "12.0.0",
-        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell’s Fan Content Policy: www.supercell.com/fan-content-policy."
+        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell\u2019s Fan Content Policy: www.supercell.com/fan-content-policy."
       }
     }
   },
@@ -137,18 +110,21 @@
             "together": false,
             "counted": [],
             "removal_day": null,
-            "saved_at": "2026-10-04T17:00:00.000Z"
+            "saved_at": "2026-10-04T17:00:00.000Z",
+            "version": 1
           }
         }
       ],
       "truncated": false,
-      "applied": {},
+      "applied": {
+        "clan_tag": "#028"
+      },
       "notes": [],
       "docs": "clan-directory#agents-and-apps",
       "meta": {
         "as_of": "2026-10-04T17:05:00.000Z",
         "contract_version": "12.0.0",
-        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell’s Fan Content Policy: www.supercell.com/fan-content-policy."
+        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell\u2019s Fan Content Policy: www.supercell.com/fan-content-policy."
       }
     }
   },
@@ -171,18 +147,21 @@
             "together": false,
             "counted": [],
             "removal_day": null,
-            "saved_at": "2026-01-01T00:00:00.000Z"
+            "saved_at": "2026-01-01T00:00:00.000Z",
+            "version": 1
           }
         }
       ],
       "truncated": false,
-      "applied": {},
+      "applied": {
+        "clan_tag": "#028"
+      },
       "notes": [],
       "docs": "clan-directory#agents-and-apps",
       "meta": {
         "as_of": "2026-10-04T17:05:00.000Z",
         "contract_version": "12.0.0",
-        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell’s Fan Content Policy: www.supercell.com/fan-content-policy."
+        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell\u2019s Fan Content Policy: www.supercell.com/fan-content-policy."
       }
     }
   },
@@ -190,33 +169,17 @@
     "case": "truncated_without_clan",
     "isError": false,
     "response": {
-      "clans": [
-        {
-          "clan_tag": "#0P",
-          "name": "Synthetic",
-          "type": "open",
-          "description": null,
-          "members": 20,
-          "required_trophies": 0,
-          "yours": true,
-          "policy": {
-            "war_intent": "participating",
-            "posture": null,
-            "together": false,
-            "counted": [],
-            "removal_day": null,
-            "saved_at": "2026-10-04T17:00:00.000Z"
-          }
-        }
-      ],
+      "clans": [],
       "truncated": true,
-      "applied": {},
+      "applied": {
+        "clan_tag": "#028"
+      },
       "notes": [],
       "docs": "clan-directory#agents-and-apps",
       "meta": {
         "as_of": "2026-10-04T17:05:00.000Z",
         "contract_version": "12.0.0",
-        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell’s Fan Content Policy: www.supercell.com/fan-content-policy."
+        "disclaimer": "This material is unofficial and is not endorsed by Supercell. For more information see Supercell\u2019s Fan Content Policy: www.supercell.com/fan-content-policy."
       }
     }
   },

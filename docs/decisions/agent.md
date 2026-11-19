@@ -145,3 +145,10 @@ public-fact fallback supplies private context. The tiny cache is confined to
 the current plan/process; no context is persisted, shown to the model or
 included in a member-facing turn. Fixture data is the core's public synthetic
 contract evidence, not an instance's policy.
+
+### Reading a clan’s public war policy (2026-11-18)
+
+The scheduler looks up its authenticated clan with `clans_directory({clan_tag})`.
+It checks the returned tag, explicit war intent, saved policy version, save time
+and read time. A missing tile or an unavailable or stale read defers the routine.
+Members may ask about the public directory in conversation.

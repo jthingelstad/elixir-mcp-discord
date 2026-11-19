@@ -20,7 +20,6 @@
  */
 
 import { log } from "./log.js";
-import { POLICY_CONTEXT_TOOL } from "./eligibility.js";
 
 /** The writes each kind of turn keeps. Both names are already in the prompts. */
 export const POLICIES = {
@@ -47,18 +46,9 @@ const PROMPTED_WRITES = ["elixir_send_feedback"];
 
 let warnedUnannotated = false;
 
-/**
- * The eligibility read is runner plumbing (src/eligibility.js), never a
- * model-facing read (since hub 12.0.0 it is clans_directory; before, the
- * private clans_context), so it is off in every lane WHATEVER the catalog says
- * (since 2026-10-10). It used to be named only when the catalog listed it:
- * a failed tools/list, or an hour-old catalog taken before the hub
- * published it, left it on for every model lane while the connector
- * discovered it on its own. The connector accepts a `configs` name the
- * server does not publish (a warning on its side, never an error), and the
- * direct-client path refuses by the same name.
- */
-const ALWAYS_OFF = [POLICY_CONTEXT_TOOL];
+// Older hubs exposed private policy through this name. The current public
+// directory can be used both by the scheduler and by a member asking a question.
+const ALWAYS_OFF = ["clans_context"];
 
 /** The tool names to switch off for this kind of turn. */
 export function disabledTools(policy, catalog) {

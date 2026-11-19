@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { disabledTools, POLICIES } from "../src/tools.js";
 import { toolCatalog } from "../src/mcp.js";
-import { POLICY_CONTEXT_TOOL } from "../src/eligibility.js";
+const PRIVATE_TOOL = "clans_context";
 
 const annotated = {
   ok: true,
@@ -29,7 +29,7 @@ test("every policy keeps every read and only the writes it names", () => {
       assert.ok(off.includes(write), `${policy}: ${write}`);
   }
   assert.deepEqual(disabledTools("rehearsal", annotated).sort(), [
-    POLICY_CONTEXT_TOOL,
+    PRIVATE_TOOL,
     "collections_edit",
     "elixir_follow_clan",
     "elixir_send_feedback",
@@ -42,11 +42,11 @@ test("without annotations a live lane keeps everything and a rehearsal loses the
     annotated: false,
     tools: annotated.tools.map(({ name }) => ({ name, readOnly: false })),
   };
-  assert.deepEqual(disabledTools("ask", bare), [POLICY_CONTEXT_TOOL], "off in every lane, annotated or not");
-  assert.deepEqual(disabledTools("rehearsal", bare).sort(), [POLICY_CONTEXT_TOOL, "elixir_send_feedback"]);
+  assert.deepEqual(disabledTools("ask", bare), [PRIVATE_TOOL], "off in every lane, annotated or not");
+  assert.deepEqual(disabledTools("rehearsal", bare).sort(), [PRIVATE_TOOL, "elixir_send_feedback"]);
   assert.deepEqual(
     disabledTools("rehearsal", { ok: false, tools: [] }),
-    [POLICY_CONTEXT_TOOL],
+    [PRIVATE_TOOL],
     "the private tool is the one name sent unpublished: the connector only warns on it",
   );
 });
@@ -81,11 +81,11 @@ test("private eligibility stays disabled in every model lane regardless of read 
         ok: true,
         annotated,
         tools: [
-          { name: POLICY_CONTEXT_TOOL, readOnly: true },
-          { name: "public_history", readOnly: true },
+          { name: PRIVATE_TOOL, readOnly: true },
+          { name: "clans_directory", readOnly: true },
         ],
       });
-      assert.deepEqual(off, [POLICY_CONTEXT_TOOL]);
+      assert.deepEqual(off, [PRIVATE_TOOL]);
     }
   }
 });
@@ -96,8 +96,8 @@ test("private eligibility stays disabled in every lane when the catalog is unava
   for (const policy of [...Object.keys(POLICIES), "nonsense"]) {
     for (const catalog of [undefined, null, { ok: false, tools: [] }, stale, staleBare]) {
       const off = disabledTools(policy, catalog);
-      assert.ok(off.includes(POLICY_CONTEXT_TOOL), `${policy}, ${JSON.stringify(catalog)}`);
-      assert.equal(off.filter((name) => name === POLICY_CONTEXT_TOOL).length, 1, "named once");
+      assert.ok(off.includes(PRIVATE_TOOL), `${policy}, ${JSON.stringify(catalog)}`);
+      assert.equal(off.filter((name) => name === PRIVATE_TOOL).length, 1, "named once");
     }
   }
 });
