@@ -573,6 +573,12 @@ test("a carried item that may not be published never reaches a turn (Codex on #5
   state.addCarry(key, [
     { ...moment("badge_earned", "2026-09-25T10:00:00.000Z", undefined, "held"), id: "tl_held", publishable: false },
     {
+      ...moment("badge_earned", "2026-09-25T10:00:00.000Z", undefined, "withdrawn"),
+      id: "tl_withdrawn",
+      revision: 1,
+      carryClan: "#028",
+    },
+    {
       ...moment("badge_earned", "2026-09-25T10:01:00.000Z", undefined, "kept"),
       id: "tl_kept",
       carryClan: "#028",
@@ -580,7 +586,15 @@ test("a carried item that may not be published never reaches a turn (Codex on #5
     },
   ]);
   const editor = { key, trigger: "events", wake: ["member_joined"], carry: ["badge_earned"] };
-  const hub = fakeHub([moment("member_joined", "2026-09-25T11:00:00.000Z", undefined, "joiner")]);
+  const hub = fakeHub([
+    moment("member_joined", "2026-09-25T11:00:00.000Z", undefined, "joiner"),
+    {
+      ...moment("badge_earned", "2026-09-25T11:00:00.000Z", undefined, "withdrawn"),
+      id: "tl_withdrawn",
+      revision: 2,
+      publishable: false,
+    },
+  ]);
   const turns = [];
   await pollRoutine(editor, null, {
     call: hub.call,

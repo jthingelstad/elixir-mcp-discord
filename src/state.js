@@ -254,6 +254,15 @@ export function carried(routineKey) {
   return read().carry?.[routineKey] ?? [];
 }
 
+/** Discard ineligible saved stories even when this poll starts no turn. */
+export function retainCarry(routineKey, eligible) {
+  const state = read();
+  const items = state.carry?.[routineKey] ?? [];
+  const kept = items.filter(eligible);
+  if (kept.length !== items.length) write({ ...state, carry: { ...state.carry, [routineKey]: kept } });
+  return kept;
+}
+
 /** One timeline item, whoever re-read it: a release turn that fails leaves
  *  the cursor where it was, and the next poll carries the same items again.
  *  Since contract 11.8.0 the hub's `id` is the story, so a story carried
