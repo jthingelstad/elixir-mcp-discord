@@ -496,9 +496,19 @@ export async function pollRoutine(
   // A carry written before the publication gate (a process older than
   // its hub) may hold an item that may not be published: it never reaches
   // a turn either.
+  const withdrawn = new Map(
+    result.timeline
+      .filter((item) => item.id && item.publishable !== true)
+      .map((item) => [item.id, Number(item.revision) || 0]),
+  );
   const carriedNow = state
-    .carried(routine.key)
-    .filter((item) => item.publishable === true && result.clanTag && item.carryClan === result.clanTag)
+    .retainCarry(
+      routine.key,
+      (item) =>
+        item.publishable === true &&
+        item.carryClan === result.clanTag &&
+        (!withdrawn.has(item.id) || withdrawn.get(item.id) < (Number(item.revision) || 0)),
+    )
     .map(({ carryClan: _carryClan, ...item }) => item);
 
   // A story already told is not news again (src/stories.js): dropped here,
