@@ -100,7 +100,7 @@ stable `id` that grows by `revision`. Each item also says whether it is
   record learned since its cursor. The seed read and a busy window's
   older pages name no reader, so without the argument the hub would
   read them as `occurred` (what happened in the window).
-- **An item with `publishable: false` never reaches a routine.**
+- **Every story candidate must carry `publishable: true`.**
   `relevant` drops it before anything else.
 - **One story, one item.** A batch keeps the highest revision of each
   `id`, and the carry holds one copy per id. A grown story moves to the
@@ -275,3 +275,10 @@ lead changing hands, which is one line. The ask brief reads a season race
 from these facts when the clan runs its awards in its app, and from
 `clans_participation` otherwise. Jamie's ask: "Do the mid season
 standings."
+
+### A routine reads its home clan (2026-11-18)
+
+Every event read requests `scope: "home_clan"`, including catch-up pages and
+summary reads. The hub filters the entries and stories before pagination.
+Held stories carry the clan tag. A held item reaches a turn only when the
+current feed is for that clan and it has explicit publication permission.

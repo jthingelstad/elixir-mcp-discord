@@ -69,7 +69,7 @@ const timeline = [
     text: "hamster is back after 7 days",
     facts: { after_days: 7 },
   },
-];
+].map((item) => ({ ...item, publishable: true }));
 
 test("a routine wakes for its kinds, or its sections, or everything if it names neither", () => {
   assert.deepEqual(
@@ -193,6 +193,7 @@ function fakeHub(items, { pageSize = 3, now = "2026-09-25T12:00:00.000Z" } = {})
       ok: true,
       body: {
         window: { from: iso(fromMs), to: iso(toMs) },
+        applied: { scope: "home_clan", clan_tag: "#028" },
         timeline,
         timeline_more: all.length - timeline.length,
         has_more: cutMs !== null,
@@ -206,6 +207,7 @@ function fakeHub(items, { pageSize = 3, now = "2026-09-25T12:00:00.000Z" } = {})
 }
 
 const moment = (kind, at, observedAt = at, name = kind) => ({
+  publishable: true,
   at,
   observed_at: observedAt,
   subject_tag: `#${name}`,
@@ -506,7 +508,7 @@ test("a skipped window's entries are read again by no reader; a built one costs 
   });
   assert.equal(hub.calls.length, 0);
 
-  const skipped = { entriesSkipped: true, entries: [], window: { to: "2026-09-25T11:55:00.000Z" } };
+  const skipped = { clanTag: "#028", entriesSkipped: true, entries: [], window: { to: "2026-09-25T11:55:00.000Z" } };
   const got = await windowEntries(skipped, "2026-09-25T11:00:00.000Z", editor, { call: hub.call });
   assert.deepEqual(got, { ok: true, entries: [{ kind: "clan", subject_tag: "#CLAN" }] });
   assert.equal(hub.calls.length, 1);
@@ -536,8 +538,8 @@ test("an item that may not be published never reaches a routine (contract 11.8.0
   ];
   assert.deepEqual(
     relevant(items, {}).map((i) => i.id),
-    ["a", "c"],
-    "publishable false is dropped; an older hub's item without the field passes",
+    ["a"],
+    "only explicitly publishable items pass",
   );
 });
 
@@ -570,7 +572,12 @@ test("a carried item that may not be published never reaches a turn (Codex on #5
   state.setCursor(key, "2026-09-25T10:55:00.000Z");
   state.addCarry(key, [
     { ...moment("badge_earned", "2026-09-25T10:00:00.000Z", undefined, "held"), id: "tl_held", publishable: false },
-    { ...moment("badge_earned", "2026-09-25T10:01:00.000Z", undefined, "kept"), id: "tl_kept", publishable: true },
+    {
+      ...moment("badge_earned", "2026-09-25T10:01:00.000Z", undefined, "kept"),
+      id: "tl_kept",
+      carryClan: "#028",
+      publishable: true,
+    },
   ]);
   const editor = { key, trigger: "events", wake: ["member_joined"], carry: ["badge_earned"] };
   const hub = fakeHub([moment("member_joined", "2026-09-25T11:00:00.000Z", undefined, "joiner")]);
@@ -666,4 +673,18 @@ test("a hard error is said to the operator once when the hold begins and once wh
     ["routine on hold", "routine recovered"],
   );
   assert.equal(state.hardHoldFor(key), null);
+});
+
+test("the editor refuses an unscoped feed or a changed home clan across pages", async () => {
+  const call = async () => ({ ok: true, body: { applied: {}, timeline: [] } });
+  const from = "2026-09-25T10:55:00.000Z";
+  assert.equal((await readWindow(from, {}, { call })).ok, false);
+  const hub = fakeHub(busyHour, { pageSize: 1 });
+  let pages = 0;
+  const changed = async (...args) => {
+    const result = await hub.call(...args);
+    if (++pages > 1) result.body.applied.clan_tag = "#082";
+    return result;
+  };
+  assert.equal((await readWindow(from, {}, { call: changed })).ok, false);
 });

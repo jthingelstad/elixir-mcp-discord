@@ -18,7 +18,7 @@ const routine = { key: "dependent", requires: { field: "war_intent", value: "par
 const gateFor = (read, extras = {}) =>
   createPolicyGate({ read, principal, now: () => at, notice: async () => {}, ...extras });
 
-test("the MCP transport reads clans_directory with no clan argument and gates on the bound clan's tile", async () => {
+test("the MCP transport reads clans_directory using its assigned clan tag and gates on the bound clan's tile", async () => {
   const original = globalThis.fetch;
   const calls = [];
   let fixture;
@@ -50,7 +50,8 @@ test("the MCP transport reads clans_directory with no clan argument and gates on
     }
     assert.equal(calls.length, mcpFixtures.length);
     assert.equal(calls[0].method, "tools/call");
-    for (const call of calls) assert.deepEqual(call.params, { name: POLICY_CONTEXT_TOOL, arguments: {} });
+    for (const call of calls)
+      assert.deepEqual(call.params, { name: POLICY_CONTEXT_TOOL, arguments: { clan_tag: base.clan_tag } });
   } finally {
     globalThis.fetch = original;
   }
@@ -185,10 +186,15 @@ test("operator diagnostics contain a bounded reason, never raw errors or the pri
 });
 
 test("a directory tile becomes the checked context; a cut-short directory without the clan proves nothing", () => {
-  const body = (clans, truncated = false) => ({ clans, truncated, meta: { as_of: base.read_at } });
+  const body = (clans, truncated = false) => ({
+    applied: { clan_tag: base.clan_tag },
+    clans,
+    truncated,
+    meta: { as_of: base.read_at },
+  });
   const tile = (war_intent, saved_at = base.policy_saved_at) => ({
     clan_tag: base.clan_tag,
-    policy: { war_intent, saved_at },
+    policy: { war_intent, saved_at, version: 7 },
   });
   assert.deepEqual(contextFromDirectory(body([tile("participating")]), base.clan_tag), {
     schema_version: 1,
@@ -196,7 +202,7 @@ test("a directory tile becomes the checked context; a cut-short directory withou
     status: "known",
     reason: null,
     war_intent: "participating",
-    policy_version: Date.parse(base.policy_saved_at),
+    policy_version: 7,
     policy_saved_at: base.policy_saved_at,
     read_at: base.read_at,
   });

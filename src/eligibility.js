@@ -7,7 +7,7 @@
  * Since hub 12.0.0 the context comes from `clans_directory`, the policy's
  * public part (the private `clans_context` read retired): the runner finds
  * its own clan's tile and turns it into the same checked context it always
- * gated on. The save instant stands in for the policy version.
+ * gated on. The public policy carries its saved revision.
  */
 import { callTool } from "./mcp.js";
 import { log } from "./log.js";
@@ -15,7 +15,7 @@ import { notify } from "./notify.js";
 import * as state from "./state.js";
 
 export const CONTEXT_MAX_AGE_MS = 60_000;
-// Read with no arguments; the runner never names a clan in the call.
+// The tag comes from the authenticated principal.
 export const POLICY_CONTEXT_TOOL = "clans_directory";
 const FUTURE_SKEW_MS = 5_000;
 const KEYS = [
@@ -55,11 +55,18 @@ const INTENTS = new Set(["participating", "not_participating"]);
  * which the gate refuses.
  */
 export function contextFromDirectory(body, clanTag) {
-  if (!clanTag || !body || typeof body !== "object" || !Array.isArray(body.clans)) return null;
+  if (
+    !clanTag ||
+    body?.applied?.clan_tag !== clanTag ||
+    body.truncated !== false ||
+    !Array.isArray(body.clans) ||
+    body.clans.length > 1 ||
+    body.clans.some((c) => c?.clan_tag !== clanTag)
+  )
+    return null;
   const readAt = body.meta?.as_of;
-  const tile = body.clans.find((clan) => clan?.clan_tag === clanTag);
+  const [tile] = body.clans;
   if (!tile) {
-    if (body.truncated !== false) return null;
     return {
       schema_version: 1,
       clan_tag: clanTag,
@@ -72,7 +79,8 @@ export function contextFromDirectory(body, clanTag) {
     };
   }
   const savedAt = tile.policy?.saved_at;
-  const version = typeof savedAt === "string" ? Date.parse(savedAt) : NaN;
+  const version = tile.policy?.version;
+  if (!instant(savedAt)) return null;
   if (!Number.isSafeInteger(version) || version < 1) return null;
   const known = INTENTS.has(tile.policy?.war_intent);
   return {
@@ -90,7 +98,8 @@ export function contextFromDirectory(body, clanTag) {
 /** Every refresh is an authenticated current read. No cached allow on error. */
 export function createPolicyGate({
   read = async ({ clanTag } = {}) => {
-    const result = await callTool(POLICY_CONTEXT_TOOL, {});
+    if (!clanTag) return { ok: false };
+    const result = await callTool(POLICY_CONTEXT_TOOL, { clan_tag: clanTag });
     return { ...result, body: contextFromDirectory(result.body, clanTag) };
   },
   principal = () => state.get("principal"),

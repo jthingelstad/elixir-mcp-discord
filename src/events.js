@@ -99,6 +99,7 @@ export async function read(
   // would otherwise read as occurred) says observed. An item that happened
   // before the window arrives with `late: true`.
   args.basis = "observed";
+  args.scope = "home_clan";
   // Since contract 11.7.0 a window with nothing these kinds could keep is
   // answered without building the entries (`entries_skipped`): the poll
   // that finds nothing costs the hub a few milliseconds instead of a full
@@ -113,8 +114,19 @@ export async function read(
   const result = await call(TIMELINE_TOOL, args);
   if (!result.ok) return { ok: false, error: result.error };
   const body = result.body ?? {};
+  const tag = body.applied?.clan_tag;
+  const principal = state.get("principal");
+  if (
+    body.applied?.scope !== "home_clan" ||
+    typeof tag !== "string" ||
+    !tag ||
+    (principal && (principal.kind !== "agent" || tag !== principal.subject?.tag))
+  ) {
+    return { ok: false, error: "The Timeline did not confirm the agent's home clan." };
+  }
   return {
     ok: true,
+    clanTag: tag,
     timeline: body.timeline ?? [],
     entries: body.entries ?? [],
     quiet: body.quiet ?? [],
@@ -206,6 +218,7 @@ export async function readWindow(from, options = {}, { call = callTool, maxPages
     to = next;
     page = await read(windowFrom, { ...options, reader: null, to, skipEmpty: false, call });
     if (!page.ok) return page;
+    if (page.clanTag !== first.clanTag) return { ok: false, error: "The home clan changed between Timeline pages." };
     pages += 1;
     items.push(...page.timeline);
   }
@@ -282,7 +295,7 @@ export function relevant(timeline, { kinds = null, wake = null, carry = null, se
     // Since contract 11.8.0 every item says whether it may be published;
     // one that may not (the account's own administration, leaders-only
     // items) never reaches a routine that posts.
-    if (item.publishable === false) return false;
+    if (item.publishable !== true) return false;
     if (named?.length && !named.includes(item.kind)) return false;
     if (sections?.length && item.section && !sections.includes(item.section)) return false;
     return true;
@@ -407,7 +420,10 @@ export async function windowEntries(result, cursor, routine, { call = callTool }
     to: result.window?.to ?? null,
     call,
   });
-  return context.ok ? { ok: true, entries: context.entries } : context;
+  if (!context.ok) return context;
+  if (context.clanTag !== result.clanTag)
+    return { ok: false, error: "The home clan changed while reading Timeline entries." };
+  return { ok: true, entries: context.entries };
 }
 
 /** Polls one routine. Returns `{ meta, items }`: the envelope of the first
@@ -480,7 +496,10 @@ export async function pollRoutine(
   // A carry written before the publication gate (a process older than
   // its hub) may hold an item that may not be published: it never reaches
   // a turn either.
-  const carriedNow = state.carried(routine.key).filter((item) => item.publishable !== false);
+  const carriedNow = state
+    .carried(routine.key)
+    .filter((item) => item.publishable === true && result.clanTag && item.carryClan === result.clanTag)
+    .map(({ carryClan: _carryClan, ...item }) => item);
 
   // A story already told is not news again (src/stories.js): dropped here,
   // before it can start a turn, ride in one, or count toward a release.
@@ -505,7 +524,10 @@ export async function pollRoutine(
     // Nothing that starts a turn. Carry what was named to carry, and let
     // the batch go only if the room has been quiet past the VOICE line.
     if (carry.length) {
-      state.addCarry(routine.key, carry);
+      state.addCarry(
+        routine.key,
+        carry.map((item) => ({ ...item, carryClan: result.clanTag })),
+      );
       log.info("events_carried", { routine: routine.key, items: carry.length, held: held.length + carry.length });
     }
     release = held.length + carry.length > 0 && releaseDue(silenceFor(routine));

@@ -427,10 +427,9 @@ collections — and the server marks which. Each kind of turn gets every
 read and only the writes it needs: a routine and the weekly review may
 file feedback; a rehearsal (`npm run try`, `try` in the DM, a proposal's **Try
 it**, `npm run review`) writes nothing at all. Nothing the bot does can
-follow a clan or player on your account. One read is withheld too:
-`clans_directory`, which the runner reads for itself to learn the clan's
-Clan Wars intent, is switched off in every model lane always, even when the tool
-list could not be read or predates it. `npm run probe` prints the
+follow a clan or player on your account. Members can ask about the public
+clan directory. Before a war routine runs, the scheduler looks up the
+bound clan by tag and checks its public intent, policy revision and read time. `npm run probe` prints the
 split. For belt and braces, untick `follows:write` on your agent's page
 in Elixir; the hub enforces that on the next call.
 
@@ -585,7 +584,7 @@ changed to an unpriced one later fails before the call, not after it.
 
 - **Cursors are per routine.** Each event routine reads `elixir_timeline`
   as its own named `reader` (`<instance>-<routine>`, Elixir MCP contract
-  3.18.0) with `mark_read: true`, which moves only that reader's pointer on
+  3.18.0) with `scope: "home_clan"` and `mark_read: true`, which moves only that reader's pointer on
   the server — never the account's (an agent is its own account) and never
   another routine's or instance's. Where the next read starts is still the
   routine's own cursor in `state/`, moved only after a successful turn, so a
@@ -609,8 +608,8 @@ changed to an unpriced one later fails before the call, not after it.
   more pages, so a join under an hour of badges is still posted. What the
   bound leaves unread is an `events_unread` warning in the log.
 - **What a turn is handed.** Every read is `basis: "observed"`, which
-  means what the record learned since the cursor. Items the hub marks
-  `publishable: false` are dropped. A story appears once, at its highest
+  means what the record learned since the cursor. Every item handed to the editor, including a saved story, must have
+  `publishable: true` and come from the current home-clan feed. A story appears once, at its highest
   `revision`, oldest first by `sort_at`. A post that says when uses
   Discord's stamp from the item's `at_unix`.
 - **A routine can remember what it posted.** `recall: 3` hands the model
