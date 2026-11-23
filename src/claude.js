@@ -9,7 +9,7 @@
  * exists:
  *
  *   1. Tool drift stops being our problem. Elixir MCP publishes
- *      `serverInfo.version` as `<contract>+tools.<fingerprint>` precisely
+ *      `serverInfo.version` as a fingerprint of its tools precisely
  *      because clients cache `tools/list` forever. A hand-written tool mirror
  *      goes stale silently — the way a "22 tools, contract 0.10" note went
  *      stale while the server shipped 36 tools at 0.28. The connector re-reads

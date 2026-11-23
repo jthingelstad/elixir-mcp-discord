@@ -372,8 +372,8 @@ Discord ◀── runner ◀── Claude ◀── events.js ──────
 **Answers use the Claude API's MCP connector.** We hand the API the server URL
 and the key; Anthropic opens the MCP connection server-side and runs the tool
 loop. There is no tool list in this repository — not a schema, not a name, not
-a switch statement. Elixir MCP publishes `serverInfo.version` as
-`<contract>+tools.<fingerprint>` precisely because MCP clients cache
+a switch statement. Elixir MCP publishes `serverInfo.version` as a
+fingerprint of its tools (`tools.<12 hex>`) precisely because MCP clients cache
 `tools/list` forever, and a hand-written mirror goes stale in silence. The
 connector re-reads the surface itself.
 

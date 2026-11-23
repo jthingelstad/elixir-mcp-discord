@@ -55,7 +55,7 @@ import { untold } from "./stories.js";
  * re-sorted oldest first (`oldestFirst`).
  *
  * `meta` is the envelope; it carries the hints the loop runs on
- * (`feedback_responses_pending`, `contract_version`).
+ * (`feedback_responses_pending`, `contract_version`, the tool fingerprint).
  */
 export const TIMELINE_TOOL = "elixir_timeline";
 
@@ -390,21 +390,6 @@ export function failureHoldMs(n, { hard = false, pollMs = config.eventPollSecond
 }
 
 /**
- * Whether a contract change is worth a DM: only a new MAJOR. The hub ships
- * a minor or a patch most days, each additive or a correction by its own
- * rule, and a DM for every one (2026-10-10, Jamie: "so much they are just
- * annoying… I completely ignore them") taught the operator to skip the one
- * that matters. A major can move a schema under a lane; the rest is a log
- * line. Versions read "<major>.<minor>.<patch>[+tools.<fingerprint>]"; a
- * first version (nothing to compare) is never a change.
- */
-export function majorChanged(from, to) {
-  const major = (v) => (typeof v === "string" ? (v.match(/^(\d+)\./)?.[1] ?? null) : null);
-  const [a, b] = [major(from), major(to)];
-  return a !== null && b !== null && a !== b;
-}
-
-/**
  * The entries a turn reads the clan from. A poll with `skip_empty` that
  * found nothing (contract 11.7.0, `entries_skipped`) came back without
  * them; a turn still runs from such a window when held items go out on the
@@ -478,18 +463,12 @@ export async function pollRoutine(
   }
   const parts = partition(result.timeline, routine);
 
-  // Contract drift is worth a log line even when nothing broke: the tool
-  // surface moving is exactly what this project is meant to notice early.
+  // The version string is the hub's tool fingerprint (since 2026-11-23):
+  // when it moves, log it once and carry on. It is no DM (2026-10-10,
+  // Jamie: "so much they are just annoying… I completely ignore them").
   const version = result.meta?.contract_version;
   if (version && version !== state.get("contractVersion")) {
     log.info("contract_version_changed", { from: state.get("contractVersion"), to: version });
-    if (majorChanged(state.get("contractVersion"), version)) {
-      await notify(
-        "Elixir changed",
-        `contract ${state.get("contractVersion")} → ${version} while running. Tool schemas may have moved; the elixir_changelog tool says what.`,
-        { fingerprint: `contract:${version}` },
-      );
-    }
     state.set({ contractVersion: version });
   }
 

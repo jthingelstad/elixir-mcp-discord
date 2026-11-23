@@ -125,7 +125,7 @@ export function readPrincipal(initializeResult) {
   return block && typeof block === "object" ? block : null;
 }
 
-/** `initialize` — the handshake. serverInfo.version is `<contract>+tools.<fingerprint>`;
+/** `initialize` — the handshake. serverInfo.version is the tool fingerprint, `tools.<12 hex>`;
  *  it changes whenever the published tool schemas change, which makes it the one
  *  reliable signal that the surface moved under us. */
 export async function initialize(auth = null) {

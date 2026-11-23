@@ -374,9 +374,9 @@
   effort for an evening. Since `config.json` (2026-09-15) a setting the file
   names wins over the shell; only secrets, wiring and path overrides still
   come from the environment. The boot log's provenance line says which.
-- **`npm run probe` before debugging anything.** It reports the principal, the
-  contract version and the tool fingerprint, and tells you whether the surface
-  moved. It must only call tools an agent surface publishes — it used to check
+- **`npm run probe` before debugging anything.** It reports the principal and
+  the tool fingerprint (the hub's whole version string since 2026-11-23), and
+  tells you whether the surface moved. It must only call tools an agent surface publishes — it used to check
   auth with `elixir_my_players`, which an agent door *refuses*, so a healthy key
   failed its own probe.
 

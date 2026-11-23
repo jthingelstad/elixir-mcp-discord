@@ -64,12 +64,11 @@ const DEFAULTS = {
   // budget, and this is what "could" means: it climbs to meet reality so the
   // estimate stops being optimistic after the first expensive turn.
   turnCeilings: {},
-  // serverInfo.version from `initialize` — "<contract>+tools.<fingerprint>".
-  // Moves when the TOOL SCHEMAS change. Distinct from contractVersion below:
-  // different strings from different calls, and storing both in one field logs
-  // drift forever.
+  // serverInfo.version from `initialize`: the hub's tool fingerprint,
+  // "tools.<12 hex>" (since 2026-11-23). Moves when the TOOL SCHEMAS change.
   serverVersion: null,
-  // meta.contract_version carried on every tool response — bare "<contract>".
+  // meta.contract_version carried on every tool response: the same string,
+  // seen by the event loop rather than the handshake.
   contractVersion: null,
   // The principal block from initialize, so a key repointed at another clan is
   // a log line rather than a channel quietly reporting on strangers.

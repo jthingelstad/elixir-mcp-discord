@@ -2,7 +2,7 @@
  * `npm run probe` — a standalone connectivity and surface check. Run it before
  * starting the bot, and any time an answer looks wrong.
  *
- * It prints the contract version, the tool fingerprint, and the tool list, then
+ * It prints the tool fingerprint (serverInfo.version) and the tool list, then
  * shows what changed since the last probe. That last part is the whole reason
  * it exists: this project's one standing operational risk is the Elixir MCP
  * tool surface moving without anyone noticing.
@@ -29,10 +29,6 @@ if (handshake.principal && handshake.principal.kind !== "agent") {
 const previous = state.get("serverVersion");
 if (previous && previous !== handshake.version) {
   console.log(`      CHANGED since last probe (was ${previous})`);
-  const changelog = await callTool("elixir_changelog", {});
-  if (changelog.ok) {
-    console.log(`      changelog: ${JSON.stringify(changelog.body).slice(0, 800)}`);
-  }
 }
 state.set({ serverVersion: handshake.version });
 
@@ -97,6 +93,6 @@ console.log(
   `      subjects: ${(feed.body?.entries ?? []).map((e) => e.name).join(", ") || "none"} · local cursors = ${positions || "unset (seed on first poll)"}`,
 );
 console.log(
-  `      contract ${feed.body?.meta?.contract_version ?? "?"} · feedback responses pending = ${feed.body?.meta?.feedback_responses_pending ?? "?"}`,
+  `      tools ${feed.body?.meta?.contract_version ?? "?"} · feedback responses pending = ${feed.body?.meta?.feedback_responses_pending ?? "?"}`,
 );
 console.log(`      spend today = $${state.todaySpend().toFixed(4)}`);
