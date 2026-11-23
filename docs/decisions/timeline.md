@@ -276,6 +276,24 @@ from these facts when the clan runs its awards in its app, and from
 `clans_participation` otherwise. Jamie's ask: "Do the mid season
 standings."
 
+### A season race is read from participation — since 2026-11-23
+
+Elixir's timeline reaches back one week from 2026-11-23 (elixir-mcp #1207;
+Jamie: "AT MOST 1 week of events"). An `award_standing` fact is written
+only when a place is new or moves, so a week of them is who moved, not the
+standings, and a member whose place held all week has no item. The ask
+brief no longer reads a season race from these facts: it adds up the
+season's war weeks in `clans_participation`, and may say who moved this
+week from the timeline, never reading an absence there as no place. The
+editor is unchanged; it only ever carried the moves. What this costs: an
+award scored by the clan's own rules is no longer readable as standings
+over MCP, and the answer is the season's war points instead (elixir-mcp
+#1206 asks whether Elixir should serve standings as a read of their own).
+
+The shipped brief changed in `agent/routines/ask.md`. An instance keeps
+its own copy, so a running bot answers the old way until its operator
+takes the new paragraph.
+
 ### A routine reads its home clan (2026-11-18)
 
 Every event read requests `scope: "home_clan"`, including catch-up pages and

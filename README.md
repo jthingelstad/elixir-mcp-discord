@@ -595,6 +595,11 @@ changed to an unpriced one later fails before the call, not after it.
   failed turn retries at the next poll and each one after waits twice as
   long, up to an hour; an error the next poll cannot fix (authentication,
   permission, a missing model, billing) waits the hour at once.
+- **Elixir's timeline reaches back one week.** A routine whose cursor is
+  older than that reads from a week ago, and the hub's note says so. The
+  shipped ask brief answers a season question from the war weeks in
+  `clans_participation`, never from the timeline, which holds only the
+  award places that moved this week.
 - **`state/state.json` is replaced, never rewritten in place.** A crash or
   a full disk mid-write leaves the previous state. If the file is ever
   unreadable (a hand edit gone wrong), it is moved to
