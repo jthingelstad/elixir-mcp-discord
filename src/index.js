@@ -21,7 +21,7 @@ import {
 } from "./config.js";
 import { handleAsk, isThreadOf } from "./ask.js";
 import { handleReaction } from "./reactions.js";
-import { startEventLoop, majorChanged } from "./events.js";
+import { startEventLoop } from "./events.js";
 import { startScheduler } from "./scheduler.js";
 import { startClockLane } from "./clock.js";
 import { startReview } from "./review.js";
@@ -207,18 +207,13 @@ async function boot(ready) {
       `initialize failed: ${handshake.error}. Every lane will fail until it is back.`,
     );
   } else {
-    if (state.get("serverVersion") && state.get("serverVersion") !== handshake.version) {
-      log.warn("contract_version_changed_at_boot", {
+    // The version string is the hub's tool fingerprint: a change is one
+    // log line, never a notice.
+    if (state.get("serverVersion") && state.get("serverVersion") !== handshake.version)
+      log.info("server_version_changed_at_boot", {
         from: state.get("serverVersion"),
         to: handshake.version,
       });
-      if (majorChanged(state.get("serverVersion"), handshake.version))
-        await notify.notify(
-          "Elixir changed",
-          `contract ${state.get("serverVersion")} → ${handshake.version}. Tool schemas may have moved; the elixir_changelog tool says what.`,
-          { fingerprint: `contract:${handshake.version}` },
-        );
-    }
     state.set({ serverVersion: handshake.version });
     reportPrincipal(handshake);
   }

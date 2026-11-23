@@ -87,7 +87,7 @@ const RESULT = {
   truncated: false,
   model: "claude-sonnet-5",
   effort: "medium",
-  serverVersion: "0.28.0+tools.79457603b3b3",
+  serverVersion: "tools.79457603b3b3",
 };
 
 test("answers a question, replacing the placeholder with the answer", async () => {
@@ -141,7 +141,7 @@ test("the trace carries the diagnostics that make an answer debuggable", () => {
     "1.0s",
     "claude-sonnet-5",
     "effort medium",
-    "0.28.0+tools.79457603b3b3",
+    "tools.79457603b3b3",
     "end_turn",
   ]) {
     assert.ok(trace.includes(needle), `trace missing ${needle}`);

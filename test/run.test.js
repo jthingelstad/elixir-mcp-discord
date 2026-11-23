@@ -48,7 +48,7 @@ const answer = (text, extra = {}) => ({
   truncated: false,
   model: "claude-sonnet-5",
   effort: "medium",
-  serverVersion: "0.31.0+tools.abc",
+  serverVersion: "tools.0123456789ab",
   ...extra,
 });
 

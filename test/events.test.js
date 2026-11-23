@@ -26,7 +26,6 @@ import {
   jittered,
   pollDelayMs,
   windowEntries,
-  majorChanged,
   latestRevisions,
   oldestFirst,
 } from "../src/events.js";
@@ -519,15 +518,6 @@ test("a skipped window's entries are read again by no reader; a built one costs 
   assert.equal(args.from, "2026-09-25T11:00:00.000Z");
   assert.equal(args.to, "2026-09-25T11:55:00.000Z");
   assert.deepEqual(args.kinds, ["member_joined", "badge_earned"]);
-});
-
-test("only a new major contract is worth a DM", () => {
-  assert.equal(majorChanged("11.7.1+tools.aaa", "11.7.2+tools.bbb"), false);
-  assert.equal(majorChanged("11.7.1", "11.8.0"), false);
-  assert.equal(majorChanged("11.7.1+tools.aaa", "12.0.0+tools.ccc"), true);
-  assert.equal(majorChanged(null, "12.0.0"), false, "a first version is no change");
-  assert.equal(majorChanged(undefined, "12.0.0"), false);
-  assert.equal(majorChanged("nonsense", "12.0.0"), false);
 });
 
 test("an item that may not be published never reaches a routine (contract 11.8.0)", () => {
